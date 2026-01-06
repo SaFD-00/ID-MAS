@@ -51,8 +51,8 @@ from utils.answer_extractor import get_extractor, AnswerExtractor
 from config.config import (
     DATA_DIR,
     AVAILABLE_STUDENT_MODELS, DEFAULT_STUDENT_MODEL,
-    AVAILABLE_TEACHER_MODELS, DEFAULT_TEACHER_MODEL, create_teacher_config,
-    MODEL_NAME_TO_SHORT, get_model_short_name,
+    AVAILABLE_TEACHER_MODELS, DEFAULT_TEACHER_MODEL, DEFAULT_VLLM_TEACHER_MODEL,
+    create_teacher_config, MODEL_NAME_TO_SHORT, get_model_short_name,
     get_domain_data_dirs, get_available_domains, get_eval_datasets_for_domain,
     get_training_datasets_for_domain, get_terminal_goal,
     get_design_output_dir
@@ -930,8 +930,9 @@ Examples:
         default=None,
         choices=AVAILABLE_TEACHER_MODELS,
         dest="teacher_model",
-        help=f"Teacher model to use. Default: {DEFAULT_TEACHER_MODEL}. "
-             f"For vLLM models, ensure server is running at localhost:8000"
+        help=f"Teacher model for instructional design and evaluation. "
+             f"Default: {DEFAULT_TEACHER_MODEL} (OpenAI). "
+             f"For vLLM (GPU server): {DEFAULT_VLLM_TEACHER_MODEL}"
     )
 
     args = parser.parse_args()

@@ -15,6 +15,7 @@ from config.api import (
 from config.models import (
     AVAILABLE_TEACHER_MODELS,
     DEFAULT_TEACHER_MODEL,
+    DEFAULT_VLLM_TEACHER_MODEL,
     create_teacher_config,
     AVAILABLE_STUDENT_MODELS,
     DEFAULT_STUDENT_MODEL,
@@ -65,9 +66,9 @@ __all__ = [
     'PROJECT_ROOT', 'OPENAI_API_KEY', 'HF_TOKEN',
 
     # Models
-    'AVAILABLE_TEACHER_MODELS', 'DEFAULT_TEACHER_MODEL', 'create_teacher_config',
-    'AVAILABLE_STUDENT_MODELS', 'DEFAULT_STUDENT_MODEL', 'STUDENT_MODEL_BASE_CONFIG',
-    'get_student_model_config', 'get_model_short_name',
+    'AVAILABLE_TEACHER_MODELS', 'DEFAULT_TEACHER_MODEL', 'DEFAULT_VLLM_TEACHER_MODEL',
+    'create_teacher_config', 'AVAILABLE_STUDENT_MODELS', 'DEFAULT_STUDENT_MODEL',
+    'STUDENT_MODEL_BASE_CONFIG', 'get_student_model_config', 'get_model_short_name',
 
     # SFT
     'MODEL_NAME_TO_SHORT', 'get_sft_model_name', 'get_sft_idmas_model_name',

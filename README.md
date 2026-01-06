@@ -73,7 +73,8 @@ ID-MAS/
 
 ### 교사 모델 (설계 및 평가)
 
-- 기본값: OpenAI `gpt-5-2025-08-07` (OPENAI_API_KEY 필요)
+- **기본값 (OpenAI)**: `gpt-5-2025-08-07` (OPENAI_API_KEY 필요)
+- **권장값 (vLLM/GPU)**: `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` (localhost:2000/v1)
 - CLI에서 `--teacher-model`로 선택 (`config.create_teacher_config()`가 설정 자동 생성)
 - `gpt-`로 시작하는 모델은 OpenAI API, 그 외 모델은 LLaMA-Factory 서버(`http://localhost:2000/v1`, API key `0`, `max_tokens=8192`)를 사용
 - 설계 모듈과 교사 모델 모두 동일한 `teacher_config`를 공유
@@ -187,6 +188,22 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 # 처음부터 새로 학습 (Resume 비활성화)
 python main.py --mode train --domain math --train-dataset gsm8k --resume False
 ```
+
+### vLLM 교사 모델 사용 예시
+
+GPU 서버에서 vLLM으로 학습:
+
+```bash
+# 권장 vLLM 모델 사용 (Qwen3-30B-A3B-Instruct-2507-FP8)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --teacher-model Qwen/Qwen3-30B-A3B-Instruct-2507-FP8
+
+# 다른 vLLM 모델 사용
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --teacher-model meta-llama/Llama-3.3-70B-Instruct
+```
+
+**참고**: vLLM 모델 사용 시 localhost:2000/v1 에 vLLM 서버가 실행 중이어야 합니다.
 
 ### 평가 모드 (--mode eval)
 

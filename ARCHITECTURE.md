@@ -685,9 +685,9 @@ python main.py --mode train --domain math --train-dataset gsm8k
 # 처음부터 새로 학습 (Resume 비활성화)
 python main.py --mode train --domain math --train-dataset gsm8k --resume False
 
-# vLLM 교사 모델 사용 (localhost:2000/v1에 vLLM 서버 필요)
+# vLLM 교사 모델 사용 (권장: Qwen3-30B-A3B-Instruct-2507-FP8)
 python main.py --mode train --domain math --train-dataset gsm8k \
-    --teacher-model meta-llama/Llama-3.3-70B-Instruct
+    --teacher-model Qwen/Qwen3-30B-A3B-Instruct-2507-FP8
 
 # Math 도메인 - MATH로 학습
 python main.py --mode train --domain math --train-dataset math
@@ -750,7 +750,8 @@ AVAILABLE_TEACHER_MODELS = [
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
 ]
 
-DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
+DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"  # Overall default (OpenAI)
+DEFAULT_VLLM_TEACHER_MODEL = "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"  # Recommended for vLLM/GPU
 
 def create_teacher_config(model_name: str = None) -> dict:
     if model_name is None:
@@ -786,6 +787,12 @@ AVAILABLE_STUDENT_MODELS = [
 ]
 ```
 `main.py`에서 `--teacher-model` CLI 인자로 `create_teacher_config()`를 호출해 교사/설계 모델 설정을 생성합니다. `gpt-` 계열은 OpenAI API를, 그 외 모델은 vLLM 서버(`http://localhost:2000/v1`, API key `0`)를 사용합니다.
+
+**Teacher Model Defaults**:
+- `DEFAULT_TEACHER_MODEL`: Overall default using OpenAI API (gpt-5-2025-08-07)
+- `DEFAULT_VLLM_TEACHER_MODEL`: Recommended for vLLM GPU servers (Qwen/Qwen3-30B-A3B-Instruct-2507-FP8)
+
+When using `--teacher-model` CLI option, you can specify either model type.
 
 ## 새로운 도메인 추가 가이드
 

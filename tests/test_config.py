@@ -12,6 +12,7 @@ from config.config import (
     get_design_output_dir,
     get_domain_data_dirs,
     DEFAULT_TEACHER_MODEL,
+    DEFAULT_VLLM_TEACHER_MODEL,
     DEFAULT_STUDENT_MODEL,
     AVAILABLE_TEACHER_MODELS,
     AVAILABLE_STUDENT_MODELS,
@@ -51,6 +52,23 @@ class TestTeacherConfig:
         for model in AVAILABLE_TEACHER_MODELS:
             config = create_teacher_config(model)
             assert config["model"] == model
+
+    def test_default_vllm_teacher_model(self):
+        """Test that DEFAULT_VLLM_TEACHER_MODEL is valid"""
+        # Should be in available models
+        assert DEFAULT_VLLM_TEACHER_MODEL in AVAILABLE_TEACHER_MODELS
+
+        # Should not be a gpt- model (should use vLLM)
+        assert not DEFAULT_VLLM_TEACHER_MODEL.startswith("gpt-")
+
+        # Should be Qwen3-30B-A3B-Instruct-2507-FP8
+        assert DEFAULT_VLLM_TEACHER_MODEL == "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"
+
+        # Should create valid vLLM config
+        config = create_teacher_config(DEFAULT_VLLM_TEACHER_MODEL)
+        assert config["model"] == DEFAULT_VLLM_TEACHER_MODEL
+        assert config["base_url"] == "http://localhost:2000/v1"
+        assert config["api_key"] == "0"
 
 
 class TestStudentConfig:

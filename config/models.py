@@ -23,7 +23,8 @@ AVAILABLE_TEACHER_MODELS = [
 ]
 
 # 기본 Teacher 모델
-DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
+DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"  # Overall default (OpenAI)
+DEFAULT_VLLM_TEACHER_MODEL = "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"  # Recommended for vLLM/GPU
 
 
 def create_teacher_config(model_name: str = None) -> dict:
