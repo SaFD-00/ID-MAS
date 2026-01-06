@@ -110,7 +110,7 @@ class BaseDatasetLoader(ABC):
 
 ### 2. 교수 설계 모듈 (Design Modules)
 
-모든 설계 단계 모듈은 `GPTWrapper(teacher_config)`를 사용합니다. `--teacher-model`로 선택한 설정이 공유되며 기본값은 OpenAI `gpt-5-2025-08-07`입니다.
+모든 설계 단계 모듈은 `GPTWrapper(teacher_config)`를 사용합니다. `--teacher-model`로 선택한 설정이 공유되며 기본값은 OpenAI `gpt-5-2025-08-07`입니다. 모델 설정은 [config/models.py](config/models.py)의 `create_teacher_config()`를 통해 생성됩니다.
 
 #### 2.1 교수 분석 (step2_analysis.py)
 - **목적**: 학습 목표를 Terminal Goal, Subskills, Subtasks로 분해
@@ -143,10 +143,12 @@ class BaseDatasetLoader(ABC):
   - Qwen/Qwen2.5-7B-Instruct
   - meta-llama/Llama-3.1-8B-Instruct
   - meta-llama/Llama-3.2-3B-Instruct
+- **기반 클래스**: [models/base_wrapper.py](models/base_wrapper.py)의 `BaseModelWrapper` 상속
 - **기능**:
   - `generate_initial_response()`: 기본 응답 생성
   - `generate_initial_response_with_scaffolding()`: Phase 1 - Task Analysis와 함께 응답 생성
   - `generate_fixed_response_with_coaching()`: Phase 2 - Coaching DB 기반 수정 응답 생성
+  - `generate_with_reflection()`: 상위 클래스에서 공통 구현 (ReAct 스타일 reflection)
 
 #### 3.2 교사 모델 (teacher_model.py)
 - **역할**: 학생 응답 평가 및 피드백 생성
@@ -815,9 +817,11 @@ mkdir -p data/{your_domain}/eval/data
 }
 ```
 
-### Step 2: config/config.py 업데이트
+### Step 2: config 모듈 업데이트
 
-**4개의 딕셔너리**에 새 도메인 정보를 추가합니다:
+**참고**: config 모듈은 리팩토링되어 여러 서브모듈로 분리되었습니다 ([config/domains.py](config/domains.py), [config/models.py](config/models.py) 등). backward compatibility를 위해 `from config import ...` 형태의 기존 import는 그대로 작동합니다.
+
+[config/domains.py](config/domains.py)의 **4개의 딕셔너리**에 새 도메인 정보를 추가합니다:
 
 #### 2.1 TERMINAL_GOALS 추가
 
@@ -939,7 +943,7 @@ python main.py --mode eval --method baseline \
 
 ```python
 # Python에서 확인
-from config.config import get_available_domains, get_training_datasets_for_domain
+from config import get_available_domains, get_training_datasets_for_domain
 print(get_available_domains())  # ['math', 'your_domain']
 print(get_training_datasets_for_domain('your_domain'))  # ['your_dataset', ...]
 ```
@@ -982,7 +986,7 @@ print(get_training_datasets_for_domain('your_domain'))  # ['your_dataset', ...]
 #### SFT 모델 추가
 HuggingFace Hub에 업로드 시:
 1. 형식: `SaFD-00/{model_short}-{domain}` 또는 `SaFD-00/{model_short}-{domain}_id-mas`
-2. `config.py`의 `MODEL_NAME_TO_SHORT` 매핑 업데이트
+2. [config/sft.py](config/sft.py)의 `MODEL_NAME_TO_SHORT` 매핑 업데이트
 
 ## 참고 문헌
 

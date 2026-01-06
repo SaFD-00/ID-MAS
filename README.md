@@ -45,13 +45,28 @@ ID-MAS/
 │   ├── answer_extractor.py # 답변 추출기 (5가지 유형)
 │   └── reparse_eval_results.py  # 평가 결과 재처리
 ├── models/                  # 모델 래퍼
+│   ├── base_wrapper.py     # 모델 래퍼 베이스 클래스
 │   ├── gpt_wrapper.py      # GPT-5 래퍼
+│   ├── qwen_wrapper.py     # Qwen 모델 래퍼
 │   └── student_wrapper.py  # 학생 모델 래퍼
-├── config/                  # 설정 파일
-│   └── config.py
+├── config/                  # 설정 모듈 (리팩토링됨)
+│   ├── __init__.py         # 통합 인터페이스
+│   ├── api.py              # API 키 및 인증
+│   ├── models.py           # Teacher/Student 모델 설정
+│   ├── sft.py              # SFT 모델 매핑
+│   ├── domains.py          # 도메인 및 데이터셋 설정
+│   └── paths.py            # 디렉토리 경로 헬퍼
+├── tests/                   # 테스트 스위트
+│   ├── test_answer_extractor.py
+│   ├── test_config.py
+│   ├── test_domain_loader.py
+│   ├── test_model_wrappers.py
+│   └── test_state_machine.py
 ├── data/                    # 데이터 저장
 │   └── math/               # Math 도메인 데이터
-└── main.py                  # 메인 실행 파일
+├── pytest.ini              # pytest 설정
+├── main.py                 # 메인 실행 파일
+└── requirements.txt        # 의존성 (pytest 포함)
 ```
 
 ## 사용 모델
@@ -379,7 +394,7 @@ mkdir -p data/{domain}/eval/data
 
 ### 2. 설정 파일 업데이트
 
-**config/config.py**에 도메인 정보 추가:
+**config/domains.py**에 도메인 정보 추가:
 
 ```python
 # Terminal Goals 추가
@@ -414,11 +429,7 @@ DOMAIN_CONFIG = {
 }
 ```
 
-**utils/domain_loader.py**에도 동일하게 추가:
-
-```python
-# TERMINAL_GOALS와 DOMAIN_CONFIG에 동일한 정보 추가
-```
+**참고**: config 모듈은 리팩토링되어 5개의 서브모듈로 분리되었습니다. backward compatibility를 위해 `from config import ...` 형태의 기존 import는 그대로 작동합니다.
 
 ### 3. 실행 및 테스트
 
