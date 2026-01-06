@@ -1,0 +1,128 @@
+"""
+Teacher and student model configurations.
+"""
+from config.api import OPENAI_API_KEY
+
+# =============================================================================
+# Teacher Model Configuration
+# =============================================================================
+
+# 지원하는 Teacher 모델 목록
+AVAILABLE_TEACHER_MODELS = [
+    # OpenAI
+    "gpt-5-2025-08-07",
+    # LLaMA-Factory vLLM
+    "openai/gpt-oss-20b",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    "Qwen/Qwen3-30B-A3B-Thinking-2507-FP8",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "Qwen/Qwen3-Next-80B-A3B-Thinking",
+    "Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+]
+
+# 기본 Teacher 모델
+DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
+
+
+def create_teacher_config(model_name: str = None) -> dict:
+    """
+    Teacher model config 생성
+
+    Args:
+        model_name: Teacher 모델 이름 (None이면 기본 모델 사용)
+
+    Returns:
+        Teacher model 설정 딕셔너리
+    """
+    if model_name is None:
+        model_name = DEFAULT_TEACHER_MODEL
+
+    # OpenAI 모델 (gpt-로 시작)
+    if model_name.startswith("gpt-"):
+        return {
+            "model": model_name,
+            "base_url": None,  # OpenAI 기본 endpoint
+            "api_key": OPENAI_API_KEY,
+            "reasoning": {"effort": "medium"},
+            "text": {"verbosity": "medium"},
+            "max_tokens": 8192
+        }
+    # LLaMA-Factory vLLM 모델 (기본값 고정: localhost:2000/v1)
+    else:
+        return {
+            "model": model_name,
+            "base_url": "http://localhost:2000/v1",
+            "api_key": "0",
+            "max_tokens": 8192
+        }
+
+
+# =============================================================================
+# Student Model Configuration
+# =============================================================================
+
+# 지원하는 학생 모델 목록
+AVAILABLE_STUDENT_MODELS = [
+    "Qwen/Qwen3-4B-Instruct-2507",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+]
+
+# 기본 학생 모델
+DEFAULT_STUDENT_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+
+# 학생 모델 공통 설정
+STUDENT_MODEL_BASE_CONFIG = {
+    "device": "cuda",
+    "max_new_tokens": 2048,
+    "temperature": 0.7,
+    "do_sample": True
+}
+
+
+def get_student_model_config(model_name: str = None) -> dict:
+    """
+    학생 모델 설정 생성
+
+    Args:
+        model_name: 모델 이름 (None이면 기본 모델 사용)
+
+    Returns:
+        모델 설정 딕셔너리
+    """
+    if model_name is None:
+        model_name = DEFAULT_STUDENT_MODEL
+
+    if model_name not in AVAILABLE_STUDENT_MODELS:
+        raise ValueError(
+            f"지원하지 않는 모델입니다: {model_name}\n"
+            f"지원 모델: {AVAILABLE_STUDENT_MODELS}"
+        )
+
+    config = STUDENT_MODEL_BASE_CONFIG.copy()
+    config["model_name"] = model_name
+
+    return config
+
+
+def get_model_short_name(model_name: str = None) -> str:
+    """
+    모델의 짧은 이름 반환 (폴더명용)
+
+    Args:
+        model_name: 전체 모델 이름 (예: "Qwen/Qwen3-4B-Instruct-2507")
+
+    Returns:
+        짧은 모델 이름 (예: "Qwen3-4B-Instruct-2507")
+    """
+    if model_name is None:
+        model_name = DEFAULT_STUDENT_MODEL
+
+    # "Qwen/Qwen3-4B-Instruct-2507" → "Qwen3-4B-Instruct-2507"
+    if "/" in model_name:
+        return model_name.split("/")[-1]
+    return model_name

@@ -1,0 +1,447 @@
+# ID-MAS: Instructional Design Multi-Agent System
+
+LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
+
+## 주요 기능
+
+- **데이터셋별 분리 학습**: 각 데이터셋(GSM8K, MATH)별 고유 Terminal Goal로 학습
+- **3-Phase Pipeline 학습**: Scaffolding → Coaching → Modeling 단계별 학습
+- **State Machine 기반 워크플로우**: 상태 관리, 체크포인트 기반 Resume 지원
+- **다양한 평가 방법**: Baseline, SFT, SFT_ID-MAS 모델 평가 지원
+- **유연한 도메인 구조**: 설정 파일만 수정하여 새로운 도메인 쉽게 추가 가능
+
+## 지원 도메인 및 Terminal Goal
+
+| 도메인 | 학습 데이터셋 | Terminal Goal |
+|--------|--------------|---------------|
+| **Math** | GSM8K | Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems. |
+| **Math** | MATH | Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution. |
+
+### 평가 데이터셋
+
+| 도메인 | 평가 데이터셋 |
+|--------|---------------|
+| **Math** | GSM8K, MATH, SVAMP, ASDiv, MAWPS, MMLU |
+
+## 시스템 구조
+
+```
+ID-MAS/
+├── design_modules/          # 교수 설계 단계별 모듈
+│   ├── step2_analysis.py   # 교수 분석 (Goal & Sub-skills)
+│   ├── step4_objectives.py # 수행목표 진술 (B-C-CR)
+│   ├── step5_test.py       # Test item 개발
+│   └── step5_rubric.py     # 루브릭 개발 (Essay형)
+├── learning_loop/           # 3-Phase 학습 파이프라인
+│   ├── state_machine.py    # 상태 머신 및 체크포인트 관리
+│   ├── student_model.py    # Ms: 학생 모델
+│   ├── teacher_model.py    # Mt: 교사 모델
+│   └── pipeline_controller.py  # 3-Phase Pipeline 제어
+├── utils/                   # 유틸리티
+│   ├── base_loader.py      # 데이터셋 로더 베이스 클래스
+│   ├── dataset_preparer.py # 데이터셋 다운로드 및 전처리
+│   ├── domain_loader.py    # 도메인 기반 데이터 로더
+│   ├── dataset_registry.py # 도메인 레지스트리
+│   ├── answer_extractor.py # 답변 추출기 (5가지 유형)
+│   └── reparse_eval_results.py  # 평가 결과 재처리
+├── models/                  # 모델 래퍼
+│   ├── gpt_wrapper.py      # GPT-5 래퍼
+│   └── student_wrapper.py  # 학생 모델 래퍼
+├── config/                  # 설정 파일
+│   └── config.py
+├── data/                    # 데이터 저장
+│   └── math/               # Math 도메인 데이터
+└── main.py                  # 메인 실행 파일
+```
+
+## 사용 모델
+
+### 교사 모델 (설계 및 평가)
+
+- 기본값: OpenAI `gpt-5-2025-08-07` (OPENAI_API_KEY 필요)
+- CLI에서 `--teacher-model`로 선택 (`config.create_teacher_config()`가 설정 자동 생성)
+- `gpt-`로 시작하는 모델은 OpenAI API, 그 외 모델은 LLaMA-Factory 서버(`http://localhost:2000/v1`, API key `0`, `max_tokens=8192`)를 사용
+- 설계 모듈과 교사 모델 모두 동일한 `teacher_config`를 공유
+
+지원 모델 (`config.AVAILABLE_TEACHER_MODELS`)
+
+| 유형 | 모델 | 비고 |
+|------|------|------|
+| OpenAI | gpt-5-2025-08-07 | 기본값 |
+| LLaMA-Factory | openai/gpt-oss-20b | localhost:2000/v1 |
+| LLaMA-Factory | meta-llama/Llama-3.3-70B-Instruct | localhost:2000/v1 |
+| LLaMA-Factory | Qwen/Qwen3-30B-A3B-Thinking-2507 | localhost:2000/v1 |
+| LLaMA-Factory | Qwen/Qwen3-30B-A3B-Thinking-2507-FP8 | localhost:2000/v1 |
+| LLaMA-Factory | Qwen/Qwen3-30B-A3B-Instruct-2507-FP8 | localhost:2000/v1 |
+| LLaMA-Factory | Qwen/Qwen3-Next-80B-A3B-Thinking | localhost:2000/v1 |
+| LLaMA-Factory | Qwen/Qwen3-Next-80B-A3B-Instruct | localhost:2000/v1 |
+| LLaMA-Factory | deepseek-ai/DeepSeek-R1-Distill-Qwen-32B | localhost:2000/v1 |
+
+#### LLaMA-Factory 서버 예시 (localhost:2000/v1)
+
+```bash
+# 1. 서버 시작 (LLaMA-Factory, API 포트 2000, vLLM 백엔드 권장)
+cd /path/to/LLaMA-Factory
+
+# Llama-3.3-70B (4 GPU 권장)
+DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0,1,2,3 API_PORT=2000 \
+    llamafactory-cli api examples/inference_custom/llama3_3_70b.yaml infer_backend=vllm
+
+# Qwen3-30B-A3B-Thinking (1+ GPU)
+DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0 API_PORT=2000 \
+    llamafactory-cli api examples/inference_custom/qwen3_30b_a3b_thinking.yaml infer_backend=vllm
+
+# Qwen3-Next-80B (2+ GPU 필수)
+DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0,1,2,3 API_PORT=2000 \
+    llamafactory-cli api examples/inference_custom/qwen3_next_80b_a3b_thinking.yaml infer_backend=vllm
+
+# DeepSeek-R1-Distill-Qwen-32B
+DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0,1 API_PORT=2000 \
+    llamafactory-cli api examples/inference_custom/deepseek_r1_distill_qwen_32b.yaml infer_backend=vllm
+
+# 2. 학습 실행 (예시)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --teacher-model meta-llama/Llama-3.3-70B-Instruct
+```
+
+### 학생 모델 (선택 가능)
+| 모델 | 설명 |
+|------|------|
+| `Qwen/Qwen3-4B-Instruct-2507` | Qwen3 4B (최신) |
+| `Qwen/Qwen2.5-3B-Instruct` | Qwen2.5 3B (기본값) |
+| `Qwen/Qwen2.5-7B-Instruct` | Qwen2.5 7B |
+| `meta-llama/Llama-3.1-8B-Instruct` | Llama 3.1 8B |
+| `meta-llama/Llama-3.2-3B-Instruct` | Llama 3.2 3B |
+
+## 빠른 시작
+
+```bash
+# 1. Conda 환경 생성 및 활성화
+conda create -n ID-MAS python=3.11 -y
+conda activate ID-MAS
+
+# 2. 의존성 설치
+pip install -r requirements.txt
+
+# 3. .env 파일 설정
+cp .env.example .env
+# .env 파일을 열어 OPENAI_API_KEY와 HF_TOKEN 설정
+
+# 4. 데이터 준비 (HuggingFace에서 다운로드)
+python -m utils.dataset_preparer
+
+# 5. 학습 실행 (3-Phase Pipeline)
+python main.py --mode train --domain math --train-dataset gsm8k
+# 교사 모델 사용 시: --teacher-model meta-llama/Llama-3.3-70B-Instruct 등 추가
+
+# 6. 평가 실행
+python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k
+```
+
+## 디버그 로그
+
+OpenAI 응답 원문을 확인하려면 `IDMAS_DEBUG_OPENAI`를 설정합니다.
+
+```bash
+# OpenAI raw response 출력
+IDMAS_DEBUG_OPENAI=1 python main.py --mode train --domain math --train-dataset gsm8k
+```
+
+## 실행 예제
+
+### 학습 모드 (--mode train)
+
+학습을 수행하고 SFT 데이터를 생성합니다.
+
+```bash
+# Math 도메인 - GSM8K로 학습
+python main.py --mode train --domain math --train-dataset gsm8k
+
+# Math 도메인 - MATH로 학습
+python main.py --mode train --domain math --train-dataset math
+
+# 다른 학생 모델로 학습
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-4B-Instruct-2507
+
+# 교사 모델로 학습 (localhost:2000/v1에서 서버 실행 필요)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --teacher-model meta-llama/Llama-3.3-70B-Instruct
+
+# 처음부터 새로 학습 (Resume 비활성화)
+python main.py --mode train --domain math --train-dataset gsm8k --resume False
+```
+
+### 평가 모드 (--mode eval)
+
+#### Baseline 평가
+
+베이스 모델의 순수 성능을 측정합니다.
+
+```bash
+# GSM8K Baseline 평가
+python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k
+
+# SVAMP Cross-dataset 평가
+python main.py --mode eval --method baseline \
+    --domain math --eval-dataset svamp
+
+# 처음부터 새로 평가 (Resume 비활성화)
+python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k --eval-resume False
+```
+
+#### SFT 평가
+
+HuggingFace Hub에서 fine-tuned 모델을 로드하여 평가합니다.
+
+```bash
+# GSM8K SFT 평가
+python main.py --mode eval --method sft \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+# Cross-dataset SFT 평가 (Math 모델로 SVAMP 평가)
+python main.py --mode eval --method sft \
+    --domain math --eval-dataset svamp \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+# 다른 학생 모델로 평가
+python main.py --mode eval --method sft \
+    --domain math --eval-dataset math \
+    --model meta-llama/Llama-3.1-8B-Instruct
+```
+
+**사용 가능한 SFT 모델:**
+- Math: `SaFD-00/qwen2.5-3b-math`, `SaFD-00/qwen2.5-7b-math`, `SaFD-00/qwen3-4b-math`, `SaFD-00/llama3.1-8b-math`, `SaFD-00/llama3.2-3b-math`
+
+#### SFT_ID-MAS 평가
+
+ID-MAS 3-Phase Pipeline으로 학습된 SFT 모델을 평가합니다.
+
+```bash
+# GSM8K SFT_ID-MAS 평가
+python main.py --mode eval --method sft_id-mas \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+# MATH SFT_ID-MAS 평가
+python main.py --mode eval --method sft_id-mas \
+    --domain math --eval-dataset math \
+    --model meta-llama/Llama-3.1-8B-Instruct
+```
+
+**사용 가능한 SFT_ID-MAS 모델:**
+- Math: `SaFD-00/qwen2.5-3b-math_id-mas`, `SaFD-00/qwen2.5-7b-math_id-mas`, `SaFD-00/qwen3-4b-math_id-mas`, `SaFD-00/llama3.1-8b-math_id-mas`, `SaFD-00/llama3.2-3b-math_id-mas`
+
+## CLI 옵션
+
+### 공통 옵션
+
+| 옵션 | 설명 | 값 |
+|------|------|-----|
+| `--mode` | 실행 모드 | `train`, `eval` (필수) |
+| `--model` | 학생 모델 선택 | Qwen/Qwen2.5-3B-Instruct (기본값) |
+| `--teacher-model` | 교사/설계 모델 선택 | `config.AVAILABLE_TEACHER_MODELS` (기본값: gpt-5-2025-08-07, LLaMA-Factory: localhost:2000/v1) |
+
+### 학습 모드 전용 옵션 (--mode train)
+
+| 옵션 | 설명 | 기본값 |
+|------|------|--------|
+| `--domain` | 도메인: `math` | (필수) |
+| `--train-dataset` | 학습 데이터셋: `gsm8k`, `math` | (필수) |
+| `--run-design` | 새로운 설계 생성 (기본값: 기존 설계 로드 또는 자동 생성) | False |
+| `--resume` | 기존 로그에서 이어서 학습 (`True`/`False`) | `True` |
+
+### 평가 모드 전용 옵션 (--mode eval)
+
+| 옵션 | 설명 | 기본값 |
+|------|------|--------|
+| `--method` | 평가 방법: `baseline`, `sft`, `sft_id-mas` | (필수) |
+| `--domain` | 도메인 (데이터셋 검증용) | (필수) |
+| `--eval-dataset` | 평가 데이터셋 | (필수) |
+| `--eval-resume` | 기존 결과에서 이어서 평가 (`True`/`False`) | `True` |
+
+## 평가 방법
+
+| Method | 설명 | 특징 |
+|--------|------|------|
+| `baseline` | 베이스 모델로 평가 | 순수 베이스 모델 성능 측정 |
+| `sft` | Fine-tuned 모델로 평가 | HuggingFace Hub에서 SFT 모델 로드하여 평가 |
+| `sft_id-mas` | ID-MAS SFT 모델로 평가 | 3-Phase Pipeline으로 학습된 SFT 모델 평가 |
+
+### SFT 평가
+
+SFT 방법은 HuggingFace Hub에서 fine-tuned 모델을 로드하여 평가:
+- `SaFD-00/{model}-{domain}` (예: `SaFD-00/qwen2.5-3b-math`)
+
+### SFT_ID-MAS 평가
+
+ID-MAS 3-Phase Pipeline으로 생성된 SFT 데이터로 학습된 모델을 평가:
+- `SaFD-00/{model}-{domain}_id-mas` (예: `SaFD-00/qwen2.5-3b-math_id-mas`)
+
+## 데이터 구조
+
+```
+data/
+└── math/                                           # Math 도메인
+    ├── train/                                      # 학습 데이터
+    │   ├── data/                                   # 원본 학습 데이터
+    │   │   ├── gsm8k_train.json                   # GSM8K 학습 데이터
+    │   │   └── math_train.json                    # MATH 학습 데이터
+    │   │
+    │   ├── instructional-design/                   # 설계 결과
+    │   │   ├── math_gsm8k_design.json             # GSM8K 설계
+    │   │   └── math_math_design.json              # MATH 설계
+    │   │
+    │   └── {Model}/                                # 모델별 출력 (예: Qwen3-4B-Instruct-2507)
+    │       ├── gsm8k_train_id-mas_{Model}.json    # SFT 데이터
+    │       ├── gsm8k_train_id-mas_{Model}_logs.json   # Pipeline 로그
+    │       ├── gsm8k_checkpoint_{timestamp}.json  # 체크포인트
+    │       └── gsm8k_train_summary_{Model}.json   # 학습 요약
+    │
+    └── eval/                                       # 평가 데이터
+        ├── data/                                   # 원본 평가 데이터
+        │   ├── gsm8k_test.json                    # GSM8K 평가 데이터
+        │   ├── math_test.json                     # MATH 평가 데이터
+        │   ├── svamp_test.json                    # SVAMP 평가 데이터
+        │   ├── asdiv_test.json                    # ASDiv 평가 데이터
+        │   ├── mawps_test.json                    # MAWPS 평가 데이터
+        │   └── mmlu_test.json                     # MMLU (수학) 평가 데이터
+        │
+        └── {Model}/                                # 모델별 평가 결과
+            ├── gsm8k_eval_results-Baseline.json   # Baseline 평가
+            ├── gsm8k_eval_results-SFT.json        # SFT 평가
+            └── gsm8k_eval_results-SFT_ID-MAS.json # SFT_ID-MAS 평가
+```
+
+## 데이터 준비
+
+HuggingFace에서 데이터셋을 다운로드하고 전처리합니다:
+
+```bash
+python -m utils.dataset_preparer
+```
+
+이 스크립트는 다음 데이터셋을 다운로드합니다:
+- **Math 도메인**: GSM8K, MATH, SVAMP, ASDiv, MAWPS, MMLU (수학 과목)
+
+## HuggingFace 토큰 설정
+
+학생 모델(Qwen, Llama)을 사용하려면 HuggingFace 토큰이 필요합니다.
+
+### 토큰 발급
+
+1. [HuggingFace](https://huggingface.co)에 가입/로그인
+2. [Settings > Access Tokens](https://huggingface.co/settings/tokens)로 이동
+3. "New token" 클릭 → 이름 입력 → "Read" 권한 선택 → "Generate"
+4. 생성된 토큰 복사 (hf_xxxxx 형식)
+
+### 토큰 등록
+
+```bash
+# .env 파일에 설정 (권장)
+HF_TOKEN=hf_your_token_here
+```
+
+### Llama 모델 접근 권한 (필수)
+
+Meta의 Llama 모델은 gated model로, 별도 접근 승인이 필요합니다:
+
+1. [meta-llama/Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) 페이지 방문
+2. "Access repository" 버튼 클릭
+3. Meta 라이선스 동의 후 제출
+4. 승인 이메일 수신 후 사용 가능 (보통 즉시~수분 내)
+
+> **참고**: Qwen 모델은 별도 승인 없이 바로 사용 가능합니다.
+
+## 새로운 도메인 추가하기
+
+ID-MAS는 설정 기반의 유연한 도메인 구조를 제공합니다. 새로운 도메인을 추가하려면:
+
+### 1. 데이터 준비
+
+새 도메인 디렉토리와 데이터 파일 구조 생성:
+
+```bash
+# 디렉토리 구조 생성
+mkdir -p data/{domain}/train/data
+mkdir -p data/{domain}/eval/data
+
+# 학습 데이터 배치
+# data/{domain}/train/data/{dataset}_train.json
+
+# 평가 데이터 배치
+# data/{domain}/eval/data/{dataset}_test.json
+```
+
+### 2. 설정 파일 업데이트
+
+**config/config.py**에 도메인 정보 추가:
+
+```python
+# Terminal Goals 추가
+TERMINAL_GOALS = {
+    "gsm8k": "...",
+    "math": "...",
+    "your_dataset": "Your terminal goal description here"
+}
+
+# Dataset to domain mapping 추가
+DATASET_TO_DOMAIN = {
+    "gsm8k": "math",
+    "math": "math",
+    "your_dataset": "your_domain"
+}
+
+# Training datasets 추가
+TRAINING_DATASETS = {
+    "math": ["gsm8k", "math"],
+    "your_domain": ["your_dataset"]
+}
+
+# Domain config 추가
+DOMAIN_CONFIG = {
+    "math": {...},
+    "your_domain": {
+        "data_dir": DATA_DIR / "your_domain",
+        "training_datasets": ["your_dataset"],
+        "eval_datasets": ["your_eval_dataset"],
+        "default_eval": "your_eval_dataset"
+    }
+}
+```
+
+**utils/domain_loader.py**에도 동일하게 추가:
+
+```python
+# TERMINAL_GOALS와 DOMAIN_CONFIG에 동일한 정보 추가
+```
+
+### 3. 실행 및 테스트
+
+```bash
+# 새 도메인으로 학습 실행
+python main.py --mode train --domain your_domain --train-dataset your_dataset
+
+# 새 도메인으로 평가 실행
+python main.py --mode eval --method baseline --domain your_domain --eval-dataset your_eval_dataset
+```
+
+### 주의사항
+
+- Terminal Goal은 학습 데이터셋별로 명확하게 정의해야 합니다
+- 데이터 파일 형식은 기존 도메인(math)의 JSON 구조를 참고하세요
+- 새 도메인 추가 시 코드 수정은 불필요합니다 (설정만 수정)
+- 더 자세한 가이드는 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요
+
+## 참고 자료
+
+- **Dick & Carey 모델**: PDF 참고 (prompt 초안.pdf)
+- **OpenAI API**: https://platform.openai.com/docs
+- **GSM8K**: https://huggingface.co/datasets/openai/gsm8k
+- **MATH**: https://huggingface.co/datasets/EleutherAI/hendrycks_math
+- **ARC**: https://huggingface.co/datasets/allenai/ai2_arc
+- **MMLU**: https://huggingface.co/datasets/cais/mmlu
