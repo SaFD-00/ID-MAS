@@ -403,12 +403,12 @@ data/
 
 | Case | 설명 | 응답 출처 |
 |------|------|-----------|
-| `A` | Iterative Scaffolding 성공 (정답 AND PO 충족) | 학생 모델 응답 (1회 또는 다중 시도) |
-| `A-Failed` | 5회 실패 후 재구성 (오답 또는 PO 미충족) | AI 기반 대화 분석 후 재구성된 응답 |
+| `A` | Iterative Scaffolding 성공 (PO 충족) | 학생 모델 응답 (1회 또는 다중 시도) |
+| `A-Failed` | 5회 실패 후 재구성 (PO 미충족) | AI 기반 대화 분석 후 재구성된 응답 |
 
-**성공 조건**: 정답을 맞추고(`is_correct=True`) **동시에** 모든 수행목표(PO)가 충족되어야(`all_satisfied=True`) Case A로 처리됩니다.
+**성공 조건**: 모든 수행목표(PO)가 충족되면(`all_satisfied=True`) Case A로 처리됩니다. 정답 여부(`is_correct`)는 SFT 케이스 분류에 영향을 주지 않습니다.
 
-**A-Failed 처리**: 최대 5회 Iterative Scaffolding 후에도 (정답 AND PO 충족) 조건을 만족하지 못한 경우, Teacher 모델이 대화 히스토리를 AI 기반으로 축약/분석하여 학생의 약점을 파악하고, 이를 보완하는 정답 솔루션을 재구성합니다. 정답은 맞았지만 PO가 충족되지 않은 경우도 A-Failed로 처리됩니다.
+**A-Failed 처리**: 최대 5회 Iterative Scaffolding 후에도 PO 충족 조건을 만족하지 못한 경우, Teacher 모델이 대화 히스토리를 AI 기반으로 축약/분석하여 학생의 약점을 파악하고, 이를 보완하는 정답 솔루션을 재구성합니다.
 
 ## 데이터 준비
 

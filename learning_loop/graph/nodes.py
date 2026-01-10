@@ -228,24 +228,20 @@ def _process_iterative_scaffolding(
             last_correct_iteration = iteration
             last_correct_response = response
 
-        # Success condition: correct answer AND all POs satisfied
-        if is_correct and all_satisfied:
-            print(f"    -> Success on iteration {iteration}! (Correct: True, PO satisfied: True)")
+        # Success condition: all POs satisfied (answer correctness is not considered)
+        if all_satisfied:
+            print(f"    -> Success on iteration {iteration}! (PO satisfied: True)")
             break
-        elif is_correct and not all_satisfied:
-            # Answer correct but PO not satisfied - continue scaffolding
-            print(f"    -> Answer correct but PO not satisfied on iteration {iteration}. Continuing scaffolding...")
-        elif not is_correct and all_satisfied:
-            # PO satisfied but answer incorrect - continue scaffolding (answer must be correct)
-            print(f"    -> PO satisfied but answer incorrect on iteration {iteration}. Continuing scaffolding...")
-        # else: both incorrect and PO not satisfied - continue scaffolding (default)
+        else:
+            # PO not satisfied - continue scaffolding
+            print(f"    -> PO not satisfied on iteration {iteration}. Continuing scaffolding...")
 
         # Store for next iteration
         last_response = response
         last_evaluation = evaluation
 
-    # Build result - success requires both correct answer AND all POs satisfied
-    if is_correct and all_satisfied:
+    # Build result - success requires all POs satisfied (answer correctness is not considered)
+    if all_satisfied:
         sft_output = _build_sft_response_from_iterations(iterations, is_success=True)
         return QuestionResult(
             id=question["id"],
@@ -266,10 +262,9 @@ def _process_iterative_scaffolding(
             },
         )
     else:
-        # Failed after max iterations - need reconstruction
-        # Could be: answer incorrect, or answer correct but PO not satisfied
-        failure_reason = "answer_incorrect" if not is_correct else "po_not_satisfied"
-        print(f"    -> Failed after {max_iterations} iterations. (Reason: {failure_reason}, Last correct iteration: {last_correct_iteration}) Reconstructing...")
+        # Failed after max iterations - need reconstruction (PO not satisfied)
+        failure_reason = "po_not_satisfied"
+        print(f"    -> Failed after {max_iterations} iterations. (Reason: {failure_reason}) Reconstructing...")
 
         reconstruction = teacher_model.summarize_and_reconstruct(
             problem_text=question["problem_text"],

@@ -272,7 +272,7 @@ flowchart TB
     subgraph Learning["Iterative Scaffolding 학습 단계"]
         subgraph Scaffolding["Iterative Scaffolding (최대 5회)"]
             S_IN[학습 문제] --> S_TA[Task Analysis + Initial Response]
-            S_TA --> S_EVAL{정답 AND PO 충족?}
+            S_TA --> S_EVAL{PO 충족?}
             S_EVAL -->|Yes| S_OK[Case A: 응답 사용]
             S_EVAL -->|No| S_SOCRATIC[Socratic 질문 생성]
             S_SOCRATIC --> S_RETRY{재시도 < 5회?}
@@ -327,9 +327,9 @@ flowchart LR
     ↓
 [Initial Response 생성] ← Terminal Goal 강조
     ↓
-[Teacher 평가] → 정답 여부 + 수행목표(PO) 충족 여부 판정
+[Teacher 평가] → 수행목표(PO) 충족 여부 판정
     ↓
-[정답 AND PO 충족?]
+[PO 충족?]
     ├─ Yes → Case A (성공)
     └─ No → [Socratic 질문 생성]
               ↓
@@ -342,9 +342,9 @@ flowchart LR
               └─ 정답 솔루션 재구성 (summarize_and_reconstruct)
 ```
 
-**성공 조건**: 정답을 맞추고(`is_correct=True`) **동시에** 모든 수행목표(PO)가 충족되어야(`all_satisfied=True`) 성공(Case A)으로 처리됩니다.
+**성공 조건**: 모든 수행목표(PO)가 충족되면(`all_satisfied=True`) 성공(Case A)으로 처리됩니다. 정답 여부(`is_correct`)는 SFT 케이스 분류에 영향을 주지 않습니다.
 
-**Iterative Scaffolding 흐름**: 정답이 틀리거나, 정답은 맞았지만 PO가 충족되지 않은 경우, 교사 모델이 Socratic 질문을 생성하여 학생의 사고를 유도합니다. 최대 5회까지 재시도하며, 5회 시도 후에도 (정답 AND PO 충족) 조건을 만족하지 못하면 A-Failed 케이스로 분류됩니다. AI가 대화 히스토리를 분석하여 학생의 약점을 파악한 후 정답 솔루션을 재구성합니다.
+**Iterative Scaffolding 흐름**: PO가 충족되지 않은 경우, 교사 모델이 Socratic 질문을 생성하여 학생의 사고를 유도합니다. 최대 5회까지 재시도하며, 5회 시도 후에도 PO 충족 조건을 만족하지 못하면 A-Failed 케이스로 분류됩니다. AI가 대화 히스토리를 분석하여 학생의 약점을 파악한 후 정답 솔루션을 재구성합니다.
 
 ### SFT 데이터 생성
 
@@ -352,8 +352,8 @@ Iterative Scaffolding 결과를 SFT 학습 데이터로 변환합니다.
 
 | 조건 | SFT Case | SFT 데이터 응답 |
 |------|----------|-----------------|
-| 정답 AND PO 충족 | Case A | 학생 응답 사용 (1회 또는 다중 시도) |
-| max_iterations 후 실패 (오답 또는 PO 미충족) | Case A-Failed | Reconstruction 응답 사용 |
+| PO 충족 | Case A | 학생 응답 사용 (1회 또는 다중 시도) |
+| max_iterations 후 PO 미충족 | Case A-Failed | Reconstruction 응답 사용 |
 
 ## 데이터 흐름
 
