@@ -110,23 +110,26 @@ class BaseDatasetLoader(ABC):
 
 ### 2. 교수 설계 모듈 (Design Modules)
 
-모든 설계 단계 모듈은 `LLMWrapper(teacher_config)`를 사용합니다 (GPTWrapper는 backward compatibility alias). `--teacher-model`로 선택한 설정이 공유되며 기본값은 OpenAI `gpt-5-2025-08-07`입니다. 모델 설정은 [config/models.py](config/models.py)의 `create_teacher_config()`를 통해 생성됩니다.
+모든 설계 단계 모듈은 `TeacherModelWrapper(teacher_config)`를 사용합니다. `--teacher-model`로 선택한 설정이 공유되며 기본값은 OpenAI `gpt-5-2025-08-07`입니다. 모델 설정은 [config/models.py](config/models.py)의 `create_teacher_config()`를 통해 생성됩니다.
+
+- **API 모델 (gpt-*, o1-*, o3-*)**: OpenAI API 직접 호출
+- **로컬 모델**: HuggingFace 모델을 `ModelCache`를 통해 로드 및 추론
 
 #### 2.1 교수 분석 (analysis.py)
 - **목적**: 학습 목표를 Terminal Goal, Subskills, Subtasks로 분해
-- **모델**: `teacher_config` (기본 gpt-5-2025-08-07, vLLM 가능)
+- **모델**: `teacher_config` (기본 gpt-5-2025-08-07, 로컬 HuggingFace 가능)
 - **출력**: 계층적 기능 분석 트리 + Anderson's Taxonomy 분류
 
 #### 2.2 수행목표 진술 (objectives.py)
 - **목적**: 각 기능에 대한 측정 가능한 수행목표 작성
 - **구성**: Behavior-Condition-Criterion (B-C-CR)
 - **참조**: Anderson & Krathwohl's Taxonomy (인지과정 차원 + 지식 차원)
-- **모델**: `teacher_config` (기본 gpt-5-2025-08-07, vLLM 가능)
+- **모델**: `teacher_config` (기본 gpt-5-2025-08-07, 로컬 HuggingFace 가능)
 
 #### 2.3 Test Item 개발 (test.py)
 - **목적**: 수행목표 달성 여부를 평가하는 문항 생성
 - **타입**: MCQ, TF, ShortAnswer, OneSentence, Essay
-- **모델**: `teacher_config` (기본 gpt-5-2025-08-07, vLLM 가능)
+- **모델**: `teacher_config` (기본 gpt-5-2025-08-07, 로컬 HuggingFace 가능)
 
 #### 2.4 루브릭 개발 (rubric.py)
 - **목적**: Essay형 평가를 위한 분석적 루브릭 생성
@@ -152,9 +155,10 @@ class BaseDatasetLoader(ABC):
 #### 3.2 교사 모델 (teacher_model.py)
 - **역할**: 학생 응답 평가 및 피드백 생성
 - **모델**: `create_teacher_config()`로 생성 (기본 GPT-5, CLI `--teacher-model`로 변경)
-  - `gpt-` prefix → OpenAI API (OPENAI_API_KEY 사용)
-  - 그 외 모델 → vLLM 서버 `http://localhost:2000/v1`, API key `0` (config.AVAILABLE_TEACHER_MODELS)
+  - `gpt-`, `o1-`, `o3-` prefix → OpenAI API (OPENAI_API_KEY 사용)
+  - 그 외 모델 → 로컬 HuggingFace 직접 로드 (`ModelCache` 사용)
   - 설계 모듈과 동일한 `teacher_config`를 공유
+  - Teacher/Student 동일 모델 사용 시 메모리 공유
 - **기능**:
   - `score_by_performance_objectives()`: 수행목표 기준 채점
   - `analyze_weak_objectives()`: 40% 이상 오류율 목표 분석
@@ -234,6 +238,34 @@ result = runner.run(
 - **체크포인트**: MemorySaver 기반 상태 저장
 - **배치 처리**: 각 Phase에서 여러 문제를 순차 처리
 
+#### 3.4 Models 패키지 구조
+
+모델 래퍼 클래스들의 계층 구조입니다.
+
+**BaseModelWrapper (base_wrapper.py)**
+- 모든 래퍼의 추상 베이스 클래스
+- `generate()`, `generate_json()` 인터페이스 정의
+
+**TeacherModelWrapper (teacher_wrapper.py)**
+- API 모델 (gpt-*, o1-*, o3-*): OpenAI API 호출
+- 로컬 모델: `ModelCache`를 통해 로드 및 추론
+- `LocalModelMixin` 상속으로 로컬 생성 로직 공유
+
+**StudentModelWrapper (student_wrapper.py)**
+- 로컬 HuggingFace 모델 전용
+- `ModelCache`를 통해 모델 로드
+- SFT/SFT_ID-MAS 모델 지원
+
+**ModelCache (model_cache.py)**
+- 글로벌 싱글톤 캐시
+- Teacher/Student 동일 모델 사용 시 메모리 공유
+- 메서드: `get_or_load()`, `is_loaded()`, `clear()`, `memory_usage()`
+
+**LocalModelMixin (local_model_mixin.py)**
+- 로컬 HuggingFace 모델 생성 로직 공유
+- `TeacherModelWrapper`와 `StudentModelWrapper`에서 사용
+- `_generate_with_local_model()` 메서드 제공
+
 ## 3-Phase Pipeline 프레임워크
 
 ### 전체 파이프라인 흐름 (Mermaid)
@@ -296,17 +328,17 @@ flowchart LR
     end
 
     TM --> CHECK{모델명 확인}
-    CHECK -->|"gpt-*"| OPENAI["OpenAI API<br/>base_url: None<br/>api_key: OPENAI_API_KEY"]
-    CHECK -->|"그 외"| VLLM["LLaMA-Factory vLLM<br/>base_url: localhost:2000/v1<br/>api_key: 0"]
+    CHECK -->|"gpt-*/o1-*/o3-*"| OPENAI["OpenAI API<br/>base_url: None<br/>api_key: OPENAI_API_KEY"]
+    CHECK -->|"그 외"| LOCAL["로컬 HuggingFace<br/>ModelCache 사용<br/>device: cuda"]
 
     OPENAI --> CONFIG["create_teacher_config()"]
-    VLLM --> CONFIG
+    LOCAL --> CONFIG
 
-    CONFIG --> DESIGN["설계 모듈<br/>(LLMWrapper)"]
+    CONFIG --> DESIGN["설계 모듈<br/>(TeacherModelWrapper)"]
     CONFIG --> TEACHER["교사 모델<br/>(TeacherModel)"]
 
     style OPENAI fill:#e3f2fd
-    style VLLM fill:#fff8e1
+    style LOCAL fill:#e8f5e9
 ```
 
 ### Phase 1: Scaffolding (초기 응답)
@@ -433,14 +465,15 @@ data/
     │   │   ├── gsm8k_train.json
     │   │   └── math_train.json
     │   │
-    │   ├── instructional-design/        # 설계 결과
-    │   │   ├── math_gsm8k_design.json
-    │   │   └── math_math_design.json
-    │   │
-    │   └── {Model}/                     # 모델별 출력
-    │       ├── gsm8k_train_id-mas_{Model}.json      # SFT 데이터
-    │       ├── gsm8k_train_id-mas_{Model}_logs.json # Pipeline 로그
-    │       └── gsm8k_checkpoint_{timestamp}.json    # 체크포인트
+    │   └── {Teacher-Model}/             # Teacher 모델별 (예: gpt-5-2025-08-07)
+    │       ├── instructional-design/    # 설계 결과
+    │       │   ├── math_gsm8k_design.json
+    │       │   └── math_math_design.json
+    │       │
+    │       └── {Student-Model}/         # Student 모델별 출력
+    │           ├── gsm8k_train_id-mas_{Model}.json      # SFT 데이터
+    │           ├── gsm8k_train_id-mas_{Model}_logs.json # Pipeline 로그
+    │           └── gsm8k_checkpoint_{timestamp}.json    # 체크포인트
     │
     └── eval/                            # 평가 데이터
         ├── data/                        # 원본 평가 데이터
@@ -720,17 +753,15 @@ python main.py --mode eval --method sft_id-mas \
 
 ### 모델 설정
 ```python
-# 교사 모델 (OpenAI 또는 vLLM)
+# 교사 모델 (OpenAI API 또는 로컬 HuggingFace)
 AVAILABLE_TEACHER_MODELS = [
-    "gpt-5-2025-08-07",                 # 기본 (OpenAI)
-    "openai/gpt-oss-20b",               # vLLM (localhost:2000/v1)
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "Qwen/Qwen3-30B-A3B-Thinking-2507",
-    "Qwen/Qwen3-30B-A3B-Thinking-2507-FP8",
-    "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
-    "Qwen/Qwen3-Next-80B-A3B-Thinking",
-    "Qwen/Qwen3-Next-80B-A3B-Instruct",
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+    "gpt-5-2025-08-07",                 # 기본 (OpenAI API)
+    "Qwen/Qwen2.5-3B-Instruct",         # 로컬 HuggingFace
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen3-4B-Instruct-2507",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
 ]
 
 DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
@@ -738,8 +769,16 @@ DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
 def create_teacher_config(model_name: str = None) -> dict:
     if model_name is None:
         model_name = DEFAULT_TEACHER_MODEL
-    # OpenAI GPT 계열
-    if model_name.startswith("gpt-"):
+
+    # API 모델 판단 (OpenAI 모델)
+    is_openai_model = (
+        model_name.startswith("gpt-") or
+        model_name.startswith("o1") or
+        model_name.startswith("o3")
+    )
+
+    # OpenAI 모델
+    if is_openai_model:
         return {
             "model": model_name,
             "base_url": None,  # OpenAI 기본 endpoint
@@ -748,12 +787,14 @@ def create_teacher_config(model_name: str = None) -> dict:
             "text": {"verbosity": "medium"},
             "max_tokens": 8192
         }
-    # LLaMA-Factory vLLM (localhost:2000/v1)
+
+    # 로컬 HuggingFace 모델
     return {
         "model": model_name,
-        "base_url": "http://localhost:2000/v1",
-        "api_key": "0",
-        "max_tokens": 8192
+        "device": "cuda",
+        "max_new_tokens": 8192,
+        "temperature": 0.7,
+        "do_sample": True
     }
 
 # 기본 교사 설정 (설계 모듈 + TeacherModel 공용)
@@ -768,11 +809,11 @@ AVAILABLE_STUDENT_MODELS = [
     "meta-llama/Llama-3.2-3B-Instruct",
 ]
 ```
-`main.py`에서 `--teacher-model` CLI 인자로 `create_teacher_config()`를 호출해 교사/설계 모델 설정을 생성합니다. `gpt-` 계열은 OpenAI API를, 그 외 모델은 vLLM 서버(`http://localhost:2000/v1`, API key `0`)를 사용합니다.
+`main.py`에서 `--teacher-model` CLI 인자로 `create_teacher_config()`를 호출해 교사/설계 모델 설정을 생성합니다. `gpt-`, `o1-`, `o3-` 계열은 OpenAI API를, 그 외 모델은 로컬 HuggingFace 직접 로드를 사용합니다.
 
 **Teacher Model Default**: `gpt-5-2025-08-07` (OpenAI API)
 
-vLLM 모델을 사용하려면 `--teacher-model` 옵션으로 `AVAILABLE_TEACHER_MODELS` 중 하나를 지정하세요.
+**로컬 모델 사용**: `--teacher-model` 옵션으로 `AVAILABLE_TEACHER_MODELS` 중 로컬 모델을 지정하면 `ModelCache`를 통해 HuggingFace 모델을 직접 로드합니다. Teacher/Student 동일 모델 사용 시 메모리가 공유됩니다.
 
 ## 새로운 도메인 추가 가이드
 

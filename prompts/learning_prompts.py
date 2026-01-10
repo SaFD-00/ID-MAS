@@ -78,7 +78,7 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 # Phase 2: Teacher Intervention Prompt (ReAct-style with Socratic Questions)
 # ==============================================================================
 
-TEACHER_INTERVENTION_PROMPT = """You are a teacher model supporting the learning of a student model (a small LLM).
+TEACHER_INTERVENTION_PROMPT = """You are a teacher model supporting the learning of a student model.
 
 Your role is NOT to provide correct answers, but to generate a reasoning state that guides the student model's next response. You must monitor the student model's reasoning steps to ensure they meet the established performance objectives.
 

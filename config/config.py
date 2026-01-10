@@ -25,26 +25,28 @@ AVAILABLE_TEACHER_MODELS = [
     "gpt-5-2025-08-07",
     # LLaMA-Factory API (OpenAI-compatible)
     "openai/gpt-oss-20b",
-    "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen3-30B-A3B-Thinking-2507",
-    "Qwen/Qwen3-30B-A3B-Thinking-2507-FP8",
-    "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
-    "Qwen/Qwen3-Next-80B-A3B-Thinking",
-    "Qwen/Qwen3-Next-80B-A3B-Instruct",
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "Qwen/Qwen3-4B-Instruct-2507",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
 ]
 
 # 기본 Teacher 모델
 DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
 
 
-def create_teacher_config(model_name: str = None) -> dict:
+def create_teacher_config(model_name: str = None, use_api: bool = None) -> dict:
     """
     Teacher model config 생성
 
     Args:
         model_name: Teacher 모델 이름 (None이면 기본 모델 사용)
+        use_api: API 모드 강제 지정 (None이면 모델명으로 자동 판단)
+            - True: LLaMA-Factory API 사용
+            - False: 로컬 HuggingFace 모델 로드
+            - None: gpt-*, o1-*, o3-*는 OpenAI API, 그 외는 로컬 로드
 
     Returns:
         Teacher model 설정 딕셔너리
@@ -52,8 +54,15 @@ def create_teacher_config(model_name: str = None) -> dict:
     if model_name is None:
         model_name = DEFAULT_TEACHER_MODEL
 
-    # OpenAI 모델 (gpt-로 시작)
-    if model_name.startswith("gpt-"):
+    # API 모델 판단 (OpenAI 모델)
+    is_openai_model = (
+        model_name.startswith("gpt-") or
+        model_name.startswith("o1") or
+        model_name.startswith("o3")
+    )
+
+    # OpenAI 모델
+    if is_openai_model:
         return {
             "model": model_name,
             "base_url": None,  # OpenAI 기본 endpoint
@@ -62,15 +71,15 @@ def create_teacher_config(model_name: str = None) -> dict:
             "text": {"verbosity": "medium"},
             "max_tokens": 8192
         }
-    # LLaMA-Factory API 모델 (OpenAI-compatible endpoint)
-    else:
-        base_url = os.getenv("LLAMA_FACTORY_BASE_URL", "http://localhost:2000/v1")
-        return {
-            "model": model_name,
-            "base_url": base_url,
-            "api_key": "0",
-            "max_tokens": 8192
-        }
+
+    # 로컬 HuggingFace 모델 (기본값)
+    return {
+        "model": model_name,
+        "device": "cuda",
+        "max_new_tokens": 8192,
+        "temperature": 0.7,
+        "do_sample": True
+    }
 
 
 # 기본 Teacher 모델 설정 (하위 호환성 - DESIGN_MODEL_CONFIG)
@@ -81,6 +90,7 @@ AVAILABLE_STUDENT_MODELS = [
     "Qwen/Qwen3-4B-Instruct-2507",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
     "meta-llama/Llama-3.1-8B-Instruct",
     "meta-llama/Llama-3.2-3B-Instruct",
 ]
@@ -101,25 +111,6 @@ DATA_DIR = PROJECT_ROOT / "data"
 
 # 기본 디렉토리 생성 (나머지는 도메인별/모델별로 생성됨)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def get_design_output_dir(domain: str) -> Path:
-    """
-    도메인별 설계 출력 디렉토리 경로 반환
-
-    Args:
-        domain: 도메인 이름 (예: "math")
-
-    Returns:
-        설계 결과 저장 디렉토리 (Path 객체)
-        New structure: data/{domain}/train/instructional-design/
-    """
-    if not domain:
-        raise ValueError("Domain cannot be empty for design outputs")
-
-    design_dir = DATA_DIR / domain.lower() / "train" / "instructional-design"
-    design_dir.mkdir(parents=True, exist_ok=True)
-    return design_dir
 
 
 def get_student_model_config(model_name: str = None) -> dict:
@@ -174,10 +165,11 @@ def get_model_short_name(model_name: str = None) -> str:
 # Maps base model names to short names used in SaFD-00/{model}-{domain} repos
 MODEL_NAME_TO_SHORT = {
     "Qwen/Qwen2.5-3B-Instruct": "qwen2.5-3b",
-    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
     "Qwen/Qwen2.5-7B-Instruct": "qwen2.5-7b",
+    "Qwen/Qwen2.5-14B-Instruct": "qwen2.5-14b",
+    "Qwen/Qwen3-4B-Instruct-2507": "qwen3-4b",
+    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
     "meta-llama/Llama-3.2-3B-Instruct": "llama3.2-3b",
-    "Qwen/Qwen3-4B-Instruct-2507": "qwen3-4b"
 }
 
 
@@ -334,19 +326,20 @@ DOMAIN_CONFIG = {
 }
 
 
-def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str = None, mode: str = "train") -> dict:
+def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str = None, mode: str = "train", teacher_model_name: str = None) -> dict:
     """
     도메인별, 모델별 데이터 디렉토리 경로 반환 (새 구조)
 
     New Structure:
-        Train: data/{domain}/train/{Model}/
-        Eval:  data/{domain}/eval/{Model}/
+        Train: data/{domain}/train/{teacher_model}/{student_model}/
+        Eval:  data/{domain}/eval/{student_model}/
 
     Args:
         domain: 도메인 이름 (예: "math")
-        model_name: 모델 이름 (None이면 기본 모델 사용)
+        model_name: Student 모델 이름 (None이면 기본 모델 사용)
         train_dataset: 학습 데이터셋 이름 (파일명 생성에 사용, 폴더 구조에는 미사용)
         mode: "train" 또는 "eval"
+        teacher_model_name: Teacher 모델 이름 (train 모드에서 사용, None이면 기본 모델 사용)
 
     Returns:
         경로 딕셔너리:
@@ -360,11 +353,13 @@ def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str
     model_short = get_model_short_name(model_name)
 
     if mode == "train":
-        model_dir = DATA_DIR / domain / "train" / model_short
+        # Teacher 모델 이름으로 상위 디렉토리 생성
+        teacher_short = get_model_short_name(teacher_model_name) if teacher_model_name else get_model_short_name(DEFAULT_TEACHER_MODEL)
+        model_dir = DATA_DIR / domain / "train" / teacher_short / model_short
         dirs = {
             "model_dir": model_dir,
             "raw_data_dir": DATA_DIR / domain / "train" / "data",
-            "design_dir": DATA_DIR / domain / "train" / "instructional-design",
+            "design_dir": DATA_DIR / domain / "train" / teacher_short / "instructional-design",
         }
     else:  # eval
         model_dir = DATA_DIR / domain / "eval" / model_short

@@ -9,21 +9,25 @@ from config.models import get_model_short_name
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def get_design_output_dir(domain: str) -> Path:
+def get_design_output_dir(domain: str, teacher_model_name: str = None) -> Path:
     """
     도메인별 설계 출력 디렉토리 경로 반환
 
     Args:
         domain: 도메인 이름 (예: "math")
+        teacher_model_name: Teacher 모델 이름 (None이면 기본 모델 사용)
 
     Returns:
         설계 결과 저장 디렉토리 (Path 객체)
-        New structure: data/{domain}/train/instructional-design/
+        New structure: data/{domain}/train/{teacher_model}/instructional-design/
     """
+    from config.models import DEFAULT_TEACHER_MODEL
+
     if not domain:
         raise ValueError("Domain cannot be empty for design outputs")
 
-    design_dir = DATA_DIR / domain.lower() / "train" / "instructional-design"
+    teacher_short = get_model_short_name(teacher_model_name) if teacher_model_name else get_model_short_name(DEFAULT_TEACHER_MODEL)
+    design_dir = DATA_DIR / domain.lower() / "train" / teacher_short / "instructional-design"
     design_dir.mkdir(parents=True, exist_ok=True)
     return design_dir
 
@@ -85,19 +89,20 @@ def get_dataset_model_dirs(dataset: str, model_name: str = None) -> dict:
     return dirs
 
 
-def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str = None, mode: str = "train") -> dict:
+def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str = None, mode: str = "train", teacher_model_name: str = None) -> dict:
     """
     도메인별, 모델별 데이터 디렉토리 경로 반환 (새 구조)
 
     New Structure:
-        Train: data/{domain}/train/{Model}/
-        Eval:  data/{domain}/eval/{Model}/
+        Train: data/{domain}/train/{teacher_model}/{student_model}/
+        Eval:  data/{domain}/eval/{student_model}/
 
     Args:
         domain: 도메인 이름 (예: "math")
-        model_name: 모델 이름 (None이면 기본 모델 사용)
+        model_name: Student 모델 이름 (None이면 기본 모델 사용)
         train_dataset: 학습 데이터셋 이름 (파일명 생성에 사용, 폴더 구조에는 미사용)
         mode: "train" 또는 "eval"
+        teacher_model_name: Teacher 모델 이름 (train 모드에서 사용, None이면 기본 모델 사용)
 
     Returns:
         경로 딕셔너리:
@@ -107,6 +112,8 @@ def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str
         - sft_data_dir: SFT 데이터 디렉토리 (train 모드만)
         - learning_loop_dir: 학습 루프 디렉토리 (train 모드만)
     """
+    from config.models import DEFAULT_TEACHER_MODEL
+
     if domain not in DOMAIN_CONFIG:
         raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
 
@@ -114,7 +121,9 @@ def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str
     domain_dir = DATA_DIR / domain
 
     if mode == "train":
-        model_dir = domain_dir / "train" / model_short
+        # Teacher 모델 이름으로 상위 디렉토리 생성
+        teacher_short = get_model_short_name(teacher_model_name) if teacher_model_name else get_model_short_name(DEFAULT_TEACHER_MODEL)
+        model_dir = domain_dir / "train" / teacher_short / model_short
         dataset_key = f"{domain}_{train_dataset}" if train_dataset else domain
 
         dirs = {

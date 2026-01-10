@@ -1,7 +1,7 @@
 """
 5-1단계: 루브릭 개발 (Essay형 Test Item용)
 """
-from models.llm_wrapper import LLMWrapper
+from models.teacher_wrapper import TeacherModelWrapper
 from prompts.rubric_templates import (
     RUBRIC_CRITERION_TEMPLATES,
     RUBRIC_GENERATION_PROMPT
@@ -18,7 +18,7 @@ class RubricDevelopment:
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
         """
-        self.llm = LLMWrapper(teacher_config)
+        self.llm = TeacherModelWrapper(teacher_config)
         self.templates = RUBRIC_CRITERION_TEMPLATES
 
     def generate_rubric(

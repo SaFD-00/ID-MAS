@@ -1,7 +1,7 @@
 """
 4단계: 수행목표 진술 (Performance Objectives)
 """
-from models.llm_wrapper import LLMWrapper
+from models.teacher_wrapper import TeacherModelWrapper
 from prompts.design_prompts import PERFORMANCE_OBJECTIVES_PROMPT
 from typing import Dict, Any, List
 import json
@@ -15,7 +15,7 @@ class PerformanceObjectives:
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
         """
-        self.llm = LLMWrapper(teacher_config)
+        self.llm = TeacherModelWrapper(teacher_config)
 
     def generate_objectives(
         self,

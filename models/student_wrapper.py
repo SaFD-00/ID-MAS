@@ -2,16 +2,15 @@
 범용 학생 모델 래퍼
 Qwen, Llama 등 다양한 HuggingFace 모델 지원
 """
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from typing import Optional, List, Dict, Tuple
-from config.config import get_student_model_config, DEFAULT_STUDENT_MODEL, HF_TOKEN
+from typing import Optional, List, Dict, Any
+from config.config import get_student_model_config, DEFAULT_STUDENT_MODEL
 from models.base_wrapper import BaseModelWrapper
+from models.local_model_mixin import LocalModelMixin
+from models.model_cache import ModelCache
 
 
-class StudentModelWrapper(BaseModelWrapper):
+class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
     """범용 학생 모델 래퍼 클래스 (Qwen, Llama 등 지원)"""
-    _model_cache: Dict[Tuple[str, str], Dict[str, object]] = {}
 
     def __init__(
         self,
@@ -54,47 +53,22 @@ class StudentModelWrapper(BaseModelWrapper):
         self.model_name = actual_model_name  # Use actual model name for loading
         self.device = self.config["device"]
 
-        # Cache key uses actual model name (SFT or base)
-        cache_key = (actual_model_name, self.device)
-        cached = self._model_cache.get(cache_key)
-        if cached:
-            self.tokenizer = cached["tokenizer"]
-            self.model = cached["model"]
-            print(f"Using cached {actual_model_name} on {self.device}")
-            return
+        # LocalModelMixin에서 사용하는 속성들
+        self.max_new_tokens = self.config["max_new_tokens"]
+        self.temperature = self.config["temperature"]
+        self.do_sample = self.config["do_sample"]
 
-        # 모델과 토크나이저 로드
-        print(f"Loading {actual_model_name}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            actual_model_name,
-            token=HF_TOKEN
-        )
-        self.model = AutoModelForCausalLM.from_pretrained(
-            actual_model_name,
-            dtype=torch.float16 if self.device == "cuda" else torch.float32,
-            device_map="auto" if self.device == "cuda" else None,
-            token=HF_TOKEN
-        )
-
-        # pad_token이 없는 경우 설정 (Llama 모델 등)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-
-        if self.device == "cpu":
-            self.model = self.model.to(self.device)
-
-        self._model_cache[cache_key] = {
-            "tokenizer": self.tokenizer,
-            "model": self.model
-        }
-
-        print(f"Model loaded on {self.device}")
+        # 공유 ModelCache를 사용하여 모델 로드 (Teacher와 동일 모델일 경우 공유됨)
+        cached = ModelCache.get_or_load(actual_model_name, self.device)
+        self.tokenizer = cached["tokenizer"]
+        self.model = cached["model"]
 
     def generate(
         self,
         prompt: str,
         system_message: Optional[str] = None,
-        chat_history: Optional[List[Dict[str, str]]] = None
+        chat_history: Optional[List[Dict[str, str]]] = None,
+        response_format: Optional[Dict[str, str]] = None  # 인터페이스 통일용 (무시됨)
     ) -> str:
         """
         텍스트 생성
@@ -103,57 +77,63 @@ class StudentModelWrapper(BaseModelWrapper):
             prompt: 사용자 프롬프트
             system_message: 시스템 메시지
             chat_history: 대화 히스토리 (Ms-Mt 루프용)
+            response_format: 응답 형식 (로컬 모델에서는 무시됨)
 
         Returns:
             생성된 텍스트
         """
-        # 메시지 구성
-        messages = []
+        return self._generate_with_local_model(prompt, system_message, chat_history)
 
-        if system_message:
-            messages.append({
-                "role": "system",
-                "content": system_message
-            })
+    def generate_json(
+        self,
+        prompt: str,
+        system_message: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        JSON 형식으로 응답 생성
 
-        # 대화 히스토리 추가
-        if chat_history:
-            messages.extend(chat_history)
+        Args:
+            prompt: 사용자 프롬프트
+            system_message: 시스템 메시지
 
-        # 현재 프롬프트 추가
-        messages.append({
-            "role": "user",
-            "content": prompt
-        })
+        Returns:
+            JSON 파싱된 딕셔너리
 
-        # 토크나이징 (chat template 적용)
-        text = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+        Note:
+            Student 모델은 JSON 응답 생성을 잘 지원하지 않을 수 있습니다.
+            Teacher 모델 사용을 권장합니다.
+        """
+        import json
+        import re
 
-        inputs = self.tokenizer(
-            [text],
-            return_tensors="pt",
-            padding=True,
-            truncation=True
-        ).to(self.device)
+        json_prompt = prompt
+        if "json" not in prompt.lower():
+            json_prompt = prompt + "\n\nRespond in valid JSON format only."
 
-        # 생성
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=self.config["max_new_tokens"],
-                temperature=self.config["temperature"],
-                do_sample=self.config["do_sample"],
-                pad_token_id=self.tokenizer.eos_token_id
-            )
+        response_text = self._generate_with_local_model(json_prompt, system_message)
 
-        # 디코딩
-        generated_text = self.tokenizer.decode(
-            outputs[0][inputs['input_ids'].shape[1]:],
-            skip_special_tokens=True
-        )
+        # JSON 추출 시도
+        try:
+            return json.loads(response_text.strip())
+        except json.JSONDecodeError:
+            pass
 
-        return generated_text.strip()
+        # ```json ... ``` 블록 추출
+        json_block_pattern = r'```(?:json)?\s*([\s\S]*?)```'
+        matches = re.findall(json_block_pattern, response_text)
+        for match in matches:
+            try:
+                return json.loads(match.strip())
+            except json.JSONDecodeError:
+                continue
+
+        # { ... } 패턴 추출
+        brace_pattern = r'\{[\s\S]*\}'
+        matches = re.findall(brace_pattern, response_text)
+        for match in matches:
+            try:
+                return json.loads(match)
+            except json.JSONDecodeError:
+                continue
+
+        raise Exception(f"JSON 파싱 오류\n응답: {response_text[:500]}...")

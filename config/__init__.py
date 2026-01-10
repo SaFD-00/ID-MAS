@@ -48,8 +48,10 @@ from config.paths import (
     get_design_output_dir,
     get_model_data_dirs,
     get_dataset_model_dirs,
-    get_domain_data_dirs,
 )
+
+# Domain data dirs from config.config (has raw_data_dir, design_dir keys)
+from config.config import get_domain_data_dirs
 
 # Legacy aliases for backward compatibility
 DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)

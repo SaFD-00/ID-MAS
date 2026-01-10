@@ -49,8 +49,10 @@ ID-MAS/
 │   └── reparse_eval_results.py  # 평가 결과 재처리
 ├── models/                  # 모델 래퍼
 │   ├── base_wrapper.py     # 모델 래퍼 베이스 클래스
-│   ├── llm_wrapper.py      # LLM API 래퍼 (OpenAI, vLLM 호환)
-│   └── student_wrapper.py  # 학생 모델 래퍼 (Qwen, Llama 등)
+│   ├── teacher_wrapper.py  # Teacher 모델 래퍼 (API + 로컬)
+│   ├── student_wrapper.py  # Student 모델 래퍼 (로컬)
+│   ├── model_cache.py      # 글로벌 모델 캐시 (메모리 공유)
+│   └── local_model_mixin.py # 로컬 모델 생성 믹스인
 ├── config/                  # 설정 모듈 (서브모듈 구조)
 │   ├── __init__.py         # 통합 인터페이스 (backward compatibility)
 │   ├── api.py              # API 키 및 인증 (OPENAI_API_KEY, HF_TOKEN)
@@ -70,50 +72,35 @@ ID-MAS/
 ### 교사 모델 (설계 및 평가)
 
 - **기본값 (OpenAI)**: `gpt-5-2025-08-07` (OPENAI_API_KEY 필요)
-- **권장값 (vLLM/GPU)**: `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` (localhost:2000/v1)
+- **로컬 모델**: HuggingFace 모델 직접 로드 (GPU 필요)
 - CLI에서 `--teacher-model`로 선택 (`config.create_teacher_config()`가 설정 자동 생성)
-- `gpt-`로 시작하는 모델은 OpenAI API, 그 외 모델은 LLaMA-Factory 서버(`http://localhost:2000/v1`, API key `0`, `max_tokens=8192`)를 사용
+- `gpt-`, `o1-`, `o3-`로 시작하는 모델은 OpenAI API, 그 외 모델은 로컬 HuggingFace 직접 로드
+- Teacher/Student 동일 모델 사용 시 `ModelCache`로 메모리 공유
 - 설계 모듈과 교사 모델 모두 동일한 `teacher_config`를 공유
 
 지원 모델 (`config.AVAILABLE_TEACHER_MODELS`)
 
 | 유형 | 모델 | 비고 |
 |------|------|------|
-| OpenAI | gpt-5-2025-08-07 | 기본값 |
-| LLaMA-Factory | openai/gpt-oss-20b | localhost:2000/v1 |
-| LLaMA-Factory | meta-llama/Llama-3.3-70B-Instruct | localhost:2000/v1 |
-| LLaMA-Factory | Qwen/Qwen3-30B-A3B-Thinking-2507 | localhost:2000/v1 |
-| LLaMA-Factory | Qwen/Qwen3-30B-A3B-Thinking-2507-FP8 | localhost:2000/v1 |
-| LLaMA-Factory | Qwen/Qwen3-30B-A3B-Instruct-2507-FP8 | localhost:2000/v1 |
-| LLaMA-Factory | Qwen/Qwen3-Next-80B-A3B-Thinking | localhost:2000/v1 |
-| LLaMA-Factory | Qwen/Qwen3-Next-80B-A3B-Instruct | localhost:2000/v1 |
-| LLaMA-Factory | deepseek-ai/DeepSeek-R1-Distill-Qwen-32B | localhost:2000/v1 |
+| OpenAI | gpt-5-2025-08-07 | 기본값 (API) |
+| 로컬 | Qwen/Qwen2.5-3B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | Qwen/Qwen2.5-7B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | Qwen/Qwen2.5-14B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | Qwen/Qwen3-4B-Instruct-2507 | HuggingFace 직접 로드 |
+| 로컬 | meta-llama/Llama-3.1-8B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | meta-llama/Llama-3.2-3B-Instruct | HuggingFace 직접 로드 |
 
-#### LLaMA-Factory 서버 예시 (localhost:2000/v1)
+#### 로컬 모델 사용 예시
 
 ```bash
-# 1. 서버 시작 (LLaMA-Factory, API 포트 2000, vLLM 백엔드 권장)
-cd /path/to/LLaMA-Factory
-
-# Llama-3.3-70B (4 GPU 권장)
-DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0,1,2,3 API_PORT=2000 \
-    llamafactory-cli api examples/inference_custom/llama3_3_70b.yaml infer_backend=vllm
-
-# Qwen3-30B-A3B-Thinking (1+ GPU)
-DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0 API_PORT=2000 \
-    llamafactory-cli api examples/inference_custom/qwen3_30b_a3b_thinking.yaml infer_backend=vllm
-
-# Qwen3-Next-80B (2+ GPU 필수)
-DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0,1,2,3 API_PORT=2000 \
-    llamafactory-cli api examples/inference_custom/qwen3_next_80b_a3b_thinking.yaml infer_backend=vllm
-
-# DeepSeek-R1-Distill-Qwen-32B
-DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0,1 API_PORT=2000 \
-    llamafactory-cli api examples/inference_custom/deepseek_r1_distill_qwen_32b.yaml infer_backend=vllm
-
-# 2. 학습 실행 (예시)
+# 로컬 Teacher 모델 사용 (GPU 필요)
 python main.py --mode train --domain math --train-dataset gsm8k \
-    --teacher-model meta-llama/Llama-3.3-70B-Instruct
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+# Teacher/Student 동일 모델 사용 (메모리 공유)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct \
+    --student-model Qwen/Qwen2.5-3B-Instruct
 ```
 
 ### 학생 모델 (선택 가능)
@@ -122,6 +109,7 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 | `Qwen/Qwen3-4B-Instruct-2507` | Qwen3 4B (최신) |
 | `Qwen/Qwen2.5-3B-Instruct` | Qwen2.5 3B (기본값) |
 | `Qwen/Qwen2.5-7B-Instruct` | Qwen2.5 7B |
+| `Qwen/Qwen2.5-14B-Instruct` | Qwen2.5 14B |
 | `meta-llama/Llama-3.1-8B-Instruct` | Llama 3.1 8B |
 | `meta-llama/Llama-3.2-3B-Instruct` | Llama 3.2 3B |
 
@@ -164,9 +152,8 @@ IDMAS_DEBUG_API=1 python main.py --mode train --domain math --train-dataset gsm8
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
-| `OPENAI_API_KEY` | OpenAI API 키 | (필수, gpt-* 모델 사용 시) |
-| `HF_TOKEN` | HuggingFace 토큰 | (필수, 학생 모델 사용 시) |
-| `LLAMA_FACTORY_BASE_URL` | LLaMA-Factory API 주소 | `http://localhost:2000/v1` |
+| `OPENAI_API_KEY` | OpenAI API 키 | (필수, gpt-*/o1-*/o3-* 모델 사용 시) |
+| `HF_TOKEN` | HuggingFace 토큰 | (필수, 로컬 모델 사용 시) |
 | `IDMAS_DEBUG_API` | API 디버그 로그 출력 | `0` |
 
 ## 실행 예제
@@ -194,21 +181,22 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 python main.py --mode train --domain math --train-dataset gsm8k --resume False
 ```
 
-### vLLM 교사 모델 사용 예시
+### 로컬 교사 모델 사용 예시
 
-GPU 서버에서 vLLM으로 학습:
+GPU 서버에서 HuggingFace 로컬 모델 사용:
 
 ```bash
-# 권장 vLLM 모델 사용 (Qwen3-30B-A3B-Instruct-2507-FP8)
+# 로컬 모델 직접 로드 (GPU 필요)
 python main.py --mode train --domain math --train-dataset gsm8k \
-    --teacher-model Qwen/Qwen3-30B-A3B-Instruct-2507-FP8
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
 
-# 다른 vLLM 모델 사용
+# Teacher/Student 동일 모델 사용 시 메모리 공유
 python main.py --mode train --domain math --train-dataset gsm8k \
-    --teacher-model meta-llama/Llama-3.3-70B-Instruct
+    --teacher-model Qwen/Qwen2.5-3B-Instruct \
+    --student-model Qwen/Qwen2.5-3B-Instruct
 ```
 
-**참고**: vLLM 모델 사용 시 localhost:2000/v1 에 vLLM 서버가 실행 중이어야 합니다.
+**참고**: 로컬 모델 사용 시 충분한 GPU 메모리가 필요합니다. `ModelCache`가 동일 모델을 공유하여 메모리를 절약합니다.
 
 ### 평가 모드 (--mode eval)
 
@@ -252,7 +240,7 @@ python main.py --mode eval --method sft \
 ```
 
 **사용 가능한 SFT 모델:**
-- Math: `SaFD-00/qwen2.5-3b-math`, `SaFD-00/qwen2.5-7b-math`, `SaFD-00/qwen3-4b-math`, `SaFD-00/llama3.1-8b-math`, `SaFD-00/llama3.2-3b-math`
+- Math: `SaFD-00/qwen2.5-3b-math`, `SaFD-00/qwen2.5-7b-math`, `SaFD-00/qwen2.5-14b-math`, `SaFD-00/qwen3-4b-math`, `SaFD-00/llama3.1-8b-math`, `SaFD-00/llama3.2-3b-math`
 
 #### SFT_ID-MAS 평가
 
@@ -271,7 +259,7 @@ python main.py --mode eval --method sft_id-mas \
 ```
 
 **사용 가능한 SFT_ID-MAS 모델:**
-- Math: `SaFD-00/qwen2.5-3b-math_id-mas`, `SaFD-00/qwen2.5-7b-math_id-mas`, `SaFD-00/qwen3-4b-math_id-mas`, `SaFD-00/llama3.1-8b-math_id-mas`, `SaFD-00/llama3.2-3b-math_id-mas`
+- Math: `SaFD-00/qwen2.5-3b-math_id-mas`, `SaFD-00/qwen2.5-7b-math_id-mas`, `SaFD-00/qwen2.5-14b-math_id-mas`, `SaFD-00/qwen3-4b-math_id-mas`, `SaFD-00/llama3.1-8b-math_id-mas`, `SaFD-00/llama3.2-3b-math_id-mas`
 
 ## CLI 옵션
 
@@ -329,15 +317,16 @@ data/
     │   │   ├── gsm8k_train.json                   # GSM8K 학습 데이터
     │   │   └── math_train.json                    # MATH 학습 데이터
     │   │
-    │   ├── instructional-design/                   # 설계 결과
-    │   │   ├── math_gsm8k_design.json             # GSM8K 설계
-    │   │   └── math_math_design.json              # MATH 설계
-    │   │
-    │   └── {Model}/                                # 모델별 출력 (예: Qwen3-4B-Instruct-2507)
-    │       ├── gsm8k_train_id-mas_{Model}.json    # SFT 데이터
-    │       ├── gsm8k_train_id-mas_{Model}_logs.json   # Pipeline 로그
-    │       ├── gsm8k_checkpoint_{timestamp}.json  # 체크포인트
-    │       └── gsm8k_train_summary_{Model}.json   # 학습 요약
+    │   └── {Teacher-Model}/                        # Teacher 모델별 (예: gpt-5-2025-08-07)
+    │       ├── instructional-design/               # 설계 결과
+    │       │   ├── math_gsm8k_design.json         # GSM8K 설계
+    │       │   └── math_math_design.json          # MATH 설계
+    │       │
+    │       └── {Student-Model}/                    # Student 모델별 (예: Qwen3-4B-Instruct-2507)
+    │           ├── gsm8k_train_id-mas_{Model}.json     # SFT 데이터
+    │           ├── gsm8k_train_id-mas_{Model}_logs.json # Pipeline 로그
+    │           ├── gsm8k_checkpoint_{timestamp}.json   # 체크포인트
+    │           └── gsm8k_train_summary_{Model}.json    # 학습 요약
     │
     └── eval/                                       # 평가 데이터
         ├── data/                                   # 원본 평가 데이터

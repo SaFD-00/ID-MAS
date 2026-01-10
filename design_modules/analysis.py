@@ -1,7 +1,7 @@
 """
 2단계: 교수 분석 (Instructional Analysis)
 """
-from models.llm_wrapper import LLMWrapper
+from models.teacher_wrapper import TeacherModelWrapper
 from prompts.design_prompts import INSTRUCTIONAL_ANALYSIS_PROMPT
 from typing import Dict, Any
 import json
@@ -15,7 +15,7 @@ class InstructionalAnalysis:
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
         """
-        self.llm = LLMWrapper(teacher_config)
+        self.llm = TeacherModelWrapper(teacher_config)
 
     def analyze(self, learning_objective: str) -> Dict[str, Any]:
         """

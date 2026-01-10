@@ -1,7 +1,7 @@
 """
 5단계: Test Item 개발
 """
-from models.llm_wrapper import LLMWrapper
+from models.teacher_wrapper import TeacherModelWrapper
 from prompts.design_prompts import TEST_ITEM_DEVELOPMENT_PROMPT
 from typing import Dict, Any, List, Optional
 import json
@@ -15,7 +15,7 @@ class TestItemDevelopment:
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
         """
-        self.llm = LLMWrapper(teacher_config)
+        self.llm = TeacherModelWrapper(teacher_config)
 
     def generate_test_items(
         self,

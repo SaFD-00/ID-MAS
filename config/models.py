@@ -13,14 +13,12 @@ AVAILABLE_TEACHER_MODELS = [
     "gpt-5-2025-08-07",
     # LLaMA-Factory API (OpenAI-compatible)
     "openai/gpt-oss-20b",
-    "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen3-30B-A3B-Thinking-2507",
-    "Qwen/Qwen3-30B-A3B-Thinking-2507-FP8",
-    "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
-    "Qwen/Qwen3-Next-80B-A3B-Thinking",
-    "Qwen/Qwen3-Next-80B-A3B-Instruct",
-    "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "Qwen/Qwen3-4B-Instruct-2507",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
 ]
 
 # 기본 Teacher 모델
@@ -71,6 +69,7 @@ AVAILABLE_STUDENT_MODELS = [
     "Qwen/Qwen3-4B-Instruct-2507",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
     "meta-llama/Llama-3.1-8B-Instruct",
     "meta-llama/Llama-3.2-3B-Instruct",
 ]

@@ -43,7 +43,7 @@ from learning_loop.teacher_model import TeacherModel
 from utils.base_loader import QuestionData
 from utils.domain_loader import DomainLoader
 from utils.answer_extractor import get_extractor, AnswerExtractor
-from config.config import (
+from config import (
     DATA_DIR,
     AVAILABLE_STUDENT_MODELS, DEFAULT_STUDENT_MODEL,
     AVAILABLE_TEACHER_MODELS, DEFAULT_TEACHER_MODEL,
@@ -52,6 +52,7 @@ from config.config import (
     get_training_datasets_for_domain, get_terminal_goal,
     get_design_output_dir
 )
+from models.model_cache import ModelCache
 
 
 class IDMASPipeline:
@@ -114,8 +115,17 @@ class IDMASPipeline:
         # Model short name for file naming (e.g., "Qwen3-4B-Instruct-2507")
         self.model_short = get_model_short_name(self.student_model_name)
 
-        # Model-specific directories (new structure: data/{domain}/train/{Model}/)
-        self.model_dirs = get_domain_data_dirs(domain, self.student_model_name, self.train_dataset, mode="train")
+        # Teacher model name for state (정의를 먼저 해야 get_domain_data_dirs에서 사용 가능)
+        self.teacher_model_name = teacher_config.get('model', DEFAULT_TEACHER_MODEL) if teacher_config else DEFAULT_TEACHER_MODEL
+
+        # Model-specific directories (new structure: data/{domain}/train/{teacher_model}/{student_model}/)
+        self.model_dirs = get_domain_data_dirs(
+            domain,
+            self.student_model_name,
+            self.train_dataset,
+            mode="train",
+            teacher_model_name=self.teacher_model_name
+        )
         self.model_dir = self.model_dirs["model_dir"]
         self.raw_data_dir = self.model_dirs["raw_data_dir"]
         self.design_dir = self.model_dirs["design_dir"]
@@ -123,9 +133,6 @@ class IDMASPipeline:
         # Student and Teacher models for pipeline
         self.student_model = StudentModel(model_name=self.student_model_name)
         self.teacher_model = TeacherModel(teacher_config)
-
-        # Teacher model name for state
-        self.teacher_model_name = teacher_config.get('model', DEFAULT_TEACHER_MODEL) if teacher_config else DEFAULT_TEACHER_MODEL
 
         # Initialize LangGraph Runner
         self.graph_runner = IDMASGraphRunner(
@@ -165,20 +172,19 @@ class IDMASPipeline:
         print(f"  Analysis completed")
 
         # 3. 수행목표 진술
-        print(f"\n[Step 4] Performance Objectives")
+        print(f"\n[Step 3] Performance Objectives")
         objectives_result = self.objectives.generate_objectives(
             analysis_result["raw_output"]
         )
         print(f"  Generated {len(objectives_result['performance_objectives'])} objectives")
 
         # 4. 루브릭 개발 (Essay 평가용)
-        print(f"\n[Step 5] Rubric Development")
-        rubric_dev = RubricDevelopment()
+        print(f"\n[Step 4] Rubric Development")
 
         # output_type 결정 로직 (Default for math domain)
         output_type = "explanatory_text"
 
-        rubric = rubric_dev.generate_rubric(
+        rubric = self.rubric_dev.generate_rubric(
             task_description=self.terminal_goal,
             output_type=output_type,
             performance_objectives=objectives_result
@@ -201,7 +207,7 @@ class IDMASPipeline:
         }
 
         # 파일 저장
-        output_dir = get_design_output_dir(self.domain)
+        output_dir = get_design_output_dir(self.domain, self.teacher_model_name)
         output_path = output_dir / f"{self.identifier}_design.json"
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(design_result, f, ensure_ascii=False, indent=2)
@@ -530,6 +536,7 @@ def run_train_mode(args):
     """
     # Create teacher config from CLI argument
     teacher_model_name = args.teacher_model or DEFAULT_TEACHER_MODEL
+    student_model_name = args.student_model or DEFAULT_STUDENT_MODEL
     teacher_config = create_teacher_config(teacher_model_name)
 
     print(f"\n{'=' * 60}")
@@ -537,9 +544,20 @@ def run_train_mode(args):
     print(f"{'=' * 60}")
     print(f"Domain: {args.domain}")
     print(f"Train Dataset: {args.train_dataset}")
-    print(f"Student Model: {args.student_model or DEFAULT_STUDENT_MODEL}")
+    print(f"Student Model: {student_model_name}")
     print(f"Teacher Model: {teacher_model_name}")
     print(f"Resume: {args.resume}")
+
+    # Teacher와 Student 모델이 동일한지 확인 (로컬 모델인 경우)
+    is_local_teacher = not (
+        teacher_model_name.startswith("gpt-") or
+        teacher_model_name.startswith("o1") or
+        teacher_model_name.startswith("o3")
+    )
+    if is_local_teacher and teacher_model_name == student_model_name:
+        print(f"\n[Model Sharing] Teacher and Student use same model: {teacher_model_name}")
+        print(f"[Model Sharing] Model will be loaded ONCE and shared (memory optimized)")
+
     print(f"{'=' * 60}\n")
 
     # Initialize pipeline with State Machine
@@ -552,11 +570,11 @@ def run_train_mode(args):
         checkpoint_interval=10
     )
 
-    print(f"Terminal Goal: {pipeline.terminal_goal[:80]}...")
+    print(f"Terminal Goal: {pipeline.terminal_goal}")
 
     # 1. 교수 설계 단계
     if not args.run_design:
-        design_dir = get_design_output_dir(pipeline.domain)
+        design_dir = get_design_output_dir(pipeline.domain, pipeline.teacher_model_name)
         design_path = design_dir / f"{pipeline.identifier}_design.json"
 
         # Check legacy flat structure and migrate if needed
@@ -589,6 +607,14 @@ def run_train_mode(args):
     print(f"Train Dataset: {args.train_dataset}")
     print(f"SFT Data: {learning_result['sft_data_count']} entries")
     print(f"SFT Path: {learning_result['sft_data_path']}")
+
+    # ModelCache 상태 출력
+    loaded_models = ModelCache.get_loaded_models()
+    if loaded_models:
+        print(f"\n[Model Cache] Loaded models: {len(loaded_models)}")
+        for model_name, device in loaded_models:
+            print(f"  - {model_name} @ {device}")
+
     print("=" * 60)
 
 

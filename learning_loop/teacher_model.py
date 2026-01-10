@@ -5,7 +5,7 @@
 - Phase 2: score_by_performance_objectives, analyze_weak_objectives, generate_coaching_db
 - Phase 3: generate_modeling_response
 """
-from models.llm_wrapper import LLMWrapper
+from models.teacher_wrapper import TeacherModelWrapper
 from prompts.learning_prompts import (
     PERFORMANCE_SCORING_PROMPT,
     WEAK_OBJECTIVE_ANALYSIS_PROMPT,
@@ -30,7 +30,7 @@ class TeacherModel:
         Args:
             config: Teacher model 설정 딕셔너리 (None이면 기본 설정 사용)
         """
-        self.llm = LLMWrapper(config)
+        self.llm = TeacherModelWrapper(config)
 
     def score_by_performance_objectives(
         self,
