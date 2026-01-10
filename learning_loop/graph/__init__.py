@@ -1,10 +1,10 @@
 """
-LangGraph-based ID-MAS 3-Phase Pipeline.
+LangGraph-based ID-MAS Iterative Scaffolding Pipeline.
 
-This module implements the 3-Phase Learning Pipeline using LangGraph:
-- Phase 1: Initial Response with Scaffolding
-- Phase 2: Teacher Coaching + Fixed Response
-- Phase 3: Teacher Modeling
+This module implements the Iterative Scaffolding Pipeline using LangGraph:
+- Task Analysis + Initial Response generation
+- Performance Objectives based evaluation with Socratic questions
+- Case A (correct) / A-Failed (reconstructed) SFT data generation
 
 Based on the Dick & Carey Instructional Design Model.
 """
