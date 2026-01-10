@@ -43,7 +43,7 @@ DOMAIN_CONFIG = {
     "math": {
         "data_dir": DATA_DIR / "math",
         "training_datasets": ["gsm8k", "math"],
-        "eval_datasets": ["gsm8k", "math", "svamp", "asdiv", "mawps", "mmlu"],
+        "eval_datasets": ["gsm8k", "math", "svamp", "asdiv", "mawps"],
         "default_eval": "gsm8k"
     },
     "logical": {

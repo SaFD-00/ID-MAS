@@ -23,7 +23,7 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 
 | 도메인 | In-Domain 평가 | OOD 평가 |
 |--------|---------------|----------|
-| **Math** | GSM8K, MATH | SVAMP, ASDiv, MAWPS, MMLU |
+| **Math** | GSM8K, MATH | SVAMP, ASDiv, MAWPS |
 | **Logical** | ReClor | ANLI-R2, ANLI-R3, BBH (논리 추론 9개 태스크) |
 | **Commonsense** | ARC-Challenge | StrategyQA, OpenBookQA |
 
@@ -349,8 +349,7 @@ data/
 │       │   ├── math_test.json
 │       │   ├── svamp_test.json
 │       │   ├── asdiv_test.json
-│       │   ├── mawps_test.json
-│       │   └── mmlu_test.json
+│       │   └── mawps_test.json
 │       └── {Model}/                                # 모델별 평가 결과
 │
 ├── logical/                                        # Logical 도메인 (NEW)
@@ -430,7 +429,7 @@ data/
     "scaffolding_processed": 100,
     "scaffolding_correct": 80,
     "sft_case_a": 80,
-    "sft_case_a_failed": 20
+    "sft_case_b": 20
   }
 }
 ```
@@ -467,7 +466,7 @@ python -m utils.dataset_preparer
 ```
 
 이 스크립트는 다음 데이터셋을 다운로드합니다:
-- **Math 도메인**: GSM8K, MATH, SVAMP, ASDiv, MAWPS, MMLU (수학 과목)
+- **Math 도메인**: GSM8K, MATH, SVAMP, ASDiv, MAWPS
 - **Logical 도메인**: ReClor, ANLI-R2, ANLI-R3, BBH (논리 추론 9개 태스크)
 - **Commonsense 도메인**: ARC-Challenge, StrategyQA, OpenBookQA
 

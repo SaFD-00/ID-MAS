@@ -29,7 +29,7 @@ class DomainLoader(BaseDatasetLoader):
     Domain-based data loader for local JSON files.
 
     Currently supports:
-    - math: GSM8K, MATH (training) + SVAMP, ASDiv, MAWPS, MMLU (evaluation)
+    - math: GSM8K, MATH (training) + SVAMP, ASDiv, MAWPS (evaluation)
 
     New domains can be added by extending DOMAIN_CONFIG.
     Each training dataset has its own Terminal Goal and is trained separately.
@@ -61,7 +61,6 @@ class DomainLoader(BaseDatasetLoader):
                 "svamp": {"filename": "svamp_test.json", "answer_type": AnswerType.NUMERIC},
                 "asdiv": {"filename": "asdiv_test.json", "answer_type": AnswerType.NUMERIC},
                 "mawps": {"filename": "mawps_test.json", "answer_type": AnswerType.LATEX},  # 분수 포함
-                "mmlu": {"filename": "mmlu_test.json", "answer_type": AnswerType.MCQ},
             },
             "default_answer_type": AnswerType.NUMERIC,
             "domain_category": "math_logic",

@@ -14,7 +14,7 @@ class DatasetRegistry:
     Registry for domain-based dataset loading.
 
     Currently supports:
-    - math: GSM8K, MATH (training) + SVAMP, ASDiv, MAWPS, MMLU (evaluation)
+    - math: GSM8K, MATH (training) + SVAMP, ASDiv, MAWPS (evaluation)
 
     New domains can be added by extending domain_loader.DomainLoader.DOMAIN_CONFIG.
     """
@@ -23,7 +23,7 @@ class DatasetRegistry:
     DOMAIN_CONFIG = {
         "math": {
             "training_datasets": ["gsm8k", "math"],
-            "eval_datasets": ["gsm8k", "math", "svamp", "asdiv", "mawps", "mmlu"],
+            "eval_datasets": ["gsm8k", "math", "svamp", "asdiv", "mawps"],
             "default_eval": "gsm8k",
             "default_answer_type": AnswerType.LATEX,  # MATH 데이터셋의 좌표, 분수 등 지원
             "category": "math_logic"

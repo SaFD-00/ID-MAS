@@ -65,19 +65,10 @@ DATASET_CONFIGS: Dict[str, Dict[str, Any]] = {
         "domain": "science_knowledge",
         "description": "AI2 Reasoning Challenge - Elementary science MCQ",
     },
-    "mmlu": {
-        "hf_name": "cais/mmlu",
-        "hf_config": "required",  # Subject required
-        "train_split": "validation",  # MMLU uses validation for training
-        "test_split": "test",
-        "answer_type": "mcq",
-        "domain": "science_knowledge",
-        "description": "Massive Multitask Language Understanding - 57 subjects",
-    },
 
     # Logical domain
     "reclor": {
-        "hf_name": "community-datasets/reclor",
+        "hf_name": "sxiong/ReClor",
         "hf_config": None,
         "train_split": "train",
         "test_split": "test",
@@ -315,27 +306,4 @@ BBH_SUBTASKS = [
     "tracking_shuffled_objects_three_objects",
     "web_of_lies",
     "word_sorting",
-]
-
-# MMLU STEM subjects for reference
-MMLU_STEM_SUBJECTS = [
-    "abstract_algebra",
-    "anatomy",
-    "astronomy",
-    "college_biology",
-    "college_chemistry",
-    "college_computer_science",
-    "college_mathematics",
-    "college_physics",
-    "computer_security",
-    "conceptual_physics",
-    "electrical_engineering",
-    "elementary_mathematics",
-    "high_school_biology",
-    "high_school_chemistry",
-    "high_school_computer_science",
-    "high_school_mathematics",
-    "high_school_physics",
-    "high_school_statistics",
-    "machine_learning",
 ]

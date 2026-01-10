@@ -63,12 +63,6 @@ Solve this math word problem step by step. Show your work clearly.
 Your final answer MUST be within \\boxed{}. If the answer is a fraction, write it as a/b or use \\frac{a}{b}.
 Example: \\boxed{49} or \\boxed{56/9}""",
 
-    # MMLU - Multiple choice questions
-    "mmlu": """You are a helpful math assistant.
-This is a multiple choice question. Solve the problem step by step, then select the correct answer from the given options (A, B, C, or D).
-Your final answer MUST be a single letter (A, B, C, or D) within \\boxed{}.
-Example: \\boxed{A}""",
-
     # Logical domain
     "reclor": """You are a logical reasoning assistant. Read the passage and question, then select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
@@ -132,16 +126,6 @@ BBH_LOGICAL_SUBTASKS = [
     "tracking_shuffled_objects_seven_objects",
     "web_of_lies",
 ]
-
-# MMLU Math subjects
-MMLU_MATH_SUBJECTS = [
-    "abstract_algebra",
-    "college_mathematics",
-    "elementary_mathematics",
-    "high_school_mathematics",
-    "high_school_statistics",
-]
-
 
 
 # =============================================================================
@@ -337,44 +321,6 @@ def process_math(train_dir: Path, eval_dir: Path):
         save_json(records, output_base / f"math_{split}.json")
 
 
-def process_mmlu(output_dir: Path, subjects: List[str], output_filename: str, is_math_domain: bool = False):
-    """
-    Process MMLU dataset for specific subjects.
-
-    MMLU format:
-    - question: question text
-    - choices: list of 4 choices
-    - answer: index (0-3)
-    """
-    print(f"\n[MMLU] Processing {output_filename}...")
-    dataset_id = "cais/mmlu"
-
-    all_records = []
-
-    for subject in subjects:
-        print(f"  Loading subject: {subject}...")
-        try:
-            data = load_dataset(dataset_id, subject, split="test")
-
-            for item in data:
-                question = item["question"]
-                choices = item["choices"]
-                answer_idx = item["answer"]
-                answer_letter = chr(65 + answer_idx)  # 0 -> A, 1 -> B, etc.
-
-                all_records.append({
-                    "instruction": DATASET_PROMPTS["mmlu"],
-                    "input": format_mcq_input(question, choices),
-                    "output": format_output(None, answer_letter)
-                })
-
-            print(f"    Loaded {len(data)} questions")
-        except Exception as e:
-            print(f"    Error loading {subject}: {e}")
-
-    save_json(all_records, output_dir / output_filename)
-
-
 def process_svamp(output_dir: Path):
     """
     Process SVAMP dataset.
@@ -505,7 +451,7 @@ def process_reclor(train_dir: Path, eval_dir: Path):
     - label: answer index (0-3)
     """
     print("\n[ReClor] Processing...")
-    dataset_id = "community-datasets/reclor"
+    dataset_id = "sxiong/ReClor"
 
     for split in ["train", "test"]:
         print(f"  Loading {split} split...")
@@ -770,16 +716,13 @@ def main():
     # 2. MATH (train + test)
     process_math(train_dir, eval_dir)
 
-    # 3. MMLU Math subjects (test only)
-    process_mmlu(eval_dir, MMLU_MATH_SUBJECTS, "mmlu_test.json", is_math_domain=True)
-
-    # 4. SVAMP (test only)
+    # 3. SVAMP (test only)
     process_svamp(eval_dir)
 
-    # 5. ASDiv (test only)
+    # 4. ASDiv (test only)
     process_asdiv(eval_dir)
 
-    # 6. MAWPS (test only)
+    # 5. MAWPS (test only)
     process_mawps(eval_dir)
 
     # ==========================================
