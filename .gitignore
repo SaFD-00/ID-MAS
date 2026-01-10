@@ -44,6 +44,10 @@ data/
 *.log
 USAGE.md
 
+# Data preparation scripts (not for production)
+utils/dataset_preparer.py
+utils/reparse_eval_results.py
+
 # Testing
 .pytest_cache/
 .coverage

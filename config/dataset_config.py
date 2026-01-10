@@ -188,7 +188,7 @@ DATASET_CONFIGS: Dict[str, Dict[str, Any]] = {
         "description": "AI2 ARC Challenge - Elementary science questions",
     },
     "strategyqa": {
-        "hf_name": "wics/strategy-qa",
+        "hf_name": "ChilleD/StrategyQA",
         "hf_config": None,
         "train_split": None,  # StrategyQA는 train split 없음
         "test_split": "test",

@@ -320,13 +320,17 @@ class IDMASGraphRunner:
         print("=" * 60)
         print(f"Total Questions: {stats['total_questions']}")
         print(f"Scaffolding Processed: {stats['scaffolding_processed']}")
-        print(f"Scaffolding Correct (Case A): {stats['scaffolding_correct']}")
-        print(f"Failed Reconstructed (Case B): {stats['sft_case_a_failed']}")
-        if stats.get('iterative_scaffolding'):
-            iter_stats = stats['iterative_scaffolding']
-            print(f"  - First Attempt Correct: {iter_stats['first_attempt_correct']}")
-            print(f"  - Multi Attempt Correct: {iter_stats['multi_attempt_correct']}")
-        print(f"SFT Data Generated: {len(final_state.get('sft_data', []))}")
+
+        case_stats = stats.get('case_statistics', {})
+        print(f"\n[Case Statistics]")
+        print(f"  Case A (한번에 성공): {case_stats.get('case_a', 0)}")
+        print(f"  Case B (Iterative Scaffolding 성공): {case_stats.get('case_b', 0)}")
+        print(f"  Case C (5회 실패 후 재구성): {case_stats.get('case_c', 0)}")
+        print(f"  ────────────────────────────")
+        print(f"  Success Total (A+B): {case_stats.get('success_total', 0)}")
+        print(f"  Success Rate: {case_stats.get('success_rate', 0) * 100:.1f}%")
+
+        print(f"\nSFT Data Generated: {len(final_state.get('sft_data', []))}")
 
         # Save results if output_dir provided
         if output_dir:

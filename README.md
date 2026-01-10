@@ -24,8 +24,12 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 | 도메인 | In-Domain 평가 | OOD 평가 |
 |--------|---------------|----------|
 | **Math** | GSM8K, MATH | SVAMP, ASDiv, MAWPS |
-| **Logical** | ReClor | ANLI-R2, ANLI-R3, BBH (논리 추론 9개 태스크) |
+| **Logical** | ReClor | ANLI-R2, ANLI-R3, BBH (9개 태스크 통합) |
 | **Commonsense** | ARC-Challenge | StrategyQA, OpenBookQA |
+
+**참고**:
+- BBH는 9개의 논리 추론 태스크(boolean expressions, formal fallacies, logical deduction 등)가 `bbh_test.json` 하나로 통합되어 있습니다.
+- ReClor는 로컬 JSON 파일(`.claude/references/data/reclor_data/`)을 사용하며, HuggingFace 대신 직접 준비된 데이터를 활용합니다.
 
 ## 시스템 구조
 
@@ -352,30 +356,22 @@ data/
 │       │   └── mawps_test.json
 │       └── {Model}/                                # 모델별 평가 결과
 │
-├── logical/                                        # Logical 도메인 (NEW)
+├── logical/                                        # Logical 도메인
 │   ├── train/
 │   │   ├── data/
-│   │   │   └── reclor_train.json
+│   │   │   └── reclor_train.json                  # 로컬 데이터에서 생성
 │   │   └── {Teacher-Model}/
 │   │       ├── instructional-design/
 │   │       └── {Student-Model}/
 │   └── eval/
 │       ├── data/
-│       │   ├── reclor_test.json                   # In-Domain
+│       │   ├── reclor_test.json                   # In-Domain (로컬 데이터)
 │       │   ├── anli_r2_test.json                  # OOD
 │       │   ├── anli_r3_test.json                  # OOD
-│       │   ├── bbh_boolean_expressions_test.json  # OOD
-│       │   ├── bbh_formal_fallacies_test.json     # OOD
-│       │   ├── bbh_logical_deduction_three_objects_test.json
-│       │   ├── bbh_logical_deduction_five_objects_test.json
-│       │   ├── bbh_logical_deduction_seven_objects_test.json
-│       │   ├── bbh_tracking_shuffled_objects_three_objects_test.json
-│       │   ├── bbh_tracking_shuffled_objects_five_objects_test.json
-│       │   ├── bbh_tracking_shuffled_objects_seven_objects_test.json
-│       │   └── bbh_web_of_lies_test.json
+│       │   └── bbh_test.json                      # OOD (9개 태스크 통합)
 │       └── {Model}/
 │
-└── commonsense/                                    # Commonsense 도메인 (NEW)
+└── commonsense/                                    # Commonsense 도메인
     ├── train/
     │   ├── data/
     │   │   └── arc_c_train.json
@@ -459,16 +455,72 @@ data/
 
 ## 데이터 준비
 
+### 자동 데이터 준비
+
 HuggingFace에서 데이터셋을 다운로드하고 전처리합니다:
 
 ```bash
 python -m utils.dataset_preparer
 ```
 
-이 스크립트는 다음 데이터셋을 다운로드합니다:
+이 스크립트는 다음 작업을 수행합니다:
+- HuggingFace에서 데이터셋 다운로드
+- 로컬 ReClor 데이터 변환 (`.claude/references/data/reclor_data/`)
+- BBH 9개 태스크를 `bbh_test.json`으로 통합
+- 통일된 JSON 형식으로 변환
+
+다운로드되는 데이터셋:
 - **Math 도메인**: GSM8K, MATH, SVAMP, ASDiv, MAWPS
-- **Logical 도메인**: ReClor, ANLI-R2, ANLI-R3, BBH (논리 추론 9개 태스크)
+- **Logical 도메인**: ReClor (로컬 데이터 활용), ANLI-R2, ANLI-R3, BBH (논리 추론 9개 태스크 통합)
 - **Commonsense 도메인**: ARC-Challenge, StrategyQA, OpenBookQA
+
+### 데이터셋 소스
+
+| 도메인 | 데이터셋 | 소스 | 비고 |
+|--------|---------|------|------|
+| Math | GSM8K, MATH, SVAMP, ASDiv, MAWPS | HuggingFace | - |
+| Logical | ANLI-R2, ANLI-R3 | HuggingFace | - |
+| Logical | BBH | HuggingFace (lukaemon/bbh) | 9개 태스크가 `bbh_test.json`로 통합 |
+| Logical | ReClor | 로컬 파일 (`.claude/references/data/reclor_data/`) | train/test 로컬 JSON 활용 |
+| Commonsense | ARC-Challenge | HuggingFace | - |
+| Commonsense | StrategyQA | HuggingFace (ChilleD/StrategyQA) | - |
+| Commonsense | OpenBookQA | HuggingFace | - |
+
+### ReClor 로컬 데이터 준비
+
+ReClor 데이터셋은 로컬 파일을 사용합니다. 다음 파일이 필요합니다:
+
+```
+.claude/references/data/reclor_data/
+├── train.json (4.7MB)
+├── test.json (1MB)
+├── val.json (533KB, 선택적)
+├── question_type_names.json
+├── source_list.txt
+└── use_items.txt
+```
+
+**필수 파일**: `train.json`, `test.json`
+**JSON 형식**:
+```json
+{
+  "context": "지문 텍스트",
+  "question": "질문 텍스트",
+  "answers": ["선택지 A", "선택지 B", "선택지 C", "선택지 D"],
+  "label": 1,
+  "id_string": "train_0"
+}
+```
+
+`dataset_preparer.py` 실행 시 이 파일들이 자동으로 읽혀 다음과 같은 형식으로 변환됩니다:
+
+```json
+{
+  "instruction": "You are a logical reasoning assistant...",
+  "input": "Context:\n[context]\nQuestion: [question]\nOptions:\nA. [option A]\nB. [option B]\nC. [option C]\nD. [option D]",
+  "output": "\\boxed{B}"
+}
+```
 
 ## HuggingFace 토큰 설정
 

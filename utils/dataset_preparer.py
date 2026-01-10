@@ -442,20 +442,43 @@ def process_mawps(output_dir: Path):
 
 def process_reclor(train_dir: Path, eval_dir: Path):
     """
-    Process ReClor dataset.
+    Process ReClor dataset from local JSON files.
 
-    ReClor format:
+    Local files location: .claude/references/data/reclor_data/
+    - train.json
+    - val.json
+    - test.json
+
+    Local JSON format:
     - context: passage text
     - question: question text
     - answers: list of 4 choices
     - label: answer index (0-3)
+    - id_string: unique identifier
     """
-    print("\n[ReClor] Processing...")
-    dataset_id = "sxiong/ReClor"
+    print("\n[ReClor - Local] Processing...")
 
-    for split in ["train", "test"]:
-        print(f"  Loading {split} split...")
-        data = load_dataset(dataset_id, split=split)
+    # 로컬 데이터 경로
+    local_data_dir = Path(__file__).parent.parent / ".claude" / "references" / "data" / "reclor_data"
+
+    # 파일 매핑: split -> (파일명, 출력 디렉토리)
+    split_mapping = {
+        "train": ("train.json", train_dir),
+        "val": ("val.json", eval_dir),
+        "test": ("test.json", eval_dir)
+    }
+
+    for split_name, (filename, output_dir) in split_mapping.items():
+        json_path = local_data_dir / filename
+
+        if not json_path.exists():
+            print(f"  Warning: {json_path} not found, skipping {split_name}")
+            continue
+
+        print(f"  Loading {split_name} from {filename}...")
+
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
 
         records = []
         for item in data:
@@ -464,23 +487,30 @@ def process_reclor(train_dir: Path, eval_dir: Path):
             answers = item.get("answers", [])
             label = item.get("label", 0)
 
-            # Format question with choices
-            question_with_choices = format_mcq_input(
-                f"{context}\n\n{question}",
-                answers
-            )
+            # 사용자 지정 형식으로 input 구성
+            input_text = f"Context:\n{context}\nQuestion: {question}\nOptions:\n"
+            for i, answer in enumerate(answers):
+                input_text += f"{chr(65 + i)}. {answer}\n"
 
-            # Answer label (0-3 -> A-D)
+            # 정답 레터 (0-3 -> A-D)
             answer_letter = chr(65 + label)
 
             records.append({
                 "instruction": DATASET_PROMPTS["reclor"],
-                "input": question_with_choices,
+                "input": input_text.strip(),
                 "output": format_output(None, answer_letter)
             })
 
-        output_base = train_dir if split == "train" else eval_dir
-        save_json(records, output_base / f"reclor_{split}.json")
+        # 파일명 결정
+        if split_name == "train":
+            output_file = "reclor_train.json"
+        elif split_name == "val":
+            output_file = "reclor_val.json"
+        else:
+            output_file = "reclor_test.json"
+
+        save_json(records, output_dir / output_file)
+        print(f"  Saved {len(records)} records to {output_file}")
 
 
 def process_arc_c(train_dir: Path, eval_dir: Path):
@@ -537,7 +567,7 @@ def process_strategyqa(eval_dir: Path):
     - answer: boolean (true/false)
     """
     print("\n[StrategyQA] Processing...")
-    dataset_id = "wics/strategy-qa"
+    dataset_id = "ChilleD/StrategyQA"
 
     print("  Loading test split...")
     data = load_dataset(dataset_id, split="test")
@@ -658,6 +688,8 @@ def process_bbh(eval_dir: Path, subtasks: List[str]):
     print("\n[BBH] Processing...")
     dataset_id = "lukaemon/bbh"
 
+    all_records = []  # 모든 subtask의 레코드를 저장할 리스트
+
     for subtask in subtasks:
         print(f"  Loading subtask: {subtask}...")
         try:
@@ -666,21 +698,22 @@ def process_bbh(eval_dir: Path, subtasks: List[str]):
             # Select prompt based on subtask
             prompt = BBH_PROMPTS.get(subtask, BBH_PROMPTS["default_mcq"])
 
-            records = []
             for item in data:
                 input_text = item["input"]
                 target = item["target"]
 
-                records.append({
+                all_records.append({
                     "instruction": prompt,
                     "input": input_text,
                     "output": format_output(None, target)
                 })
 
-            save_json(records, eval_dir / f"bbh_{subtask}_test.json")
-
         except Exception as e:
             print(f"    Error loading {subtask}: {e}")
+
+    # 단일 파일로 저장
+    save_json(all_records, eval_dir / "bbh_test.json")
+    print(f"  Saved {len(all_records)} total records to bbh_test.json")
 
 
 # =============================================================================

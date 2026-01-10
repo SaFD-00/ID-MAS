@@ -30,16 +30,7 @@ class DatasetRegistry:
         },
         "logical": {
             "training_datasets": ["reclor"],
-            "eval_datasets": [
-                "reclor", "anli_r2", "anli_r3",
-                "bbh_boolean_expressions", "bbh_formal_fallacies",
-                "bbh_logical_deduction_three_objects", "bbh_logical_deduction_five_objects",
-                "bbh_logical_deduction_seven_objects",
-                "bbh_tracking_shuffled_objects_three_objects",
-                "bbh_tracking_shuffled_objects_five_objects",
-                "bbh_tracking_shuffled_objects_seven_objects",
-                "bbh_web_of_lies"
-            ],
+            "eval_datasets": ["reclor", "anli_r2", "anli_r3", "bbh"],
             "default_eval": "reclor",
             "default_answer_type": AnswerType.MCQ,
             "category": "logical_reasoning"

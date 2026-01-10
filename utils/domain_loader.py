@@ -47,6 +47,9 @@ class DomainLoader(BaseDatasetLoader):
 
         # Commonsense domain
         "arc_c": "Apply commonsense scientific knowledge to solve elementary science problems by understanding fundamental concepts and selecting the correct answer from multiple choices.",
+
+        # BBH (Big Bench Hard)
+        "bbh": "Evaluate and solve various logical reasoning tasks including boolean expressions, formal fallacies, logical deduction, and object tracking.",
     }
 
     DOMAIN_CONFIG = {
@@ -74,15 +77,7 @@ class DomainLoader(BaseDatasetLoader):
                 "reclor": {"filename": "reclor_test.json", "answer_type": AnswerType.MCQ},
                 "anli_r2": {"filename": "anli_r2_test.json", "answer_type": AnswerType.MCQ},
                 "anli_r3": {"filename": "anli_r3_test.json", "answer_type": AnswerType.MCQ},
-                "bbh_boolean_expressions": {"filename": "bbh_boolean_expressions_test.json", "answer_type": AnswerType.BOOLEAN},
-                "bbh_formal_fallacies": {"filename": "bbh_formal_fallacies_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_logical_deduction_three_objects": {"filename": "bbh_logical_deduction_three_objects_test.json", "answer_type": AnswerType.MCQ},
-                "bbh_logical_deduction_five_objects": {"filename": "bbh_logical_deduction_five_objects_test.json", "answer_type": AnswerType.MCQ},
-                "bbh_logical_deduction_seven_objects": {"filename": "bbh_logical_deduction_seven_objects_test.json", "answer_type": AnswerType.MCQ},
-                "bbh_tracking_shuffled_objects_three_objects": {"filename": "bbh_tracking_shuffled_objects_three_objects_test.json", "answer_type": AnswerType.MCQ},
-                "bbh_tracking_shuffled_objects_five_objects": {"filename": "bbh_tracking_shuffled_objects_five_objects_test.json", "answer_type": AnswerType.MCQ},
-                "bbh_tracking_shuffled_objects_seven_objects": {"filename": "bbh_tracking_shuffled_objects_seven_objects_test.json", "answer_type": AnswerType.MCQ},
-                "bbh_web_of_lies": {"filename": "bbh_web_of_lies_test.json", "answer_type": AnswerType.BOOLEAN},
+                "bbh": {"filename": "bbh_test.json", "answer_type": AnswerType.TEXT},
             },
             "default_answer_type": AnswerType.MCQ,
             "domain_category": "logical_reasoning",

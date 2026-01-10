@@ -83,23 +83,19 @@ def process_question_scaffolding(
         "updated_at": datetime.now().isoformat(),
     }
 
-    if result.get("scaffolding_correct"):
+    sft_case = result.get("sft_case")
+    if sft_case == SFTCase.A.value:
+        updates["case_a_count"] = state.get("case_a_count", 0) + 1
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
-        print(f"  -> Correct! (Case A)")
-
-        # Track iterative statistics
-        if use_iterative:
-            scaffolding_info = result.get("iterative_scaffolding", {})
-            iterations_needed = scaffolding_info.get("iterations_needed", 1)
-            if iterations_needed == 1:
-                updates["first_attempt_correct"] = state.get("first_attempt_correct", 0) + 1
-            else:
-                updates["multi_attempt_correct"] = state.get("multi_attempt_correct", 0) + 1
-    else:
-        print(f"  -> Incorrect (predicted: {result.get('predicted_answer')})")
-
-        if result.get("sft_case") == "B":
-            updates["failed_reconstructed"] = state.get("failed_reconstructed", 0) + 1
+        print(f"  -> Case A: 한번에 성공! (1회차 PO 충족)")
+    elif sft_case == SFTCase.B.value:
+        updates["case_b_count"] = state.get("case_b_count", 0) + 1
+        updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
+        iterations = result.get("iterative_scaffolding", {}).get("iterations_needed", 0)
+        print(f"  -> Case B: Iterative Scaffolding 성공! ({iterations}회차 PO 충족)")
+    elif sft_case == SFTCase.C.value:
+        updates["case_c_count"] = state.get("case_c_count", 0) + 1
+        print(f"  -> Case C: 5회 실패 후 재구성")
 
     return updates
 
@@ -242,7 +238,25 @@ def _process_iterative_scaffolding(
 
     # Build result - success requires all POs satisfied (answer correctness is not considered)
     if all_satisfied:
-        sft_output = _build_sft_response_from_iterations(iterations, is_success=True)
+        iterations_needed = len(iterations)
+
+        if iterations_needed == 1:
+            # Case A: 1회차 성공 - 학생 응답 그대로 사용
+            sft_output = response
+            sft_case = SFTCase.A.value
+        else:
+            # Case B: 2~5회차 성공 - teacher가 scaffolding 과정 재구성
+            reconstruction = teacher_model.reconstruct_successful_scaffolding(
+                problem_text=question["problem_text"],
+                ground_truth=question["output"],
+                task_analysis=task_analysis,
+                conversation_history=conversation_history,
+                final_response=response,
+                iterations_needed=iterations_needed,
+            )
+            sft_output = reconstruction.get("reconstructed_response", response)
+            sft_case = SFTCase.B.value
+
         return QuestionResult(
             id=question["id"],
             instruction=question.get("instruction", ""),
@@ -252,11 +266,11 @@ def _process_iterative_scaffolding(
             initial_response=response,
             predicted_answer=predicted,
             scaffolding_correct=True,
-            sft_case=SFTCase.A.value,
+            sft_case=sft_case,
             sft_response=sft_output,
             iterative_scaffolding={
                 "success": True,
-                "iterations_needed": len(iterations),
+                "iterations_needed": iterations_needed,
                 "conversation_history": conversation_history,
                 "iterations": iterations,
             },
@@ -284,7 +298,7 @@ def _process_iterative_scaffolding(
             initial_response=reconstructed_response,
             predicted_answer=predicted,
             scaffolding_correct=False,
-            sft_case=SFTCase.B.value,
+            sft_case=SFTCase.C.value,
             sft_response=reconstructed_response,
             iterative_scaffolding={
                 "success": False,
@@ -370,9 +384,9 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     """
     sft_data = []
 
-    # Scaffolding results: Case A (correct) and Case B (reconstructed)
+    # Scaffolding results: Case A, Case B, and Case C
     for result in state.get("scaffolding_results", []):
-        if result.get("sft_case") in (SFTCase.A.value, SFTCase.B.value):
+        if result.get("sft_case") in (SFTCase.A.value, SFTCase.B.value, SFTCase.C.value):
             entry = _create_sft_entry(result)
             if entry:
                 sft_data.append(entry)
@@ -391,7 +405,7 @@ def _create_sft_entry(result: QuestionResult) -> Optional[Dict[str, Any]]:
     output = result.get("sft_response", "")
 
     if not output:
-        if case in (SFTCase.A.value, SFTCase.B.value):
+        if case in (SFTCase.A.value, SFTCase.B.value, SFTCase.C.value):
             output = result.get("initial_response", "")
 
     if not output:
@@ -400,8 +414,10 @@ def _create_sft_entry(result: QuestionResult) -> Optional[Dict[str, Any]]:
     instruction = result.get("instruction", "")
     if not instruction:
         if case == SFTCase.A.value:
-            instruction = "Solve the following problem with teacher guidance."
+            instruction = "Solve the following problem."
         elif case == SFTCase.B.value:
+            instruction = "Solve the following problem with teacher guidance."
+        elif case == SFTCase.C.value:
             instruction = "Solve the following problem, learning from common mistakes."
         else:
             instruction = "Solve the following problem step by step."

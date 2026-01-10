@@ -12,6 +12,7 @@ from prompts.learning_prompts import (
     SUMMARY_RECONSTRUCTION_PROMPT,
     TEACHER_INTERVENTION_PROMPT,
     CONVERSATION_SUMMARIZATION_PROMPT,
+    SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT,
 )
 from typing import Dict, Any, Optional, List
 import json
@@ -182,6 +183,83 @@ class TeacherModel:
             print(f"  Warning: Failed to generate progressive hint: {e}")
             return f"Look at your previous answer. There seems to be an error. Let me help you: Review step by step and check if the calculation is correct."
 
+    def reconstruct_successful_scaffolding(
+        self,
+        problem_text: str,
+        ground_truth: str,
+        task_analysis: str,
+        conversation_history: List[Dict],
+        final_response: str,
+        iterations_needed: int
+    ) -> Dict[str, Any]:
+        """
+        Case B: Iterative Scaffolding 성공 후 SFT 데이터용 응답 재구성
+
+        학생이 2~5회차에 성공한 경우:
+        1. scaffolding 과정에서 얻은 핵심 학습 포인트 추출
+        2. 최종 성공 응답을 기반으로 깔끔하게 재구성
+        3. teacher guidance의 핵심을 자연스럽게 통합
+
+        Args:
+            problem_text: 문제 텍스트
+            ground_truth: 정답
+            task_analysis: 과제 분석 결과
+            conversation_history: 전체 대화 기록
+            final_response: 최종 성공한 학생 응답
+            iterations_needed: 성공까지 걸린 iteration 수
+
+        Returns:
+            {
+                "reconstructed_response": str,  # SFT 데이터로 사용할 재구성된 응답
+                "key_learning_points": List[str],  # scaffolding에서 얻은 핵심 학습 포인트
+                "improvement_summary": str  # 학생이 어떻게 개선했는지 요약
+            }
+        """
+        # AI 기반 대화 히스토리 축약
+        conversation_summary = self.summarize_conversation_with_ai(
+            problem_text=problem_text,
+            ground_truth=ground_truth,
+            conversation_history=conversation_history
+        )
+
+        prompt = SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT.format(
+            problem_text=problem_text,
+            ground_truth=ground_truth,
+            task_analysis=task_analysis[:1500],
+            iterations_needed=iterations_needed,
+            conversation_summary=conversation_summary,
+            final_response=final_response
+        )
+
+        # 최대 3회 재시도
+        max_retries = 3
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = self.llm.generate_json(prompt)
+                # Ensure required fields exist
+                if 'reconstructed_response' not in result:
+                    result['reconstructed_response'] = final_response
+                if 'key_learning_points' not in result:
+                    result['key_learning_points'] = ["Successfully solved through iterative refinement"]
+                if 'improvement_summary' not in result:
+                    result['improvement_summary'] = f"Improved through {iterations_needed} iterations of scaffolding"
+                return result
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    print(f"  Warning: Attempt {attempt}/{max_retries} failed: {e}. Retrying...")
+                else:
+                    print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
+
+        # 모든 재시도 실패 시 fallback 반환
+        return {
+            "reconstructed_response": final_response,
+            "key_learning_points": ["Successfully solved through iterative scaffolding"],
+            "improvement_summary": f"Student succeeded after {iterations_needed} iterations with teacher guidance"
+        }
+
     def summarize_and_reconstruct(
         self,
         problem_text: str,
@@ -190,7 +268,7 @@ class TeacherModel:
         conversation_history: List[Dict]
     ) -> Dict[str, Any]:
         """
-        Iterative Scaffolding: 5회 실패 후 요약 및 정답 재구성
+        Iterative Scaffolding: 5회 실패 후 요약 및 정답 재구성 (Case C)
 
         학생이 5번 시도해도 정답을 못 맞춘 경우:
         1. 대화를 요약하여 학생의 약점 분석

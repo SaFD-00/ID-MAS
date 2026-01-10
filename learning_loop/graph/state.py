@@ -20,8 +20,9 @@ import operator
 
 class SFTCase(str, Enum):
     """SFT data case classification based on scaffolding result."""
-    A = "A"  # PO satisfied (initial or multi-attempt response)
-    B = "B"  # PO not satisfied after max iterations (reconstructed by teacher)
+    A = "A"  # PO satisfied on first attempt (한번에 성공)
+    B = "B"  # PO satisfied via iterative scaffolding (2-5회차 성공)
+    C = "C"  # PO not satisfied after max iterations (재구성 필요)
 
 
 class QuestionResultRequired(TypedDict):
@@ -111,9 +112,9 @@ class IDMASState(TypedDict, total=False):
     scaffolding_correct_count: int
 
     # Iterative scaffolding statistics
-    first_attempt_correct: int
-    multi_attempt_correct: int
-    failed_reconstructed: int
+    case_a_count: int  # 1회차 성공 (한번에 성공)
+    case_b_count: int  # 2~5회차 성공 (Iterative Scaffolding 성공)
+    case_c_count: int  # 5회 실패 후 재구성
 
     # ==================== SFT Data ====================
     sft_data: List[Dict[str, Any]]
@@ -192,9 +193,9 @@ def create_initial_state(
         scaffolding_results=[],
         scaffolding_processed=0,
         scaffolding_correct_count=0,
-        first_attempt_correct=0,
-        multi_attempt_correct=0,
-        failed_reconstructed=0,
+        case_a_count=0,
+        case_b_count=0,
+        case_c_count=0,
 
         # SFT Data
         sft_data=[],
@@ -224,18 +225,24 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
     Returns:
         Statistics dictionary
     """
+    case_a = state.get("case_a_count", 0)
+    case_b = state.get("case_b_count", 0)
+    case_c = state.get("case_c_count", 0)
+
     return {
         "total_questions": state.get("total_questions", 0),
         "scaffolding_processed": state.get("scaffolding_processed", 0),
-        "scaffolding_correct": state.get("scaffolding_correct_count", 0),
-        "scaffolding_incorrect": state.get("scaffolding_processed", 0) - state.get("scaffolding_correct_count", 0),
-        "sft_case_a": state.get("scaffolding_correct_count", 0),
-        "sft_case_a_failed": state.get("failed_reconstructed", 0),
-        "iterative_scaffolding": {
-            "first_attempt_correct": state.get("first_attempt_correct", 0),
-            "multi_attempt_correct": state.get("multi_attempt_correct", 0),
-            "failed_reconstructed": state.get("failed_reconstructed", 0),
-            "max_iterations": state.get("max_iterations", 5),
+        "case_statistics": {
+            "case_a": case_a,  # 한번에 성공
+            "case_b": case_b,  # Iterative Scaffolding 성공
+            "case_c": case_c,  # 5회 실패 후 재구성
+            "success_total": case_a + case_b,
+            "success_rate": (case_a + case_b) / state.get("scaffolding_processed", 1) if state.get("scaffolding_processed", 0) > 0 else 0,
+        },
+        "sft_data_breakdown": {
+            "case_a": case_a,
+            "case_b": case_b,
+            "case_c": case_c,
         },
     }
 
@@ -269,9 +276,9 @@ def load_checkpoint_from_logs(
         "scaffolding_results": [],
         "scaffolding_processed": 0,
         "scaffolding_correct_count": 0,
-        "first_attempt_correct": 0,
-        "multi_attempt_correct": 0,
-        "failed_reconstructed": 0,
+        "case_a_count": 0,
+        "case_b_count": 0,
+        "case_c_count": 0,
     }
 
     # Process scaffolding results (supports both old and new field names)
@@ -285,17 +292,21 @@ def load_checkpoint_from_logs(
 
             # Support both old and new field names
             is_correct = result.get("scaffolding_correct") or result.get("phase1_correct")
-            if is_correct:
+            sft_case = result.get("sft_case")
+
+            # Legacy compatibility: old "B" case (재구성) → 새로운 "C" case로 매핑
+            if sft_case == "B" and not is_correct:
+                sft_case = "C"
+
+            # Count by case
+            if sft_case == SFTCase.A.value:
+                checkpoint_data["case_a_count"] += 1
                 checkpoint_data["scaffolding_correct_count"] += 1
-                # Track iterative scaffolding stats
-                scaffolding = result.get("iterative_scaffolding", {})
-                if scaffolding.get("iterations_needed", 1) == 1:
-                    checkpoint_data["first_attempt_correct"] += 1
-                else:
-                    checkpoint_data["multi_attempt_correct"] += 1
-            else:
-                if result.get("sft_case") == SFTCase.B.value:
-                    checkpoint_data["failed_reconstructed"] += 1
+            elif sft_case == SFTCase.B.value:
+                checkpoint_data["case_b_count"] += 1
+                checkpoint_data["scaffolding_correct_count"] += 1
+            elif sft_case == SFTCase.C.value:
+                checkpoint_data["case_c_count"] += 1
 
     return checkpoint_data, processed_ids
 
@@ -334,9 +345,9 @@ def restore_state_from_checkpoint(
     # Restore counters
     restored["scaffolding_processed"] = checkpoint_data.get("scaffolding_processed", 0)
     restored["scaffolding_correct_count"] = checkpoint_data.get("scaffolding_correct_count", 0)
-    restored["first_attempt_correct"] = checkpoint_data.get("first_attempt_correct", 0)
-    restored["multi_attempt_correct"] = checkpoint_data.get("multi_attempt_correct", 0)
-    restored["failed_reconstructed"] = checkpoint_data.get("failed_reconstructed", 0)
+    restored["case_a_count"] = checkpoint_data.get("case_a_count", 0)
+    restored["case_b_count"] = checkpoint_data.get("case_b_count", 0)
+    restored["case_c_count"] = checkpoint_data.get("case_c_count", 0)
 
     # Update questions to remaining ones
     restored["questions"] = remaining_questions

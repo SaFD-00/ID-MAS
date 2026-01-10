@@ -163,8 +163,9 @@ class BaseDatasetLoader(ABC):
   - `evaluate_with_performance_objectives()`: 수행목표 기준 평가 및 Socratic 질문 생성
   - `generate_initial_hint()`: 초기 힌트 생성
   - `generate_progressive_hint()`: 점진적 힌트 생성
-  - `summarize_conversation_with_ai()`: AI 기반 대화 히스토리 축약 (실패 후 재구성 시 사용)
-  - `summarize_and_reconstruct()`: 5회 실패 후 요약 및 정답 재구성
+  - `summarize_conversation_with_ai()`: AI 기반 대화 히스토리 축약 (재구성 시 사용)
+  - `reconstruct_successful_scaffolding()`: 2~5회차 성공 후 scaffolding 과정 재구성 (Case B)
+  - `summarize_and_reconstruct()`: 5회 실패 후 요약 및 정답 재구성 (Case C)
 
 #### 3.3 LangGraph 파이프라인 (learning_loop/graph/)
 
@@ -182,7 +183,7 @@ learning_loop/graph/
 **상태 스키마 (state.py)**:
 - `IDMASState`: TypedDict 기반 파이프라인 상태
 - `QuestionResult`: 각 문제의 처리 결과
-- `SFTCase`: SFT 데이터 분류 (A, B)
+- `SFTCase`: SFT 데이터 분류 (A, B, C)
 
 **노드 함수 (nodes.py)**:
 - `process_question_scaffolding()`: Iterative Scaffolding 처리
@@ -330,30 +331,39 @@ flowchart LR
 [Teacher 평가] → 수행목표(PO) 충족 여부 판정
     ↓
 [PO 충족?]
-    ├─ Yes → Case A (성공)
+    ├─ Yes, 1회차 → Case A (한번에 성공)
+    ├─ Yes, 2~5회차 → Case B (Iterative Scaffolding 성공)
+    │                   ├─ AI 기반 대화 히스토리 축약 (summarize_conversation_with_ai)
+    │                   └─ Scaffolding 과정 재구성 (reconstruct_successful_scaffolding)
     └─ No → [Socratic 질문 생성]
               ↓
          [학생 재응답] ← 교사 피드백 반영
               ↓
          [반복 (최대 5회)]
               ↓
-         [5회 실패 시 B 재구성]
+         [5회 후 PO 미충족 → Case C (재구성)]
               ├─ AI 기반 대화 히스토리 축약 (summarize_conversation_with_ai)
               └─ 정답 솔루션 재구성 (summarize_and_reconstruct)
 ```
 
-**성공 조건**: 모든 수행목표(PO)가 충족되면(`all_satisfied=True`) 성공(Case A)으로 처리됩니다. 정답 여부(`is_correct`)는 SFT 케이스 분류에 영향을 주지 않습니다.
+**성공 조건**: 모든 수행목표(PO)가 충족되면(`all_satisfied=True`) 성공으로 처리됩니다. 정답 여부(`is_correct`)는 SFT 케이스 분류에 영향을 주지 않습니다.
 
-**Iterative Scaffolding 흐름**: PO가 충족되지 않은 경우, 교사 모델이 Socratic 질문을 생성하여 학생의 사고를 유도합니다. 최대 5회까지 재시도하며, 5회 시도 후에도 PO 충족 조건을 만족하지 못하면 B 케이스로 분류됩니다. AI가 대화 히스토리를 분석하여 학생의 약점을 파악한 후 정답 솔루션을 재구성합니다.
+**케이스 분류**:
+- **Case A**: 1회차에 PO 충족 → 학생 응답 그대로 사용
+- **Case B**: 2~5회차에 PO 충족 → Teacher가 scaffolding 과정을 재구성하여 깔끔한 응답 생성
+- **Case C**: 5회 시도 후 PO 미충족 → Teacher가 정답 기반 솔루션 재구성
+
+**Iterative Scaffolding 흐름**: PO가 충족되지 않은 경우, 교사 모델이 Socratic 질문을 생성하여 학생의 사고를 유도합니다. 최대 5회까지 재시도하며, 성공 시점에 따라 Case A 또는 Case B로 분류됩니다. 5회 시도 후에도 PO 충족 조건을 만족하지 못하면 Case C로 분류되어 AI가 대화 히스토리를 분석하고 정답 솔루션을 재구성합니다.
 
 ### SFT 데이터 생성
 
 Iterative Scaffolding 결과를 SFT 학습 데이터로 변환합니다.
 
-| 조건 | SFT Case | SFT 데이터 응답 |
-|------|----------|-----------------|
-| PO 충족 | Case A | 학생 응답 사용 (1회 또는 다중 시도) |
-| max_iterations 후 PO 미충족 | Case B | Reconstruction 응답 사용 |
+| 조건 | SFT Case | SFT 데이터 응답 | 설명 |
+|------|----------|-----------------|------|
+| 1회차 PO 충족 | Case A | 학생 응답 그대로 사용 | 한번에 성공 |
+| 2~5회차 PO 충족 | Case B | Teacher 재구성 응답 사용 | Scaffolding 과정 요약 및 재구성 |
+| 5회 후 PO 미충족 | Case C | Teacher 재구성 응답 사용 | 정답 기반 솔루션 재구성 |
 
 ## 데이터 흐름
 
@@ -529,7 +539,7 @@ python main.py --mode train --domain math --train-dataset gsm8k
 │   - DomainLoader.load_training_data("gsm8k")                    │
 │   - Iterative Scaffolding (최대 5회 반복)                        │
 │   - Teacher 평가 (PO 기반) + Socratic 질문                       │
-│   - Case A (성공) / Case B (재구성)                       │
+│   - Case A (1회차 성공) / Case B (2~5회차 성공) / Case C (재구성) │
 │                                                                 │
 │   출력: data/math/Qwen2.5-3B-Instruct/gsm8k/learning_logs/      │
 └─────────────────────────────────────────────────────────────────┘

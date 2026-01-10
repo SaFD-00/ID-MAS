@@ -313,3 +313,45 @@ KEY PATTERNS:
 
 Do NOT include lengthy explanations. Be telegraphic and specific.
 """
+
+
+# ==============================================================================
+# Successful Scaffolding Reconstruction Prompt (Case B)
+# ==============================================================================
+
+SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT = """You are an expert teacher reconstructing a successful learning outcome into clean SFT training data.
+
+[Problem]
+{problem_text}
+
+[Correct Answer]
+{ground_truth}
+
+[Task Analysis]
+{task_analysis}
+
+[Scaffolding Process Summary]
+The student succeeded after {iterations_needed} iterations.
+{conversation_summary}
+
+[Final Successful Response]
+{final_response}
+
+[Your Task]
+Reconstruct the student's learning journey into a single, clean response that:
+1. Incorporates the key insights gained through scaffolding
+2. Presents a clear, step-by-step solution
+3. Naturally integrates the guidance that led to success
+4. Is suitable for SFT training (no explicit mention of scaffolding process)
+
+The reconstructed response should be what an ideal student would produce after having learned from this scaffolding experience.
+
+[Output Format - JSON]
+{{
+    "reconstructed_response": "A clean, comprehensive solution that incorporates the learning from scaffolding...",
+    "key_learning_points": ["Point 1", "Point 2", "Point 3"],
+    "improvement_summary": "How the student improved through the scaffolding process..."
+}}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
+"""
