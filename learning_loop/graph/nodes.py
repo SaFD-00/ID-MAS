@@ -239,10 +239,9 @@ def _process_iterative_scaffolding(
             # Answer correct but PO not satisfied - continue scaffolding
             print(f"    -> Answer correct but PO not satisfied on iteration {iteration}. Continuing scaffolding...")
         elif not is_correct and all_satisfied:
-            # PO satisfied but answer incorrect (rare case) - treat as success
-            print(f"    -> PO satisfied on iteration {iteration}! (Correct: False, PO satisfied: True)")
-            is_correct = True
-            break
+            # PO satisfied but answer incorrect - continue scaffolding (answer must be correct)
+            print(f"    -> PO satisfied but answer incorrect on iteration {iteration}. Continuing scaffolding...")
+        # else: both incorrect and PO not satisfied - continue scaffolding (default)
 
         # Store for next iteration
         last_response = response
