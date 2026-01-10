@@ -46,7 +46,7 @@ def create_idmas_graph(
     The graph implements the following flow:
     1. scaffolding -> process current question with iterative scaffolding
        - If correct (answer + PO satisfied): Case A
-       - If failed after max iterations: Case A-Failed (reconstructed)
+       - If failed after max iterations: Case B (reconstructed)
     2. advance -> check if more questions
        - If more questions: go back to scaffolding
        - If no more questions: go to finalize
@@ -321,7 +321,7 @@ class IDMASGraphRunner:
         print(f"Total Questions: {stats['total_questions']}")
         print(f"Scaffolding Processed: {stats['scaffolding_processed']}")
         print(f"Scaffolding Correct (Case A): {stats['scaffolding_correct']}")
-        print(f"Failed Reconstructed (Case A-Failed): {stats['sft_case_a_failed']}")
+        print(f"Failed Reconstructed (Case B): {stats['sft_case_a_failed']}")
         if stats.get('iterative_scaffolding'):
             iter_stats = stats['iterative_scaffolding']
             print(f"  - First Attempt Correct: {iter_stats['first_attempt_correct']}")

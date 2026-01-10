@@ -98,7 +98,7 @@ def process_question_scaffolding(
     else:
         print(f"  -> Incorrect (predicted: {result.get('predicted_answer')})")
 
-        if result.get("sft_case") == "A-Failed":
+        if result.get("sft_case") == "B":
             updates["failed_reconstructed"] = state.get("failed_reconstructed", 0) + 1
 
     return updates
@@ -155,7 +155,7 @@ def _process_iterative_scaffolding(
     4. If answer correct but PO not satisfied → continue scaffolding
     5. If not satisfied, student responds to Socratic questions
     6. Repeat until (correct AND all POs satisfied) or max iterations
-    7. If failed after max iterations → reconstruction (Case A-Failed)
+    7. If failed after max iterations → reconstruction (Case B)
        - Failure can be: answer incorrect OR answer correct but PO not satisfied
     """
     conversation_history = []
@@ -284,7 +284,7 @@ def _process_iterative_scaffolding(
             initial_response=reconstructed_response,
             predicted_answer=predicted,
             scaffolding_correct=False,
-            sft_case=SFTCase.A_FAILED.value,
+            sft_case=SFTCase.B.value,
             sft_response=reconstructed_response,
             iterative_scaffolding={
                 "success": False,
@@ -370,9 +370,9 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     """
     sft_data = []
 
-    # Scaffolding results: Case A (correct) and Case A-Failed (reconstructed)
+    # Scaffolding results: Case A (correct) and Case B (reconstructed)
     for result in state.get("scaffolding_results", []):
-        if result.get("sft_case") in (SFTCase.A.value, SFTCase.A_FAILED.value):
+        if result.get("sft_case") in (SFTCase.A.value, SFTCase.B.value):
             entry = _create_sft_entry(result)
             if entry:
                 sft_data.append(entry)
@@ -391,7 +391,7 @@ def _create_sft_entry(result: QuestionResult) -> Optional[Dict[str, Any]]:
     output = result.get("sft_response", "")
 
     if not output:
-        if case in (SFTCase.A.value, SFTCase.A_FAILED.value):
+        if case in (SFTCase.A.value, SFTCase.B.value):
             output = result.get("initial_response", "")
 
     if not output:
@@ -401,7 +401,7 @@ def _create_sft_entry(result: QuestionResult) -> Optional[Dict[str, Any]]:
     if not instruction:
         if case == SFTCase.A.value:
             instruction = "Solve the following problem with teacher guidance."
-        elif case == SFTCase.A_FAILED.value:
+        elif case == SFTCase.B.value:
             instruction = "Solve the following problem, learning from common mistakes."
         else:
             instruction = "Solve the following problem step by step."

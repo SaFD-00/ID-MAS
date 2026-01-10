@@ -182,7 +182,7 @@ learning_loop/graph/
 **상태 스키마 (state.py)**:
 - `IDMASState`: TypedDict 기반 파이프라인 상태
 - `QuestionResult`: 각 문제의 처리 결과
-- `SFTCase`: SFT 데이터 분류 (A, A-Failed)
+- `SFTCase`: SFT 데이터 분류 (A, B)
 
 **노드 함수 (nodes.py)**:
 - `process_question_scaffolding()`: Iterative Scaffolding 처리
@@ -278,7 +278,7 @@ flowchart TB
             S_SOCRATIC --> S_RETRY{재시도 < 5회?}
             S_RETRY -->|Yes| S_RESPOND[학생 재응답]
             S_RESPOND --> S_EVAL
-            S_RETRY -->|No| S_FAILED[Case A-Failed: 재구성]
+            S_RETRY -->|No| S_FAILED[Case B: 재구성]
         end
     end
 
@@ -337,14 +337,14 @@ flowchart LR
               ↓
          [반복 (최대 5회)]
               ↓
-         [5회 실패 시 A-Failed 재구성]
+         [5회 실패 시 B 재구성]
               ├─ AI 기반 대화 히스토리 축약 (summarize_conversation_with_ai)
               └─ 정답 솔루션 재구성 (summarize_and_reconstruct)
 ```
 
 **성공 조건**: 모든 수행목표(PO)가 충족되면(`all_satisfied=True`) 성공(Case A)으로 처리됩니다. 정답 여부(`is_correct`)는 SFT 케이스 분류에 영향을 주지 않습니다.
 
-**Iterative Scaffolding 흐름**: PO가 충족되지 않은 경우, 교사 모델이 Socratic 질문을 생성하여 학생의 사고를 유도합니다. 최대 5회까지 재시도하며, 5회 시도 후에도 PO 충족 조건을 만족하지 못하면 A-Failed 케이스로 분류됩니다. AI가 대화 히스토리를 분석하여 학생의 약점을 파악한 후 정답 솔루션을 재구성합니다.
+**Iterative Scaffolding 흐름**: PO가 충족되지 않은 경우, 교사 모델이 Socratic 질문을 생성하여 학생의 사고를 유도합니다. 최대 5회까지 재시도하며, 5회 시도 후에도 PO 충족 조건을 만족하지 못하면 B 케이스로 분류됩니다. AI가 대화 히스토리를 분석하여 학생의 약점을 파악한 후 정답 솔루션을 재구성합니다.
 
 ### SFT 데이터 생성
 
@@ -353,7 +353,7 @@ Iterative Scaffolding 결과를 SFT 학습 데이터로 변환합니다.
 | 조건 | SFT Case | SFT 데이터 응답 |
 |------|----------|-----------------|
 | PO 충족 | Case A | 학생 응답 사용 (1회 또는 다중 시도) |
-| max_iterations 후 PO 미충족 | Case A-Failed | Reconstruction 응답 사용 |
+| max_iterations 후 PO 미충족 | Case B | Reconstruction 응답 사용 |
 
 ## 데이터 흐름
 
@@ -384,7 +384,7 @@ Dataset-specific Training Data (GSM8K 또는 MATH)
   - Task Analysis + Initial Response
   - Teacher 평가 (PO 기반)
   - Socratic 질문 → 학생 재응답 (최대 5회)
-  - 성공: Case A / 실패: Case A-Failed (재구성)
+  - 성공: Case A / 실패: Case B (재구성)
     ↓
 [SFT 데이터 생성]
     ↓
@@ -530,7 +530,7 @@ python main.py --mode train --domain math --train-dataset gsm8k
 │   - DomainLoader.load_training_data("gsm8k")                    │
 │   - Iterative Scaffolding (최대 5회 반복)                        │
 │   - Teacher 평가 (PO 기반) + Socratic 질문                       │
-│   - Case A (성공) / Case A-Failed (재구성)                       │
+│   - Case A (성공) / Case B (재구성)                       │
 │                                                                 │
 │   출력: data/math/Qwen2.5-3B-Instruct/gsm8k/learning_logs/      │
 └─────────────────────────────────────────────────────────────────┘

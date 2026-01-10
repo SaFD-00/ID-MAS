@@ -20,8 +20,8 @@ import operator
 
 class SFTCase(str, Enum):
     """SFT data case classification based on scaffolding result."""
-    A = "A"           # Correct (initial or multi-attempt response)
-    A_FAILED = "A-Failed"  # Failed after max iterations (reconstructed by teacher)
+    A = "A"  # PO satisfied (initial or multi-attempt response)
+    B = "B"  # PO not satisfied after max iterations (reconstructed by teacher)
 
 
 class QuestionResultRequired(TypedDict):
@@ -294,7 +294,7 @@ def load_checkpoint_from_logs(
                 else:
                     checkpoint_data["multi_attempt_correct"] += 1
             else:
-                if result.get("sft_case") == SFTCase.A_FAILED.value:
+                if result.get("sft_case") == SFTCase.B.value:
                     checkpoint_data["failed_reconstructed"] += 1
 
     return checkpoint_data, processed_ids

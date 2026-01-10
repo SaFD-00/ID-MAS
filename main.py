@@ -9,7 +9,7 @@ Domain-based Multi-Dataset Support for LLM Learning and Evaluation
 Iterative Scaffolding Pipeline (LangGraph):
 - Teacher-guided iterative response generation (max 5 iterations)
 - Performance Objectives based evaluation with Socratic questions
-- Case A (correct) / A-Failed (reconstructed) SFT data generation
+- Case A (PO satisfied) / Case B (reconstructed) SFT data generation
 
 LangGraph Features:
 - StateGraph based workflow management

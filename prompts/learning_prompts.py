@@ -4,7 +4,7 @@ Iterative Scaffolding Pipeline Prompts (PDF Proposal Based)
 Scaffolding - Iterative Response Generation with Teacher Guidance
 - Initial response generation
 - Iterative scaffolding with Socratic questions (max 5 iterations)
-- A-Failed case: Reconstruction after max iterations
+- Case B: Reconstruction after max iterations
 """
 
 

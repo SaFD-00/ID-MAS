@@ -3,7 +3,7 @@
 
 Iterative Scaffolding Pipeline Support:
 - Scaffolding: evaluate_with_performance_objectives, generate_initial_hint, generate_progressive_hint
-- A-Failed: summarize_and_reconstruct (5회 실패 후 대화 분석 및 재구성)
+- Case B: summarize_and_reconstruct (5회 실패 후 대화 분석 및 재구성)
 """
 from models.teacher_wrapper import TeacherModelWrapper
 from prompts.learning_prompts import (
