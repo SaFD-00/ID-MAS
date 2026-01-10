@@ -1,16 +1,12 @@
 """
 교사 모델 (Teacher Model, Mt)
 
-3-Phase Pipeline Support:
-- Phase 2: score_by_performance_objectives, analyze_weak_objectives, generate_coaching_db
-- Phase 3: generate_modeling_response
+Iterative Scaffolding Pipeline Support:
+- Scaffolding: evaluate_with_performance_objectives, generate_initial_hint, generate_progressive_hint
+- A-Failed: summarize_and_reconstruct (5회 실패 후 대화 분석 및 재구성)
 """
 from models.teacher_wrapper import TeacherModelWrapper
 from prompts.learning_prompts import (
-    PERFORMANCE_SCORING_PROMPT,
-    WEAK_OBJECTIVE_ANALYSIS_PROMPT,
-    COACHING_DB_GENERATION_PROMPT,
-    MODELING_PROMPT,
     INITIAL_HINT_PROMPT,
     PROGRESSIVE_HINT_PROMPT,
     SUMMARY_RECONSTRUCTION_PROMPT,
@@ -22,7 +18,7 @@ import json
 
 
 class TeacherModel:
-    """교사 모델 - 학생 응답 평가, Coaching, Modeling"""
+    """교사 모델 - Iterative Scaffolding을 위한 학생 응답 평가 및 가이드"""
 
     def __init__(self, config: dict = None):
         """
@@ -33,58 +29,6 @@ class TeacherModel:
         """
         self.llm = TeacherModelWrapper(config)
 
-    def score_by_performance_objectives(
-        self,
-        student_response: str,
-        performance_objectives: List[Dict],
-        ground_truth: str
-    ) -> Dict[str, Any]:
-        """
-        Phase 2: Performance Objective 기준으로 학생 응답 채점
-
-        Args:
-            student_response: 학생의 응답
-            performance_objectives: Performance Objectives 리스트
-            ground_truth: 정답
-
-        Returns:
-            {
-                "overall_correct": bool,
-                "objective_scores": [
-                    {
-                        "objective_target": str,
-                        "score": float (0.0-1.0),
-                        "demonstrated_behavior": str,
-                        "weaknesses": List[str]
-                    }
-                ],
-                "weak_objectives": List[str]
-            }
-        """
-        prompt = PERFORMANCE_SCORING_PROMPT.format(
-            student_response=student_response,
-            performance_objectives=json.dumps(performance_objectives, ensure_ascii=False, indent=2),
-            ground_truth=ground_truth
-        )
-
-        try:
-            result = self.llm.generate_json(prompt)
-            # Ensure required fields exist
-            if 'overall_correct' not in result:
-                result['overall_correct'] = False
-            if 'objective_scores' not in result:
-                result['objective_scores'] = []
-            if 'weak_objectives' not in result:
-                result['weak_objectives'] = []
-            return result
-        except Exception as e:
-            print(f"  Warning: Failed to parse scoring result: {e}")
-            return {
-                "overall_correct": False,
-                "objective_scores": [],
-                "weak_objectives": []
-            }
-
     def evaluate_with_performance_objectives(
         self,
         student_response: str,
@@ -93,7 +37,7 @@ class TeacherModel:
         ground_truth: str
     ) -> Dict[str, Any]:
         """
-        Phase 1 Iterative: ReAct-style PO 평가 및 Socratic 질문 생성
+        Iterative Scaffolding: ReAct-style PO 평가 및 Socratic 질문 생성
 
         학생 응답을 Performance Objectives 기준으로 평가하고,
         미충족 목표에 대해 Socratic 질문을 생성합니다.
@@ -154,144 +98,8 @@ class TeacherModel:
                 }
             }
 
-    def analyze_weak_objectives(
-        self,
-        weak_objectives: List[Dict],
-        student_responses: List[str],
-        task_analysis: str
-    ) -> Dict[str, Any]:
-        """
-        Phase 2: 40% 이상 오류를 보인 Performance Objective 분석
-
-        Args:
-            weak_objectives: 취약 PO 리스트 (error_rate 포함)
-            student_responses: 오류를 보인 학생 응답들
-            task_analysis: 과제분석 결과
-
-        Returns:
-            {
-                "weak_performance_areas": [...],
-                "recommended_strategies": [...],
-                "examples_needed": [...]
-            }
-        """
-        # Limit responses to avoid context overflow
-        sample_responses = student_responses[:5]
-
-        prompt = WEAK_OBJECTIVE_ANALYSIS_PROMPT.format(
-            weak_objectives=json.dumps(weak_objectives, ensure_ascii=False, indent=2),
-            student_responses=json.dumps(sample_responses, ensure_ascii=False, indent=2),
-            task_analysis=task_analysis[:3000]  # Truncate if too long
-        )
-
-        try:
-            result = self.llm.generate_json(prompt)
-            if 'weak_performance_areas' not in result:
-                result['weak_performance_areas'] = []
-            if 'recommended_strategies' not in result:
-                result['recommended_strategies'] = []
-            if 'examples_needed' not in result:
-                result['examples_needed'] = []
-            return result
-        except Exception as e:
-            print(f"  Warning: Failed to analyze weak objectives: {e}")
-            return {
-                "weak_performance_areas": [],
-                "recommended_strategies": ["Review the problem carefully"],
-                "examples_needed": []
-            }
-
-    def generate_coaching_db(
-        self,
-        learning_objective: str,
-        task_analysis: str,
-        weak_analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Phase 2: Coaching Database 생성
-
-        Args:
-            learning_objective: 학습 목표 (Terminal Goal)
-            task_analysis: 과제분석 결과
-            weak_analysis: 취약 영역 분석 결과
-
-        Returns:
-            {
-                "learning_objective": str,
-                "task_analysis_summary": str,
-                "performance_areas": [...],
-                "general_tips": [...]
-            }
-        """
-        prompt = COACHING_DB_GENERATION_PROMPT.format(
-            learning_objective=learning_objective,
-            task_analysis=task_analysis[:3000],
-            weak_analysis=json.dumps(weak_analysis, ensure_ascii=False, indent=2)
-        )
-
-        try:
-            result = self.llm.generate_json(prompt)
-            if 'learning_objective' not in result:
-                result['learning_objective'] = learning_objective
-            if 'task_analysis_summary' not in result:
-                result['task_analysis_summary'] = task_analysis[:500]
-            if 'performance_areas' not in result:
-                result['performance_areas'] = []
-            if 'general_tips' not in result:
-                result['general_tips'] = []
-            return result
-        except Exception as e:
-            print(f"  Warning: Failed to generate coaching DB: {e}")
-            return {
-                "learning_objective": learning_objective,
-                "task_analysis_summary": task_analysis[:500],
-                "performance_areas": [],
-                "general_tips": ["Review the problem step by step"]
-            }
-
-    def generate_modeling_response(
-        self,
-        problem_text: str,
-        ground_truth: str,
-        task_analysis: str
-    ) -> str:
-        """
-        Phase 3: Modeling - 교사가 추론 명료화(articulate reasoning) 제공
-
-        올바른 풀이과정의 정석을 학생에게 보여줌
-
-        Args:
-            problem_text: 문제
-            ground_truth: 정답
-            task_analysis: 과제분석 결과
-
-        Returns:
-            Teacher의 모범 풀이 응답
-        """
-        prompt = MODELING_PROMPT.format(
-            problem_text=problem_text,
-            ground_truth=ground_truth,
-            task_analysis=task_analysis[:2000]
-        )
-
-        try:
-            response = self.llm.generate(prompt)
-            return response
-        except Exception as e:
-            print(f"  Warning: Failed to generate modeling response: {e}")
-            # Fallback: return a basic structured response
-            return f"""Problem-solving strategy and flow:
-- Strategy selection: Apply systematic problem-solving approach
-- Step-by-step reasoning:
-  * Step 1: Understand the problem
-  * Step 2: Apply appropriate method
-- Key insights: Follow the task analysis structure
-
-Answer: {ground_truth}
-"""
-
     # =========================================================================
-    # Phase 1: Iterative Scaffolding Methods (NEW)
+    # Iterative Scaffolding Methods
     # =========================================================================
 
     def generate_initial_hint(
@@ -301,7 +109,7 @@ Answer: {ground_truth}
         ground_truth: str
     ) -> str:
         """
-        Phase 1 Iterative: 첫 번째 힌트 생성
+        Iterative Scaffolding: 첫 번째 힌트 생성
 
         학생이 문제를 풀기 전에 방향을 제시하는 힌트.
         답을 알려주지 않으면서 올바른 접근법을 안내.
@@ -338,7 +146,7 @@ Answer: {ground_truth}
         max_iterations: int = 5
     ) -> str:
         """
-        Phase 1 Iterative: 점진적 힌트 생성
+        Iterative Scaffolding: 점진적 힌트 생성
 
         이전 시도를 분석하고 더 구체적인 힌트 제공.
         iteration이 높아질수록 더 상세한 가이드 제공.
@@ -382,7 +190,7 @@ Answer: {ground_truth}
         conversation_history: List[Dict]
     ) -> Dict[str, Any]:
         """
-        Phase 1 Iterative: 5회 실패 후 요약 및 정답 재구성
+        Iterative Scaffolding: 5회 실패 후 요약 및 정답 재구성
 
         학생이 5번 시도해도 정답을 못 맞춘 경우:
         1. 대화를 요약하여 학생의 약점 분석
@@ -418,32 +226,43 @@ Answer: {ground_truth}
             conversation_history=summarized_history
         )
 
-        try:
-            result = self.llm.generate_json(prompt)
-            # Ensure required fields exist
-            if 'summary' not in result:
-                result['summary'] = "Student struggled with this problem after multiple attempts."
-            if 'student_weaknesses' not in result:
-                result['student_weaknesses'] = ["Could not identify the correct approach"]
-            if 'reconstructed_response' not in result:
-                result['reconstructed_response'] = f"Let me solve this correctly.\n\nAnswer: {ground_truth}"
-            if 'learning_points' not in result:
-                result['learning_points'] = ["Review the fundamental concepts"]
-            return result
-        except Exception as e:
-            print(f"  Warning: Failed to summarize and reconstruct: {e}")
-            return {
-                "summary": "Student needed multiple attempts but could not solve the problem.",
-                "student_weaknesses": ["Fundamental understanding of the problem"],
-                "reconstructed_response": f"""[Understanding the problem]
+        # 최대 3회 재시도
+        max_retries = 3
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = self.llm.generate_json(prompt)
+                # Ensure required fields exist
+                if 'summary' not in result:
+                    result['summary'] = "Student struggled with this problem after multiple attempts."
+                if 'student_weaknesses' not in result:
+                    result['student_weaknesses'] = ["Could not identify the correct approach"]
+                if 'reconstructed_response' not in result:
+                    result['reconstructed_response'] = f"Let me solve this correctly.\n\nAnswer: {ground_truth}"
+                if 'learning_points' not in result:
+                    result['learning_points'] = ["Review the fundamental concepts"]
+                return result
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    print(f"  Warning: Attempt {attempt}/{max_retries} failed: {e}. Retrying...")
+                else:
+                    print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
+
+        # 모든 재시도 실패 시 fallback 반환
+        return {
+            "summary": "Student needed multiple attempts but could not solve the problem.",
+            "student_weaknesses": ["Fundamental understanding of the problem"],
+            "reconstructed_response": f"""[Understanding the problem]
 Let me break down this problem carefully.
 
 [Step-by-step solution]
 Following the correct approach:
 
 Answer: {ground_truth}""",
-                "learning_points": ["Review the problem-solving approach", "Practice similar problems"]
-            }
+            "learning_points": ["Review the problem-solving approach", "Practice similar problems"]
+        }
 
     def _format_conversation_history(self, history: List[Dict]) -> str:
         """
@@ -534,6 +353,7 @@ if __name__ == "__main__":
     problem = "Calculate 15 + 27"
     student_resp = "15 + 27 = 41"  # Wrong answer
     ground_truth = "42"
+    task_analysis = "Terminal Goal: Perform basic arithmetic correctly"
 
     performance_objectives = [
         {
@@ -544,18 +364,19 @@ if __name__ == "__main__":
         }
     ]
 
-    print("=== Performance Objective Scoring ===")
-    scores = teacher.score_by_performance_objectives(
+    print("=== Performance Objective Evaluation (Iterative Scaffolding) ===")
+    evaluation = teacher.evaluate_with_performance_objectives(
         student_response=student_resp,
         performance_objectives=performance_objectives,
+        problem_text=problem,
         ground_truth=ground_truth
     )
-    print(json.dumps(scores, indent=2, ensure_ascii=False))
+    print(json.dumps(evaluation, indent=2, ensure_ascii=False))
 
-    print("\n=== Modeling Response ===")
-    modeling = teacher.generate_modeling_response(
+    print("\n=== Initial Hint ===")
+    hint = teacher.generate_initial_hint(
         problem_text=problem,
-        ground_truth=ground_truth,
-        task_analysis="Terminal Goal: Perform basic arithmetic correctly"
+        task_analysis=task_analysis,
+        ground_truth=ground_truth
     )
-    print(modeling)
+    print(hint)

@@ -1,14 +1,15 @@
 """
-3-Phase Learning Pipeline Prompts (PDF Proposal Based)
+Iterative Scaffolding Pipeline Prompts (PDF Proposal Based)
 
-Phase 1: Scaffolding - Initial Response Generation
-Phase 2: Coaching - Performance Objective Scoring, Weak Analysis, Fixed Response
-Phase 3: Modeling - Teacher's Articulate Reasoning
+Scaffolding - Iterative Response Generation with Teacher Guidance
+- Initial response generation
+- Iterative scaffolding with Socratic questions (max 5 iterations)
+- A-Failed case: Reconstruction after max iterations
 """
 
 
 # ==============================================================================
-# Phase 1: Scaffolding System Prompt
+# Scaffolding System Prompt
 # ==============================================================================
 
 SCAFFOLDING_SYSTEM_PROMPT = """The purpose of your response is to demonstrate the attainment of the Terminal Goal: {terminal_goal}
@@ -36,46 +37,7 @@ Answer: [your final answer]
 
 
 # ==============================================================================
-# Phase 2: Performance Objective Scoring Prompt
-# ==============================================================================
-
-PERFORMANCE_SCORING_PROMPT = """You are evaluating a student's response against specific Performance Objectives.
-
-[Student Response]
-{student_response}
-
-[Performance Objectives]
-{performance_objectives}
-
-[Ground Truth]
-{ground_truth}
-
-[Instructions]
-For each Performance Objective:
-1. Evaluate whether the student demonstrated the required behavior
-2. Score from 0.0 (completely incorrect) to 1.0 (fully correct)
-3. Identify specific weaknesses if score < 1.0
-
-[Output Format - JSON]
-{{
-  "overall_correct": true or false,
-  "objective_scores": [
-    {{
-      "objective_target": "name of the objective",
-      "score": 0.0 to 1.0,
-      "demonstrated_behavior": "what the student did correctly",
-      "weaknesses": ["list of specific weaknesses"]
-    }}
-  ],
-  "weak_objectives": ["list of objective targets with score < 0.6"]
-}}
-
-Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
-"""
-
-
-# ==============================================================================
-# Phase 2: Teacher Intervention Prompt (ReAct-style with Socratic Questions)
+# Teacher Intervention Prompt (ReAct-style with Socratic Questions)
 # ==============================================================================
 
 TEACHER_INTERVENTION_PROMPT = """You are a teacher model supporting the learning of a student model.
@@ -124,7 +86,7 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 
 
 # ==============================================================================
-# Phase 2: Student Response to Socratic Questions
+# Student Response to Socratic Questions
 # ==============================================================================
 
 STUDENT_SOCRATIC_RESPONSE_PROMPT = """You are a student model learning to solve problems with teacher guidance.
@@ -163,190 +125,6 @@ Answer: [your final answer]
 
 
 # ==============================================================================
-# Phase 2: Weak Objective Analysis Prompt (Batch)
-# ==============================================================================
-
-WEAK_OBJECTIVE_ANALYSIS_PROMPT = """You are analyzing systematic weaknesses across multiple student responses.
-
-[Weak Objectives Identified]
-{weak_objectives}
-
-[Sample Student Responses with Errors]
-{student_responses}
-
-[Task Analysis]
-{task_analysis}
-
-[Instructions]
-1. Identify common error patterns related to each weak objective
-2. Determine the underlying conceptual or procedural gaps
-3. Suggest specific remediation strategies with examples
-
-[Output Format - JSON]
-{{
-  "weak_performance_areas": [
-    {{
-      "objective": "objective name",
-      "error_rate": 0.0 to 1.0,
-      "common_errors": ["list of common error patterns"],
-      "conceptual_gaps": ["underlying knowledge/skill gaps"],
-      "remediation_hints": ["suggested strategies to overcome"]
-    }}
-  ],
-  "recommended_strategies": ["general strategies for improvement"],
-  "examples_needed": ["types of examples that would help"]
-}}
-
-Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
-"""
-
-
-# ==============================================================================
-# Phase 2: Coaching DB Generation Prompt
-# ==============================================================================
-
-COACHING_DB_GENERATION_PROMPT = """You are a Teacher Model with expertise in instructional design (Dick & Carey).
-
-Your role is to design pedagogical scaffolding artifacts for the Student Model's next attempt (fixed response). This scaffolding:
-- Does NOT provide correct answers directly
-- Provides strategies and cognitive scaffolds for restructuring performance
-- Will be used as a reference DB during the rollout process
-
-[Input Data]
-- Learning Objective (Terminal Goal): {learning_objective}
-- Instructional Analysis (Task Hierarchy): {task_analysis}
-- Performance Evaluation Summary: {performance_evaluation}
-- Initial Response Error Summary: {initial_response_error_summary}
-
-[Design Principles]
-1. Scaffolding Target Selection:
-   - Select only performance objectives with high error rates (e.g., ≥40%)
-   - Focus on objectives critical to achieving the Terminal Goal
-
-2. Skill Level Classification (based on Bloom's Taxonomy):
-   - High Order Skills (HOT): Analyze / Evaluate / Create
-   - Low Order Skills (LOT): Remember / Understand / Apply
-
-3. Pedagogical Intervention by Skill Level:
-   - For HOT:
-     · Suggest performance strategies
-     · Provide examples showing student's partial performance or errors (up to the error point)
-     · Include Socratic questions
-     · Do NOT include final answer derivation steps
-   - For LOT:
-     · Specify concepts or information the learner missed
-     · Provide explanations that minimize cognitive load
-
-[Output Format - JSON]
-{{
-  "learning_objective": "{learning_objective}",
-  "task_analysis_summary": "Key performance steps and required knowledge/information for achieving the terminal goal",
-  "high_order_skill_scaffolding": [
-    {{
-      "skill_reference": "[Subskill/Subtask number from instructional analysis]",
-      "skill_type": "HOT",
-      "bloom_level": "Analyze / Evaluate / Create",
-      "repeated_failure_point": "Where the learner repeatedly failed",
-      "strategies_for_next_attempt": [
-        {{
-          "strategy_name": "Strategy 1",
-          "partial_performance_example": "Example showing student's work up to error point",
-          "teacher_reasoning_clarification": "Why this strategy should be considered"
-        }}
-      ],
-      "key_considerations": "Critical points to note during performance",
-      "socratic_question": "Guiding question to prompt reflection"
-    }}
-  ],
-  "low_order_skill_scaffolding": [
-    {{
-      "skill_reference": "[Subskill/Subtask number from instructional analysis]",
-      "skill_type": "LOT",
-      "bloom_level": "Remember / Understand / Apply",
-      "missed_information": "Concepts or information the learner missed",
-      "concise_explanation": "Brief, clear explanation to minimize cognitive load"
-    }}
-  ],
-  "scaffolding_summary": "3-5 sentence summary of key strategies and concepts the Student Model must reference when using this scaffolding"
-}}
-
-Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
-"""
-
-
-# ==============================================================================
-# Phase 2: Fixed Response Generation Prompt (with Coaching DB)
-# ==============================================================================
-
-COACHING_RESPONSE_PROMPT = """Solve this problem by referencing the Coaching DB below.
-
-[Learning Objective]
-{learning_objective}
-
-[Instructional Analysis]
-{task_analysis}
-
-[Coaching DB]
-{coaching_db}
-
-[Problem]
-{problem_text}
-
-[Instructions]
-1. Review the scaffolding strategies and explanations in the Coaching DB
-2. Apply the relevant strategies (HOT scaffolding for analysis/evaluation tasks, LOT scaffolding for foundational knowledge)
-3. You MUST explicitly mention which information from the Coaching DB you are using in your solution
-4. Show your reasoning step by step, demonstrating how the scaffolding guided your approach
-5. Provide a clear final answer
-
-[Output Format]
-Problem-solving strategy and flow:
-- Information retrieved from Coaching DB: [explicitly state what strategies/concepts you used from the DB]
-- Strategy application: [how you applied the scaffolding strategies]
-- Step-by-step reasoning: [your detailed solution incorporating the DB guidance]
-
-Answer: [your final answer]
-"""
-
-
-# ==============================================================================
-# Phase 3: Modeling Prompt (Teacher's Articulate Reasoning)
-# ==============================================================================
-
-MODELING_PROMPT = """You are a teacher providing a model solution with clear, articulated reasoning.
-
-[Problem]
-{problem_text}
-
-[Correct Answer]
-{ground_truth}
-
-[Task Analysis for Reference]
-{task_analysis}
-
-[Instructions]
-Provide a complete, well-structured solution that:
-1. Explicitly states the problem-solving strategy
-2. Shows each reasoning step clearly
-3. Explains why each step is taken (articulate reasoning)
-4. Arrives at the correct answer with justification
-
-Your solution should serve as an exemplary model that students can learn from.
-
-[Output Format]
-Problem-solving strategy and flow:
-- Strategy selection: [explain which approach is best and why]
-- Step-by-step reasoning:
-  * Step 1: [action] - [justification for this step]
-  * Step 2: [action] - [justification for this step]
-  * ...
-- Key insights: [important concepts applied]
-
-Answer: {ground_truth}
-"""
-
-
-# ==============================================================================
 # SFT Data Output Format Template
 # ==============================================================================
 
@@ -358,7 +136,7 @@ Answer: {answer}
 
 
 # ==============================================================================
-# Phase 1: Iterative Scaffolding Prompts (NEW)
+# Iterative Scaffolding Prompts
 # ==============================================================================
 
 INITIAL_HINT_PROMPT = """You are a teacher providing the first hint to help a student solve a problem.

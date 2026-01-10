@@ -5,7 +5,7 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 ## 주요 기능
 
 - **데이터셋별 분리 학습**: 각 데이터셋(GSM8K, MATH)별 고유 Terminal Goal로 학습
-- **3-Phase Pipeline 학습**: Scaffolding → Coaching → Modeling 단계별 학습
+- **Iterative Scaffolding Pipeline**: Performance Objectives 기반 평가 + Socratic 질문을 통한 반복 학습 (최대 5회)
 - **LangGraph 기반 워크플로우**: StateGraph 상태 관리, 조건부 라우팅, 체크포인트 기반 Resume 지원
 - **다양한 평가 방법**: Baseline, SFT, SFT_ID-MAS 모델 평가 지원
 - **유연한 도메인 구조**: 설정 파일만 수정하여 새로운 도메인 쉽게 추가 가능
@@ -32,11 +32,11 @@ ID-MAS/
 │   ├── objectives.py       # 수행목표 진술 (B-C-CR)
 │   ├── test.py             # Test item 개발
 │   └── rubric.py           # 루브릭 개발 (Essay형)
-├── learning_loop/           # 3-Phase 학습 파이프라인 (LangGraph 기반)
+├── learning_loop/           # Iterative Scaffolding Pipeline (LangGraph 기반)
 │   ├── graph/              # LangGraph StateGraph 구현
 │   │   ├── __init__.py     # 모듈 export
 │   │   ├── state.py        # 상태 스키마 (IDMASState, QuestionResult)
-│   │   ├── nodes.py        # 노드 함수 (phase1, phase2, phase3 등)
+│   │   ├── nodes.py        # 노드 함수 (scaffolding, advance, finalize)
 │   │   └── graph.py        # StateGraph 구성 및 IDMASGraphRunner
 │   ├── student_model.py    # Ms: 학생 모델
 │   └── teacher_model.py    # Mt: 교사 모델
@@ -130,7 +130,7 @@ cp .env.example .env
 # 4. 데이터 준비 (HuggingFace에서 다운로드)
 python -m utils.dataset_preparer
 
-# 5. 학습 실행 (3-Phase Pipeline)
+# 5. 학습 실행 (Iterative Scaffolding Pipeline)
 python main.py --mode train --domain math --train-dataset gsm8k
 # 교사 모델 사용 시: --teacher-model meta-llama/Llama-3.3-70B-Instruct 등 추가
 
@@ -244,7 +244,7 @@ python main.py --mode eval --method sft \
 
 #### SFT_ID-MAS 평가
 
-ID-MAS 3-Phase Pipeline으로 학습된 SFT 모델을 평가합니다.
+ID-MAS Iterative Scaffolding Pipeline으로 학습된 SFT 모델을 평가합니다.
 
 ```bash
 # GSM8K SFT_ID-MAS 평가
@@ -269,7 +269,7 @@ python main.py --mode eval --method sft_id-mas \
 |------|------|-----|
 | `--mode` | 실행 모드 | `train`, `eval` (필수) |
 | `--model` | 학생 모델 선택 | Qwen/Qwen2.5-3B-Instruct (기본값) |
-| `--teacher-model` | 교사/설계 모델 선택 | `config.AVAILABLE_TEACHER_MODELS` (기본값: gpt-5-2025-08-07, LLaMA-Factory: localhost:2000/v1) |
+| `--teacher-model` | 교사/설계 모델 선택 | `config.AVAILABLE_TEACHER_MODELS` (기본값: gpt-5-2025-08-07) |
 
 ### 학습 모드 전용 옵션 (--mode train)
 
@@ -295,7 +295,7 @@ python main.py --mode eval --method sft_id-mas \
 |--------|------|------|
 | `baseline` | 베이스 모델로 평가 | 순수 베이스 모델 성능 측정 |
 | `sft` | Fine-tuned 모델로 평가 | HuggingFace Hub에서 SFT 모델 로드하여 평가 |
-| `sft_id-mas` | ID-MAS SFT 모델로 평가 | 3-Phase Pipeline으로 학습된 SFT 모델 평가 |
+| `sft_id-mas` | ID-MAS SFT 모델로 평가 | Iterative Scaffolding Pipeline으로 학습된 SFT 모델 평가 |
 
 ### SFT 평가
 
@@ -304,7 +304,7 @@ SFT 방법은 HuggingFace Hub에서 fine-tuned 모델을 로드하여 평가:
 
 ### SFT_ID-MAS 평가
 
-ID-MAS 3-Phase Pipeline으로 생성된 SFT 데이터로 학습된 모델을 평가:
+ID-MAS Iterative Scaffolding Pipeline으로 생성된 SFT 데이터로 학습된 모델을 평가:
 - `SaFD-00/{model}-{domain}_id-mas` (예: `SaFD-00/qwen2.5-3b-math_id-mas`)
 
 ## 데이터 구조
@@ -359,7 +359,7 @@ data/
 
 ```json
 {
-  "phase1_results": [
+  "scaffolding_results": [
     {
       "id": "question_id",
       "instruction": "시스템 프롬프트",
@@ -367,7 +367,7 @@ data/
       "output": "정답 (ground truth)",
       "initial_response": "학생 모델 응답",
       "predicted_answer": "추출된 답",
-      "phase1_correct": true,
+      "scaffolding_correct": true,
       "sft_case": "A",
       "sft_response": "SFT용 응답",
       "iterative_scaffolding": {
@@ -377,9 +377,13 @@ data/
       }
     }
   ],
-  "phase2_results": [...],
-  "phase3_results": [...],
-  "coaching_db": {...}
+  "statistics": {
+    "total_questions": 100,
+    "scaffolding_processed": 100,
+    "scaffolding_correct": 80,
+    "sft_case_a": 80,
+    "sft_case_a_failed": 20
+  }
 }
 ```
 
@@ -390,7 +394,7 @@ data/
   {
     "instruction": "시스템 프롬프트",
     "input": "문제 텍스트",
-    "output": "SFT용 응답 (Phase 1/2/3 결과)"
+    "output": "SFT용 응답"
   }
 ]
 ```
@@ -399,14 +403,12 @@ data/
 
 | Case | 설명 | 응답 출처 |
 |------|------|-----------|
-| `A` | Phase 1 정답 AND PO 충족 | 학생 모델 초기 응답 |
-| `A-Failed` | Phase 1 5회 실패 후 재구성 (오답 또는 PO 미충족) | AI 기반 대화 분석 후 재구성된 응답 |
-| `B` | Phase 2 정답 | Coaching 후 수정된 응답 |
-| `C` | Phase 3 모델링 | 교사 모델 응답 |
+| `A` | Iterative Scaffolding 성공 (정답 AND PO 충족) | 학생 모델 응답 (1회 또는 다중 시도) |
+| `A-Failed` | 5회 실패 후 재구성 (오답 또는 PO 미충족) | AI 기반 대화 분석 후 재구성된 응답 |
 
-**Phase 1 성공 조건**: 정답을 맞추고(`is_correct=True`) **동시에** 모든 수행목표(PO)가 충족되어야(`all_satisfied=True`) Case A로 처리됩니다.
+**성공 조건**: 정답을 맞추고(`is_correct=True`) **동시에** 모든 수행목표(PO)가 충족되어야(`all_satisfied=True`) Case A로 처리됩니다.
 
-**A-Failed 처리**: Phase 1에서 최대 5회 Iterative Scaffolding 후에도 (정답 AND PO 충족) 조건을 만족하지 못한 경우, Teacher 모델이 대화 히스토리를 AI 기반으로 축약/분석하여 학생의 약점을 파악하고, 이를 보완하는 정답 솔루션을 재구성합니다. 정답은 맞았지만 PO가 충족되지 않은 경우도 A-Failed로 처리됩니다.
+**A-Failed 처리**: 최대 5회 Iterative Scaffolding 후에도 (정답 AND PO 충족) 조건을 만족하지 못한 경우, Teacher 모델이 대화 히스토리를 AI 기반으로 축약/분석하여 학생의 약점을 파악하고, 이를 보완하는 정답 솔루션을 재구성합니다. 정답은 맞았지만 PO가 충족되지 않은 경우도 A-Failed로 처리됩니다.
 
 ## 데이터 준비
 

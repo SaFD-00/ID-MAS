@@ -1,16 +1,15 @@
 """
-LangGraph StateGraph for ID-MAS 3-Phase Pipeline.
+LangGraph StateGraph for ID-MAS Iterative Scaffolding Pipeline.
 
 This module builds the complete LangGraph workflow:
 - StateGraph construction with conditional routing
 - IDMASGraphRunner for executing the pipeline
 - Checkpoint support with SqliteSaver or MemorySaver
 
-Based on the research proposal's 3-Phase Pipeline architecture.
+Based on the research proposal's Iterative Scaffolding architecture.
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
@@ -28,10 +27,7 @@ from learning_loop.graph.state import (
     restore_state_from_checkpoint,
 )
 from learning_loop.graph.nodes import (
-    process_question_phase1,
-    generate_coaching_db,
-    process_question_phase2,
-    process_question_phase3,
+    process_question_scaffolding,
     advance_to_next_question,
     generate_sft_data,
     save_results,
@@ -45,18 +41,16 @@ def create_idmas_graph(
     answer_extractor,
 ) -> StateGraph:
     """
-    Create the ID-MAS 3-Phase Pipeline as a LangGraph StateGraph.
+    Create the ID-MAS Iterative Scaffolding Pipeline as a LangGraph StateGraph.
 
     The graph implements the following flow:
-    1. process_phase1 -> check if correct
-       - If correct: advance to next question or finish Phase 1
-       - If incorrect: add to Phase 2 queue
-    2. After all Phase 1: generate_coaching_db if there are incorrect answers
-    3. process_phase2 -> check if fixed
-       - If fixed: mark as Case B
-       - If still incorrect: add to Phase 3 queue
-    4. process_phase3 -> mark as Case C (modeling)
-    5. generate_sft_data -> complete
+    1. scaffolding -> process current question with iterative scaffolding
+       - If correct (answer + PO satisfied): Case A
+       - If failed after max iterations: Case A-Failed (reconstructed)
+    2. advance -> check if more questions
+       - If more questions: go back to scaffolding
+       - If no more questions: go to finalize
+    3. finalize -> generate SFT data and complete
 
     Args:
         student_model: StudentModel instance
@@ -69,9 +63,9 @@ def create_idmas_graph(
 
     # ==================== Node Functions (wrapped) ====================
 
-    def phase1_node(state: IDMASState) -> Dict[str, Any]:
-        """Phase 1: Process current question with scaffolding."""
-        return process_question_phase1(
+    def scaffolding_node(state: IDMASState) -> Dict[str, Any]:
+        """Process current question with iterative scaffolding."""
+        return process_question_scaffolding(
             state=state,
             student_model=student_model,
             teacher_model=teacher_model,
@@ -82,107 +76,19 @@ def create_idmas_graph(
         """Advance to next question."""
         return advance_to_next_question(state)
 
-    def coaching_db_node(state: IDMASState) -> Dict[str, Any]:
-        """Generate Coaching DB for Phase 2."""
-        return generate_coaching_db(
-            state=state,
-            teacher_model=teacher_model,
-        )
-
-    def phase2_batch_node(state: IDMASState) -> Dict[str, Any]:
-        """Process all Phase 2 questions."""
-        incorrect_results = list(state.get("incorrect_after_phase1", []))
-        if not incorrect_results:
-            return {"current_phase": "phase3_check"}
-
-        updates = {
-            "phase2_processed": 0,
-            "phase2_results": [],
-            "still_incorrect_after_phase2": [],
-        }
-
-        for result in incorrect_results:
-            result_updates = process_question_phase2(
-                state={**state, **updates},
-                result=result,
-                student_model=student_model,
-                answer_extractor=answer_extractor,
-            )
-            # Merge updates
-            updates["phase2_processed"] = result_updates.get(
-                "phase2_processed", updates["phase2_processed"]
-            )
-            if "phase2_results" in result_updates:
-                updates["phase2_results"] = updates.get("phase2_results", []) + result_updates["phase2_results"]
-            if "still_incorrect_after_phase2" in result_updates:
-                updates["still_incorrect_after_phase2"] = (
-                    updates.get("still_incorrect_after_phase2", []) +
-                    result_updates["still_incorrect_after_phase2"]
-                )
-
-        updates["current_phase"] = "phase3_check"
-        updates["updated_at"] = datetime.now().isoformat()
-        return updates
-
-    def phase3_batch_node(state: IDMASState) -> Dict[str, Any]:
-        """Process all Phase 3 questions."""
-        still_incorrect = list(state.get("still_incorrect_after_phase2", []))
-        if not still_incorrect:
-            return {"current_phase": "finalize"}
-
-        updates = {
-            "phase3_processed": 0,
-            "phase3_results": [],
-        }
-
-        for result in still_incorrect:
-            result_updates = process_question_phase3(
-                state={**state, **updates},
-                result=result,
-                teacher_model=teacher_model,
-            )
-            updates["phase3_processed"] = result_updates.get(
-                "phase3_processed", updates["phase3_processed"]
-            )
-            if "phase3_results" in result_updates:
-                updates["phase3_results"] = updates.get("phase3_results", []) + result_updates["phase3_results"]
-
-        updates["current_phase"] = "finalize"
-        updates["updated_at"] = datetime.now().isoformat()
-        return updates
-
     def finalize_node(state: IDMASState) -> Dict[str, Any]:
         """Generate SFT data and mark complete."""
         return generate_sft_data(state)
 
     # ==================== Conditional Routing ====================
 
-    def should_continue_phase1(state: IDMASState) -> Literal["phase1", "phase2_prep"]:
-        """Check if there are more Phase 1 questions to process."""
-        current_index = state.get("current_question_index", 0)
+    def should_continue_scaffolding(state: IDMASState) -> Literal["scaffolding", "finalize"]:
+        """Check if there are more questions to process."""
         total = state.get("total_questions", 0)
-
-        # Check if we just processed a question (phase1_processed > current_index)
-        processed = state.get("phase1_processed", 0)
+        processed = state.get("scaffolding_processed", 0)
 
         if processed < total:
-            return "phase1"
-        else:
-            return "phase2_prep"
-
-    def should_run_phase2(state: IDMASState) -> Literal["phase2", "phase3_check"]:
-        """Check if Phase 2 is needed."""
-        incorrect = state.get("incorrect_after_phase1", [])
-        if incorrect:
-            return "phase2"
-        else:
-            return "phase3_check"
-
-    def should_run_phase3(state: IDMASState) -> Literal["phase3", "finalize"]:
-        """Check if Phase 3 is needed."""
-        still_incorrect = state.get("still_incorrect_after_phase2", [])
-        if still_incorrect:
-            return "phase3"
+            return "scaffolding"
         else:
             return "finalize"
 
@@ -191,43 +97,24 @@ def create_idmas_graph(
     workflow = StateGraph(IDMASState)
 
     # Add nodes
-    workflow.add_node("phase1", phase1_node)
+    workflow.add_node("scaffolding", scaffolding_node)
     workflow.add_node("advance", advance_node)
-    workflow.add_node("coaching_db", coaching_db_node)
-    workflow.add_node("phase2", phase2_batch_node)
-    workflow.add_node("phase3", phase3_batch_node)
     workflow.add_node("finalize", finalize_node)
 
     # Set entry point
-    workflow.set_entry_point("phase1")
+    workflow.set_entry_point("scaffolding")
 
     # Add edges
-    workflow.add_edge("phase1", "advance")
+    # scaffolding → advance → (conditional: more scaffolding or finalize) → END
+    workflow.add_edge("scaffolding", "advance")
     workflow.add_conditional_edges(
         "advance",
-        should_continue_phase1,
+        should_continue_scaffolding,
         {
-            "phase1": "phase1",
-            "phase2_prep": "coaching_db",
-        }
-    )
-    workflow.add_conditional_edges(
-        "coaching_db",
-        should_run_phase2,
-        {
-            "phase2": "phase2",
-            "phase3_check": "finalize",
-        }
-    )
-    workflow.add_conditional_edges(
-        "phase2",
-        should_run_phase3,
-        {
-            "phase3": "phase3",
+            "scaffolding": "scaffolding",
             "finalize": "finalize",
         }
     )
-    workflow.add_edge("phase3", "finalize")
     workflow.add_edge("finalize", END)
 
     return workflow
@@ -235,7 +122,7 @@ def create_idmas_graph(
 
 class IDMASGraphRunner:
     """
-    Runner class for the ID-MAS LangGraph pipeline.
+    Runner class for the ID-MAS Iterative Scaffolding Pipeline.
 
     Handles:
     - Graph compilation with checkpointing
@@ -321,7 +208,7 @@ class IDMASGraphRunner:
             design_result: Pre-loaded design result
             output_dir: Output directory for saving results
             checkpoint_interval: Save checkpoint every N questions
-            use_iterative_scaffolding: Use iterative scaffolding in Phase 1
+            use_iterative_scaffolding: Use iterative scaffolding
             max_iterations: Max iterations for iterative scaffolding
             thread_id: Thread ID for checkpointing
             resume: Whether to resume from existing logs file
@@ -330,7 +217,7 @@ class IDMASGraphRunner:
             Final state with results
         """
         print("\n" + "=" * 60)
-        print("ID-MAS 3-PHASE PIPELINE (LangGraph)")
+        print("ID-MAS ITERATIVE SCAFFOLDING PIPELINE (LangGraph)")
         print("=" * 60)
         print(f"Domain: {domain}")
         print(f"Dataset: {train_dataset}")
@@ -372,12 +259,11 @@ class IDMASGraphRunner:
                     )
                     remaining = len(initial_state.get("questions", []))
                     print(f"[Resume] Remaining questions: {remaining}")
-                    print(f"[Resume] Phase 1 correct: {initial_state.get('phase1_correct_count', 0)}")
-                    print(f"[Resume] Phase 1 incorrect: {len(initial_state.get('incorrect_after_phase1', []))}")
+                    print(f"[Resume] Scaffolding correct: {initial_state.get('scaffolding_correct_count', 0)}")
+                    print(f"[Resume] Failed reconstructed: {initial_state.get('failed_reconstructed', 0)}")
 
-                    # If all Phase 1 is done, check if we need to continue with Phase 2/3
                     if remaining == 0:
-                        print("[Resume] All Phase 1 questions processed. Continuing with Phase 2/3...")
+                        print("[Resume] All questions processed. Finalizing...")
                 else:
                     print("[Resume] No processed questions found. Starting fresh.")
             else:
@@ -407,16 +293,8 @@ class IDMASGraphRunner:
                     else:
                         accumulated_state[key] = value
 
-                # Save incremental checkpoint after Phase 1 question processing
+                # Save incremental checkpoint after question processing
                 if node_name == "advance" and output_dir:
-                    save_incremental_checkpoint(
-                        state=accumulated_state,
-                        output_dir=output_dir,
-                        logs_filename=logs_filename,
-                    )
-
-                # Save after Phase 2 and Phase 3 batch processing
-                if node_name in ("phase2", "phase3", "coaching_db") and output_dir:
                     save_incremental_checkpoint(
                         state=accumulated_state,
                         output_dir=output_dir,
@@ -441,9 +319,13 @@ class IDMASGraphRunner:
         print("PIPELINE COMPLETE")
         print("=" * 60)
         print(f"Total Questions: {stats['total_questions']}")
-        print(f"Phase 1 Correct (Case A): {stats['phase1_correct']}")
-        print(f"Phase 2 Fixed (Case B): {stats['phase2_fixed']}")
-        print(f"Phase 3 Modeling (Case C): {stats['phase3_modeling']}")
+        print(f"Scaffolding Processed: {stats['scaffolding_processed']}")
+        print(f"Scaffolding Correct (Case A): {stats['scaffolding_correct']}")
+        print(f"Failed Reconstructed (Case A-Failed): {stats['sft_case_a_failed']}")
+        if stats.get('iterative_scaffolding'):
+            iter_stats = stats['iterative_scaffolding']
+            print(f"  - First Attempt Correct: {iter_stats['first_attempt_correct']}")
+            print(f"  - Multi Attempt Correct: {iter_stats['multi_attempt_correct']}")
         print(f"SFT Data Generated: {len(final_state.get('sft_data', []))}")
 
         # Save results if output_dir provided
@@ -489,7 +371,7 @@ class IDMASGraphRunner:
 
         state = checkpoint.get("channel_values", {})
         print(f"\n[Resuming from checkpoint]")
-        print(f"Phase 1 processed: {state.get('phase1_processed', 0)}/{state.get('total_questions', 0)}")
+        print(f"Scaffolding processed: {state.get('scaffolding_processed', 0)}/{state.get('total_questions', 0)}")
 
         # recursion_limit 설정
         total_questions = state.get('total_questions', 100)

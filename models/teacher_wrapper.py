@@ -17,6 +17,50 @@ from models.model_cache import ModelCache
 from config.config import DESIGN_MODEL_CONFIG, OPENAI_API_KEY
 
 
+def _fix_control_characters(text: str) -> str:
+    """
+    JSON 문자열 내의 제어 문자(0x00-0x1F)를 유니코드 이스케이프로 변환
+
+    LLM이 JSON 응답 생성 시 문자열 내에 실제 개행/탭 등을 포함할 때
+    'Invalid control character' 오류를 방지
+    """
+    result = []
+    in_string = False
+    escape_next = False
+
+    for char in text:
+        if escape_next:
+            result.append(char)
+            escape_next = False
+            continue
+
+        if char == '\\' and in_string:
+            result.append(char)
+            escape_next = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            result.append(char)
+            continue
+
+        # 문자열 내부의 제어 문자만 이스케이프
+        if in_string and ord(char) < 32:
+            # 일반적인 제어 문자는 유니코드 이스케이프로 변환
+            if char == '\n':
+                result.append('\\n')
+            elif char == '\r':
+                result.append('\\r')
+            elif char == '\t':
+                result.append('\\t')
+            else:
+                result.append(f'\\u{ord(char):04x}')
+        else:
+            result.append(char)
+
+    return ''.join(result)
+
+
 def _fix_json_escapes(text: str) -> str:
     """
     JSON에서 유효하지 않은 백슬래시 이스케이프를 수정
@@ -26,6 +70,9 @@ def _fix_json_escapes(text: str) -> str:
 
     유효한 JSON 이스케이프: \\", \\\\, \\/, \\b, \\f, \\n, \\r, \\t, \\uXXXX
     """
+    # 먼저 제어 문자를 이스케이프
+    text = _fix_control_characters(text)
+
     result = []
     i = 0
     while i < len(text):

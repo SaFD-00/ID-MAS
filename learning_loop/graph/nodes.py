@@ -1,13 +1,11 @@
 """
-LangGraph Node Functions for ID-MAS 3-Phase Pipeline.
+LangGraph Node Functions for ID-MAS Iterative Scaffolding Pipeline.
 
 This module implements the node functions used in the LangGraph pipeline:
-- Phase 1: process_question_phase1 (Scaffolding)
-- Phase 2: generate_coaching_db, process_question_phase2 (Coaching)
-- Phase 3: process_question_phase3 (Modeling)
+- Scaffolding: process_question_scaffolding (iterative with teacher guidance)
 - Utility: save_results, check_completion
 
-Based on the research proposal's 3-Phase Pipeline architecture.
+Based on the research proposal's Iterative Scaffolding architecture.
 """
 from __future__ import annotations
 
@@ -24,16 +22,16 @@ from learning_loop.graph.state import (
 )
 
 
-# ==================== Phase 1: Scaffolding ====================
+# ==================== Scaffolding ====================
 
-def process_question_phase1(
+def process_question_scaffolding(
     state: IDMASState,
     student_model,
     teacher_model,
     answer_extractor,
 ) -> Dict[str, Any]:
     """
-    Phase 1: Process current question with scaffolding.
+    Process current question with iterative scaffolding.
 
     This node generates an initial response using the student model
     with task analysis scaffolding. If iterative scaffolding is enabled,
@@ -46,7 +44,7 @@ def process_question_phase1(
         answer_extractor: AnswerExtractor instance
 
     Returns:
-        State updates including phase1_results
+        State updates including scaffolding_results
     """
     question = state["current_question"]
     task_analysis = state.get("task_analysis", "")
@@ -56,7 +54,7 @@ def process_question_phase1(
     terminal_goal = state.get("terminal_goal", "")
 
     qid = question["id"]
-    print(f"\n[Phase 1] Processing: {qid}")
+    print(f"\n[Scaffolding] Processing: {qid}")
 
     if use_iterative:
         result = _process_iterative_scaffolding(
@@ -80,13 +78,13 @@ def process_question_phase1(
 
     # Build state updates
     updates = {
-        "phase1_results": [result],
-        "phase1_processed": state.get("phase1_processed", 0) + 1,
+        "scaffolding_results": [result],
+        "scaffolding_processed": state.get("scaffolding_processed", 0) + 1,
         "updated_at": datetime.now().isoformat(),
     }
 
-    if result.get("phase1_correct"):
-        updates["phase1_correct_count"] = state.get("phase1_correct_count", 0) + 1
+    if result.get("scaffolding_correct"):
+        updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
         print(f"  -> Correct! (Case A)")
 
         # Track iterative statistics
@@ -94,15 +92,14 @@ def process_question_phase1(
             scaffolding_info = result.get("iterative_scaffolding", {})
             iterations_needed = scaffolding_info.get("iterations_needed", 1)
             if iterations_needed == 1:
-                updates["phase1_first_attempt_correct"] = state.get("phase1_first_attempt_correct", 0) + 1
+                updates["first_attempt_correct"] = state.get("first_attempt_correct", 0) + 1
             else:
-                updates["phase1_multi_attempt_correct"] = state.get("phase1_multi_attempt_correct", 0) + 1
+                updates["multi_attempt_correct"] = state.get("multi_attempt_correct", 0) + 1
     else:
-        updates["incorrect_after_phase1"] = [result]
         print(f"  -> Incorrect (predicted: {result.get('predicted_answer')})")
 
         if result.get("sft_case") == "A-Failed":
-            updates["phase1_failed_reconstructed"] = state.get("phase1_failed_reconstructed", 0) + 1
+            updates["failed_reconstructed"] = state.get("failed_reconstructed", 0) + 1
 
     return updates
 
@@ -132,7 +129,7 @@ def _process_single_shot(
         _problem_text=question["problem_text"],  # 내부 처리용
         initial_response=response,
         predicted_answer=predicted,
-        phase1_correct=is_correct,
+        scaffolding_correct=is_correct,
         sft_case=SFTCase.A.value if is_correct else None,
         sft_response=response if is_correct else None,
     )
@@ -258,7 +255,7 @@ def _process_iterative_scaffolding(
             _problem_text=question["problem_text"],  # 내부 처리용
             initial_response=response,
             predicted_answer=predicted,
-            phase1_correct=True,
+            scaffolding_correct=True,
             sft_case=SFTCase.A.value,
             sft_response=sft_output,
             iterative_scaffolding={
@@ -291,7 +288,7 @@ def _process_iterative_scaffolding(
             _problem_text=question["problem_text"],  # 내부 처리용
             initial_response=reconstructed_response,
             predicted_answer=predicted,
-            phase1_correct=False,
+            scaffolding_correct=False,
             sft_case=SFTCase.A_FAILED.value,
             sft_response=reconstructed_response,
             iterative_scaffolding={
@@ -339,219 +336,6 @@ def _build_sft_response_from_iterations(
     return "\n\n".join(parts)
 
 
-# ==================== Phase 2: Coaching ====================
-
-def generate_coaching_db(
-    state: IDMASState,
-    teacher_model,
-) -> Dict[str, Any]:
-    """
-    Generate Coaching Database for Phase 2.
-
-    This node analyzes incorrect Phase 1 responses to identify
-    weak performance objectives and generates coaching strategies.
-
-    Args:
-        state: Current pipeline state
-        teacher_model: TeacherModel instance
-
-    Returns:
-        State updates including coaching_db
-    """
-    incorrect_results = state.get("incorrect_after_phase1", [])
-    performance_objectives = state.get("performance_objectives", [])
-    task_analysis = state.get("task_analysis", "")
-    terminal_goal = state.get("terminal_goal", "")
-
-    if not incorrect_results:
-        return {"coaching_db": None}
-
-    print(f"\n[Phase 2] Generating Coaching DB for {len(incorrect_results)} incorrect responses...")
-
-    # Step 1: Score all incorrect responses
-    all_scores = []
-    for result in incorrect_results:
-        scores = teacher_model.score_by_performance_objectives(
-            student_response=result.get("initial_response", ""),
-            performance_objectives=performance_objectives,
-            ground_truth=result.get("output", ""),
-        )
-        result["phase2_scores"] = scores
-        all_scores.append(scores)
-
-    # Step 2: Find weak objectives (40%+ error rate)
-    weak_objectives = _find_weak_objectives(
-        all_scores=all_scores,
-        performance_objectives=performance_objectives,
-        error_threshold=0.4,
-    )
-    print(f"  Found {len(weak_objectives)} weak objectives")
-
-    # Step 3: Generate Coaching DB
-    if weak_objectives:
-        weak_analysis = teacher_model.analyze_weak_objectives(
-            weak_objectives=weak_objectives,
-            student_responses=[r.get("initial_response", "") for r in incorrect_results[:5]],
-            task_analysis=task_analysis,
-        )
-
-        coaching_db = teacher_model.generate_coaching_db(
-            learning_objective=terminal_goal,
-            task_analysis=task_analysis,
-            weak_analysis=weak_analysis,
-        )
-    else:
-        coaching_db = {
-            "learning_objective": terminal_goal,
-            "task_analysis_summary": task_analysis[:500],
-            "performance_areas": [],
-            "general_tips": ["Review the problem carefully", "Check your calculations"],
-        }
-
-    return {
-        "coaching_db": coaching_db,
-        "weak_objectives": weak_objectives,
-        "updated_at": datetime.now().isoformat(),
-    }
-
-
-def _find_weak_objectives(
-    all_scores: List[Dict],
-    performance_objectives: List[Dict],
-    error_threshold: float = 0.4,
-) -> List[Dict]:
-    """Find performance objectives with error rate >= threshold."""
-    obj_errors = {}
-    for obj in performance_objectives:
-        obj_target = obj.get("target", "")
-        obj_errors[obj_target] = {"total": 0, "errors": 0}
-
-    for scores in all_scores:
-        for obj_score in scores.get("objective_scores", []):
-            target = obj_score.get("objective_target", "")
-            if target in obj_errors:
-                obj_errors[target]["total"] += 1
-                if obj_score.get("score", 0) < 0.6:
-                    obj_errors[target]["errors"] += 1
-
-    weak = []
-    for target, counts in obj_errors.items():
-        if counts["total"] > 0:
-            error_rate = counts["errors"] / counts["total"]
-            if error_rate >= error_threshold:
-                weak.append({
-                    "target": target,
-                    "error_rate": error_rate,
-                    "error_count": counts["errors"],
-                    "total_count": counts["total"],
-                })
-
-    return weak
-
-
-def process_question_phase2(
-    state: IDMASState,
-    result: QuestionResult,
-    student_model,
-    answer_extractor,
-) -> Dict[str, Any]:
-    """
-    Phase 2: Process a single incorrect result with coaching.
-
-    This node generates a fixed response using the coaching database.
-
-    Args:
-        state: Current pipeline state
-        result: Phase 1 result (incorrect)
-        student_model: StudentModel instance
-        answer_extractor: AnswerExtractor instance
-
-    Returns:
-        State updates including phase2_results
-    """
-    coaching_db = state.get("coaching_db", {})
-    task_analysis = state.get("task_analysis", "")
-    terminal_goal = state.get("terminal_goal", "")
-
-    rid = result["id"]
-    print(f"  [Phase 2] Fixed Response: {rid}")
-
-    fixed_response = student_model.generate_fixed_response_with_coaching(
-        problem_text=result["_problem_text"],
-        coaching_db=coaching_db,
-        task_analysis=task_analysis,
-        learning_objective=terminal_goal,
-    )
-
-    predicted = answer_extractor.extract(fixed_response)
-    is_correct = answer_extractor.compare(predicted, result["output"])
-
-    # Update result
-    result["fixed_response"] = fixed_response
-    result["fixed_predicted"] = predicted
-    result["phase2_correct"] = is_correct
-    result["coaching_db_used"] = True
-
-    updates = {
-        "phase2_processed": state.get("phase2_processed", 0) + 1,
-        "updated_at": datetime.now().isoformat(),
-    }
-
-    if is_correct:
-        result["sft_case"] = SFTCase.B.value
-        result["sft_response"] = fixed_response
-        updates["phase2_results"] = [result]
-        print(f"      -> Fixed! (Case B)")
-    else:
-        updates["still_incorrect_after_phase2"] = [result]
-        print(f"      -> Still incorrect")
-
-    return updates
-
-
-# ==================== Phase 3: Modeling ====================
-
-def process_question_phase3(
-    state: IDMASState,
-    result: QuestionResult,
-    teacher_model,
-) -> Dict[str, Any]:
-    """
-    Phase 3: Generate modeling response for a still-incorrect question.
-
-    This node has the teacher model demonstrate the correct solution.
-
-    Args:
-        state: Current pipeline state
-        result: Phase 2 result (still incorrect)
-        teacher_model: TeacherModel instance
-
-    Returns:
-        State updates including phase3_results
-    """
-    task_analysis = state.get("task_analysis", "")
-
-    rid = result["id"]
-    print(f"  [Phase 3] Modeling: {rid}")
-
-    modeling_response = teacher_model.generate_modeling_response(
-        problem_text=result["_problem_text"],
-        ground_truth=result["output"],
-        task_analysis=task_analysis,
-    )
-
-    result["modeling_response"] = modeling_response
-    result["sft_case"] = SFTCase.C.value
-    result["sft_response"] = modeling_response
-    result["phase3_applied"] = True
-
-    return {
-        "phase3_results": [result],
-        "phase3_processed": state.get("phase3_processed", 0) + 1,
-        "updated_at": datetime.now().isoformat(),
-    }
-
-
 # ==================== Utility Nodes ====================
 
 def advance_to_next_question(state: IDMASState) -> Dict[str, Any]:
@@ -581,7 +365,7 @@ def advance_to_next_question(state: IDMASState) -> Dict[str, Any]:
 
 def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     """
-    Generate SFT training data from all phase results.
+    Generate SFT training data from scaffolding results.
 
     Args:
         state: Current pipeline state
@@ -591,23 +375,9 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     """
     sft_data = []
 
-    # Phase 1 correct (Case A) and failed (Case A-Failed)
-    for result in state.get("phase1_results", []):
+    # Scaffolding results: Case A (correct) and Case A-Failed (reconstructed)
+    for result in state.get("scaffolding_results", []):
         if result.get("sft_case") in (SFTCase.A.value, SFTCase.A_FAILED.value):
-            entry = _create_sft_entry(result)
-            if entry:
-                sft_data.append(entry)
-
-    # Phase 2 fixed (Case B)
-    for result in state.get("phase2_results", []):
-        if result.get("sft_case") == SFTCase.B.value:
-            entry = _create_sft_entry(result)
-            if entry:
-                sft_data.append(entry)
-
-    # Phase 3 modeling (Case C)
-    for result in state.get("phase3_results", []):
-        if result.get("sft_case") == SFTCase.C.value:
             entry = _create_sft_entry(result)
             if entry:
                 sft_data.append(entry)
@@ -626,12 +396,8 @@ def _create_sft_entry(result: QuestionResult) -> Optional[Dict[str, Any]]:
     output = result.get("sft_response", "")
 
     if not output:
-        if case == SFTCase.A.value:
+        if case in (SFTCase.A.value, SFTCase.A_FAILED.value):
             output = result.get("initial_response", "")
-        elif case == SFTCase.B.value:
-            output = result.get("fixed_response", "")
-        elif case == SFTCase.C.value:
-            output = result.get("modeling_response", "")
 
     if not output:
         return None
@@ -704,10 +470,7 @@ def save_results(
 
     # Save detailed results (filter internal fields and reorder)
     results = {
-        "phase1_results": _prepare_results_for_save(state.get("phase1_results", [])),
-        "phase2_results": _prepare_results_for_save(state.get("phase2_results", [])),
-        "phase3_results": _prepare_results_for_save(state.get("phase3_results", [])),
-        "coaching_db": state.get("coaching_db"),
+        "scaffolding_results": _prepare_results_for_save(state.get("scaffolding_results", [])),
         "statistics": get_statistics(state),
         "timestamp": datetime.now().isoformat(),
     }
@@ -747,13 +510,10 @@ def save_incremental_checkpoint(
 
     # Save detailed results with current progress (filter internal fields and reorder)
     results = {
-        "phase1_results": _prepare_results_for_save(state.get("phase1_results", [])),
-        "phase2_results": _prepare_results_for_save(state.get("phase2_results", [])),
-        "phase3_results": _prepare_results_for_save(state.get("phase3_results", [])),
-        "coaching_db": state.get("coaching_db"),
+        "scaffolding_results": _prepare_results_for_save(state.get("scaffolding_results", [])),
         "statistics": get_statistics(state),
         "is_complete": state.get("is_complete", False),
-        "current_phase": state.get("current_phase", "phase1"),
+        "current_phase": state.get("current_phase", "scaffolding"),
         "timestamp": datetime.now().isoformat(),
     }
 

@@ -1,19 +1,19 @@
 """
-ID-MAS 메인 실행 파일 (LangGraph 기반 3-Phase Pipeline)
+ID-MAS 메인 실행 파일 (LangGraph 기반 Iterative Scaffolding Pipeline)
 Domain-based Multi-Dataset Support for LLM Learning and Evaluation
 
 학습(train)과 평가(eval)를 분리하여 실행:
-- Train Mode: 설계 → 3-Phase 학습 → SFT 데이터 생성
+- Train Mode: 설계 → Iterative Scaffolding 학습 → SFT 데이터 생성
 - Eval Mode: Baseline, SFT, SFT_ID-MAS 평가
 
-3-Phase Learning Pipeline (LangGraph):
-- Phase 1: Initial Response with Scaffolding
-- Phase 2: Fixed Response with Coaching DB
-- Phase 3: Modeling (Teacher's articulate reasoning)
+Iterative Scaffolding Pipeline (LangGraph):
+- Teacher-guided iterative response generation (max 5 iterations)
+- Performance Objectives based evaluation with Socratic questions
+- Case A (correct) / A-Failed (reconstructed) SFT data generation
 
 LangGraph Features:
 - StateGraph based workflow management
-- Conditional routing for phase transitions
+- Conditional routing for question processing
 - Built-in checkpointing support
 
 Terminal Goals:
@@ -57,14 +57,14 @@ from models.model_cache import ModelCache
 
 class IDMASPipeline:
     """
-    ID-MAS 3-Phase Pipeline with LangGraph (Research Proposal Based)
+    ID-MAS Iterative Scaffolding Pipeline with LangGraph (Research Proposal Based)
 
     Each training dataset (GSM8K, MATH) has its own Terminal Goal
     and is trained separately using LangGraph StateGraph.
 
     Features:
     - LangGraph based workflow management
-    - Conditional routing for phase transitions
+    - Iterative scaffolding with teacher guidance
     - Built-in checkpointing support
     - Per-question progress tracking
     """
@@ -224,7 +224,7 @@ class IDMASPipeline:
         resume: bool = False
     ) -> Dict:
         """
-        LangGraph 기반 3-Phase Learning Pipeline 실행
+        LangGraph 기반 Iterative Scaffolding Pipeline 실행
 
         Args:
             design_result: 설계 결과
@@ -282,9 +282,11 @@ class IDMASPipeline:
             "train_dataset": self.train_dataset,
             "terminal_goal": self.terminal_goal,
             "total_questions": stats['total_questions'],
-            "phase1_correct": stats['phase1_correct'],
-            "phase2_fixed": stats['phase2_fixed'],
-            "phase3_modeling": stats['phase3_modeling'],
+            "scaffolding_processed": stats['scaffolding_processed'],
+            "scaffolding_correct": stats['scaffolding_correct'],
+            "sft_case_a": stats['sft_case_a'],
+            "sft_case_a_failed": stats['sft_case_a_failed'],
+            "iterative_scaffolding": stats.get('iterative_scaffolding', {}),
             "sft_data_count": len(final_state.get('sft_data', [])),
             "sft_data_path": final_state.get('sft_path', ''),
             "results_path": final_state.get('results_path', ''),
@@ -532,7 +534,7 @@ class IDMASEvaluator:
 
 def run_train_mode(args):
     """
-    학습 모드 실행 (설계 → 3-Phase 학습 → SFT 데이터 생성)
+    학습 모드 실행 (설계 → Iterative Scaffolding 학습 → SFT 데이터 생성)
     """
     # Create teacher config from CLI argument
     teacher_model_name = args.teacher_model or DEFAULT_TEACHER_MODEL
@@ -540,7 +542,7 @@ def run_train_mode(args):
     teacher_config = create_teacher_config(teacher_model_name)
 
     print(f"\n{'=' * 60}")
-    print(f"ID-MAS: TRAIN MODE (3-Phase Pipeline with State Machine)")
+    print(f"ID-MAS: TRAIN MODE (Iterative Scaffolding Pipeline)")
     print(f"{'=' * 60}")
     print(f"Domain: {args.domain}")
     print(f"Train Dataset: {args.train_dataset}")
@@ -595,7 +597,7 @@ def run_train_mode(args):
         # Run design phase
         design_result = pipeline.run_design_phase()
 
-    # 2. 3-Phase 학습 단계
+    # 2. Iterative Scaffolding 학습 단계
     learning_result = pipeline.run_learning_phase(
         design_result=design_result,
         resume=args.resume
@@ -653,12 +655,12 @@ def run_eval_mode(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ID-MAS: Instructional Design Multi-Agent System (3-Phase Pipeline with State Machine)",
+        description="ID-MAS: Instructional Design Multi-Agent System (Iterative Scaffolding Pipeline)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # ========================================
-  # TRAIN MODE (3-Phase Learning Pipeline)
+  # TRAIN MODE (Iterative Scaffolding Pipeline)
   # ========================================
 
   # GSM8K로 학습
