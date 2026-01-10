@@ -1,14 +1,13 @@
 """
 학생 모델 (Student Model, Ms)
 
-3-Phase Pipeline Support:
-- Phase 1: generate_initial_response_with_scaffolding
-- Phase 2: generate_fixed_response_with_coaching
+Iterative Scaffolding Pipeline Support:
+- generate_initial_response_with_scaffolding: Task Analysis와 함께 응답 생성
+- respond_to_socratic_questions: Socratic 질문에 응답하여 개선된 풀이 생성
 """
 from models.student_wrapper import StudentModelWrapper
 from prompts.learning_prompts import (
     SCAFFOLDING_SYSTEM_PROMPT,
-    COACHING_RESPONSE_PROMPT,
     ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT,
     STUDENT_WITH_HINT_PROMPT,
     STUDENT_SOCRATIC_RESPONSE_PROMPT,
@@ -74,7 +73,7 @@ class StudentModel:
         terminal_goal: str = ""
     ) -> str:
         """
-        Phase 1: Scaffolding과 함께 초기 응답 생성
+        Scaffolding과 함께 초기 응답 생성
 
         과제분석 결과를 System Prompt에 포함하여 문제 풀이 지원
         Terminal Goal 달성을 목표로 응답 생성
@@ -99,42 +98,6 @@ class StudentModel:
 
         return response
 
-    def generate_fixed_response_with_coaching(
-        self,
-        problem_text: str,
-        coaching_db: Dict[str, Any],
-        task_analysis: str,
-        learning_objective: str
-    ) -> str:
-        """
-        Phase 2: Coaching DB를 참고하여 수정 응답 생성
-
-        Args:
-            problem_text: 문제 설명
-            coaching_db: Coaching Database (HOT/LOT 스캐폴딩 포함)
-            task_analysis: 과제분석 결과
-            learning_objective: 학습 목표 (Terminal Goal)
-
-        Returns:
-            생성된 응답
-        """
-        # Format coaching DB as JSON string for the new prompt format
-        coaching_db_str = json.dumps(coaching_db, ensure_ascii=False, indent=2)
-
-        prompt = COACHING_RESPONSE_PROMPT.format(
-            learning_objective=learning_objective,
-            task_analysis=task_analysis[:2000],  # Truncate if too long
-            coaching_db=coaching_db_str,
-            problem_text=problem_text
-        )
-
-        response = self.model.generate(
-            prompt=prompt,
-            system_message="You are a student using coaching guidance to solve a problem correctly. You MUST explicitly cite which information from the Coaching DB you are using."
-        )
-
-        return response
-
     def respond_to_socratic_questions(
         self,
         problem_text: str,
@@ -143,7 +106,7 @@ class StudentModel:
         task_analysis: str
     ) -> str:
         """
-        Phase 1 Iterative: 교사의 Socratic 질문에 응답하여 개선된 풀이 생성
+        Iterative Scaffolding: 교사의 Socratic 질문에 응답하여 개선된 풀이 생성
 
         Args:
             problem_text: 문제 텍스트
@@ -172,7 +135,7 @@ class StudentModel:
         return response
 
     # =========================================================================
-    # Phase 1: Iterative Scaffolding Methods (NEW)
+    # Iterative Scaffolding Methods
     # =========================================================================
 
     def generate_response_with_hint(
@@ -183,7 +146,7 @@ class StudentModel:
         task_analysis: Optional[str] = None
     ) -> str:
         """
-        Phase 1 Iterative: 교사 힌트를 참고하여 응답 생성
+        Iterative Scaffolding: 교사 힌트를 참고하여 응답 생성
 
         Args:
             problem_text: 문제 텍스트
