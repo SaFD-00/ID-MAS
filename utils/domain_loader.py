@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from utils.base_loader import BaseDatasetLoader, QuestionData, AnswerType
+from utils.answer_extractor import extract_boxed_answer
 
 
 # Get project root directory
@@ -44,16 +45,16 @@ class DomainLoader(BaseDatasetLoader):
     DOMAIN_CONFIG = {
         "math": {
             "training_datasets": {
-                "gsm8k": "gsm8k_train.json",
-                "math": "math_train.json"
+                "gsm8k": {"filename": "gsm8k_train.json", "answer_type": AnswerType.NUMERIC},
+                "math": {"filename": "math_train.json", "answer_type": AnswerType.LATEX},
             },
             "eval_datasets": {
-                "gsm8k": "gsm8k_test.json",
-                "math": "math_test.json",
-                "svamp": "svamp_test.json",
-                "asdiv": "asdiv_test.json",
-                "mawps": "mawps_test.json",
-                "mmlu": "mmlu_test.json"
+                "gsm8k": {"filename": "gsm8k_test.json", "answer_type": AnswerType.NUMERIC},
+                "math": {"filename": "math_test.json", "answer_type": AnswerType.LATEX},
+                "svamp": {"filename": "svamp_test.json", "answer_type": AnswerType.NUMERIC},
+                "asdiv": {"filename": "asdiv_test.json", "answer_type": AnswerType.NUMERIC},
+                "mawps": {"filename": "mawps_test.json", "answer_type": AnswerType.LATEX},  # 분수 포함
+                "mmlu": {"filename": "mmlu_test.json", "answer_type": AnswerType.MCQ},
             },
             "default_answer_type": AnswerType.NUMERIC,
             "domain_category": "math_logic",
@@ -149,7 +150,8 @@ class DomainLoader(BaseDatasetLoader):
                 f"Available: {list(training_datasets.keys())}"
             )
 
-        filename = training_datasets[dataset]
+        ds_config = training_datasets[dataset]
+        filename = self._get_filename(ds_config)
         # New structure: data/{domain}/train/data/{dataset}_train.json
         file_path = self.data_dir / "train" / "data" / filename
 
@@ -194,7 +196,8 @@ class DomainLoader(BaseDatasetLoader):
             )
 
         self._current_eval_dataset = dataset
-        filename = self.config["eval_datasets"][dataset]
+        ds_config = self.config["eval_datasets"][dataset]
+        filename = self._get_filename(ds_config)
         # New structure: data/{domain}/eval/data/{dataset}_test.json
         file_path = self.data_dir / "eval" / "data" / filename
 
@@ -208,6 +211,47 @@ class DomainLoader(BaseDatasetLoader):
 
         print(f"[{self.domain.upper()}] Loaded {len(questions)} eval questions from {dataset}")
         return questions
+
+    def _get_filename(self, ds_config) -> str:
+        """
+        Extract filename from dataset config.
+
+        Args:
+            ds_config: Either a string (filename) or dict with 'filename' key
+
+        Returns:
+            Filename string
+        """
+        if isinstance(ds_config, str):
+            return ds_config
+        return ds_config.get("filename", "")
+
+    def _get_dataset_answer_type(self, dataset_name: str) -> AnswerType:
+        """
+        Get answer type for a specific dataset.
+
+        Args:
+            dataset_name: Name of the dataset
+
+        Returns:
+            AnswerType for the dataset
+        """
+        dataset_name = dataset_name.lower()
+
+        # Check training_datasets
+        if dataset_name in self.config.get("training_datasets", {}):
+            ds_config = self.config["training_datasets"][dataset_name]
+            if isinstance(ds_config, dict) and "answer_type" in ds_config:
+                return ds_config["answer_type"]
+
+        # Check eval_datasets
+        if dataset_name in self.config.get("eval_datasets", {}):
+            ds_config = self.config["eval_datasets"][dataset_name]
+            if isinstance(ds_config, dict) and "answer_type" in ds_config:
+                return ds_config["answer_type"]
+
+        # Fallback: use default_answer_type
+        return self.config.get("default_answer_type", AnswerType.TEXT)
 
     def _load_json_file(
         self,
@@ -292,23 +336,31 @@ class DomainLoader(BaseDatasetLoader):
         """
         Extract answer and determine type from output field.
 
+        Priority:
+        1. \\boxed{...} pattern (handles nested braces)
+        2. #### pattern (GSM8K style)
+        3. Fallback: last line
+
         Args:
             output: Output text containing answer
-            dataset_name: Name of dataset (for type inference)
+            dataset_name: Name of dataset (for type lookup)
 
         Returns:
             Tuple of (answer, AnswerType)
         """
-        # Find #### pattern
-        match = re.search(r'####\s*(.+?)$', output.strip(), re.MULTILINE)
-        if match:
+        # 1. Try \boxed{...} pattern first (handles nested braces)
+        boxed_answer = extract_boxed_answer(output)
+        if boxed_answer:
+            answer = boxed_answer
+        # 2. Try #### pattern (GSM8K style)
+        elif match := re.search(r'####\s*(.+?)$', output.strip(), re.MULTILINE):
             answer = match.group(1).strip()
+        # 3. Fallback: use last line
         else:
-            # Fallback: use last line
             answer = output.strip().split('\n')[-1].strip()
 
-        # Determine answer type
-        answer_type = self._infer_answer_type(answer, dataset_name)
+        # Get answer type from dataset config (not inferred)
+        answer_type = self._get_dataset_answer_type(dataset_name)
 
         return answer, answer_type
 
