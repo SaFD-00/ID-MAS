@@ -437,7 +437,7 @@ SUMMARY_RECONSTRUCTION_PROMPT = """You are a teacher summarizing a learning sess
 [Task Analysis]
 {task_analysis}
 
-[Full Conversation History]
+[Conversation History]
 {conversation_history}
 
 [Instructions]
@@ -498,4 +498,40 @@ STUDENT_WITH_HINT_PROMPT = """Based on the teacher's guidance, solve this proble
 {teacher_hint}
 
 Now solve the problem, incorporating the teacher's guidance. Show your thinking step by step and provide your final answer clearly.
+"""
+
+
+CONVERSATION_SUMMARIZATION_PROMPT = """You are a teacher analyzing a tutoring session where a student struggled with a problem.
+
+[Problem]
+{problem_text}
+
+[Correct Answer]
+{ground_truth}
+
+[Full Conversation History]
+{conversation_history}
+
+[Your Task]
+Summarize this tutoring session concisely, focusing on what's important for understanding the student's learning gaps.
+
+Extract and preserve:
+1. The specific mathematical/logical errors in each attempt (not vague descriptions)
+2. How the student's approach changed between iterations
+3. Any recurring misconceptions or patterns
+4. The final answer attempted in each iteration
+
+[Output Format]
+Keep your summary under 800 characters. Use this structure:
+
+ATTEMPT SUMMARY:
+- Iter 1: [approach] → [specific error] → Answer: [answer]
+- Iter 2: [approach] → [specific error] → Answer: [answer]
+...
+
+KEY PATTERNS:
+- Main weakness: [specific skill/concept gap]
+- Recurring error: [pattern across attempts]
+
+Do NOT include lengthy explanations. Be telegraphic and specific.
 """

@@ -164,6 +164,8 @@ class BaseDatasetLoader(ABC):
   - `analyze_weak_objectives()`: 40% 이상 오류율 목표 분석
   - `generate_coaching_db()`: Phase 2 Coaching DB 생성
   - `generate_modeling_response()`: Phase 3 교사 모델링 응답 생성
+  - `summarize_conversation_with_ai()`: AI 기반 대화 히스토리 축약 (Phase 1 실패 후 재구성 시 사용)
+  - `summarize_and_reconstruct()`: Phase 1 5회 실패 후 요약 및 정답 재구성
 
 #### 3.3 LangGraph 파이프라인 (learning_loop/graph/)
 
@@ -352,8 +354,20 @@ flowchart LR
     ↓
 [Initial Response 생성] ← Scaffolding 적용
     ↓
-[정답 비교] → 정답/오답 판정
+[정답 AND PO 평가] → 정답 여부 + 수행목표(PO) 충족 여부 판정
+    ↓
+[정답 맞춤 BUT PO 미충족 시] ← Scaffolding 계속 (최대 5회)
+    ↓
+[오답 OR PO 미충족 시 Iterative Scaffolding] ← 최대 5회 반복
+    ↓
+[5회 실패 시 A-Failed 재구성]
+    ├─ AI 기반 대화 히스토리 축약 (summarize_conversation_with_ai)
+    └─ 정답 솔루션 재구성 (summarize_and_reconstruct)
 ```
+
+**성공 조건**: 정답을 맞추고(`is_correct=True`) **동시에** 모든 수행목표(PO)가 충족되어야(`all_satisfied=True`) Phase 1 성공(Case A)으로 처리됩니다.
+
+**Iterative Scaffolding**: 정답이 틀리거나, 정답은 맞았지만 PO가 충족되지 않은 경우, 교사 모델이 점진적 힌트를 제공하며 최대 5회까지 재시도합니다. 5회 시도 후에도 (정답 AND PO 충족) 조건을 만족하지 못하면 A-Failed 케이스로 분류되고, AI가 대화 히스토리를 분석하여 학생의 약점을 파악한 후 정답 솔루션을 재구성합니다.
 
 ### Phase 2: Coaching (교정 응답)
 
@@ -387,11 +401,12 @@ Phase 2 오답 문제
 
 각 Phase의 결과를 통합하여 SFT 학습 데이터를 생성합니다.
 
-| Phase | 조건 | SFT 데이터 응답 |
-|-------|------|-----------------|
-| Phase 1 | 정답 | Phase 1 응답 사용 |
-| Phase 2 | Phase 1 오답 → Phase 2 정답 | Phase 2 응답 사용 |
-| Phase 3 | Phase 2 오답 | Teacher Modeling 응답 사용 |
+| Phase | 조건 | SFT Case | SFT 데이터 응답 |
+|-------|------|----------|-----------------|
+| Phase 1 | 정답 AND PO 충족 | Case A | Phase 1 응답 사용 |
+| Phase 1 | max_iterations 후 실패 (오답 또는 PO 미충족) | Case A-Failed | Reconstruction 응답 사용 |
+| Phase 2 | Phase 1 실패 → Phase 2 정답 | Case B | Phase 2 응답 사용 |
+| Phase 3 | Phase 2 오답 | Case C | Teacher Modeling 응답 사용 |
 
 ## 데이터 흐름
 

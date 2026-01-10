@@ -154,16 +154,21 @@ def _process_iterative_scaffolding(
     Flow:
     1. Student generates initial response with Terminal Goal emphasis
     2. Teacher evaluates with Performance Objectives + generates Socratic questions
-    3. If all satisfied or correct answer → success (Case A)
-    4. If not satisfied, student responds to Socratic questions
-    5. Repeat until correct or max iterations
-    6. If failed after max iterations → reconstruction (Case A-Failed)
+    3. If correct answer AND all POs satisfied → success (Case A)
+    4. If answer correct but PO not satisfied → continue scaffolding
+    5. If not satisfied, student responds to Socratic questions
+    6. Repeat until (correct AND all POs satisfied) or max iterations
+    7. If failed after max iterations → reconstruction (Case A-Failed)
+       - Failure can be: answer incorrect OR answer correct but PO not satisfied
     """
     conversation_history = []
     iterations = []
     is_correct = False
+    all_satisfied = False
     predicted = None
     response = None
+    last_correct_iteration = None
+    last_correct_response = None
 
     for iteration in range(1, max_iterations + 1):
         # Iteration 1: Student generates initial response with scaffolding
@@ -221,9 +226,21 @@ def _process_iterative_scaffolding(
             "timestamp": datetime.now().isoformat(),
         })
 
-        # Success condition: correct answer OR all POs satisfied
-        if is_correct or all_satisfied:
-            print(f"    -> Correct on iteration {iteration}! (PO satisfied: {all_satisfied})")
+        # Track last correct response for potential reconstruction
+        if is_correct:
+            last_correct_iteration = iteration
+            last_correct_response = response
+
+        # Success condition: correct answer AND all POs satisfied
+        if is_correct and all_satisfied:
+            print(f"    -> Success on iteration {iteration}! (Correct: True, PO satisfied: True)")
+            break
+        elif is_correct and not all_satisfied:
+            # Answer correct but PO not satisfied - continue scaffolding
+            print(f"    -> Answer correct but PO not satisfied on iteration {iteration}. Continuing scaffolding...")
+        elif not is_correct and all_satisfied:
+            # PO satisfied but answer incorrect (rare case) - treat as success
+            print(f"    -> PO satisfied on iteration {iteration}! (Correct: False, PO satisfied: True)")
             is_correct = True
             break
 
@@ -231,8 +248,8 @@ def _process_iterative_scaffolding(
         last_response = response
         last_evaluation = evaluation
 
-    # Build result
-    if is_correct:
+    # Build result - success requires both correct answer AND all POs satisfied
+    if is_correct and all_satisfied:
         sft_output = _build_sft_response_from_iterations(iterations, is_success=True)
         return QuestionResult(
             id=question["id"],
@@ -254,7 +271,10 @@ def _process_iterative_scaffolding(
         )
     else:
         # Failed after max iterations - need reconstruction
-        print(f"    -> Failed after {max_iterations} iterations. Reconstructing...")
+        # Could be: answer incorrect, or answer correct but PO not satisfied
+        failure_reason = "answer_incorrect" if not is_correct else "po_not_satisfied"
+        print(f"    -> Failed after {max_iterations} iterations. (Reason: {failure_reason}, Last correct iteration: {last_correct_iteration}) Reconstructing...")
+
         reconstruction = teacher_model.summarize_and_reconstruct(
             problem_text=question["problem_text"],
             ground_truth=question["output"],
@@ -271,7 +291,7 @@ def _process_iterative_scaffolding(
             output=question["output"],
             _problem_text=question["problem_text"],  # 내부 처리용
             initial_response=reconstructed_response,
-            predicted_answer=None,
+            predicted_answer=predicted,
             phase1_correct=False,
             sft_case=SFTCase.A_FAILED.value,
             sft_response=reconstructed_response,
@@ -280,6 +300,9 @@ def _process_iterative_scaffolding(
                 "iterations_needed": max_iterations,
                 "conversation_history": conversation_history,
                 "iterations": iterations,
+                "failure_reason": failure_reason,
+                "last_correct_iteration": last_correct_iteration,
+                "last_correct_response": last_correct_response,
             },
             reconstruction={
                 "summary": reconstruction.get("summary", ""),

@@ -15,6 +15,7 @@ from prompts.learning_prompts import (
     PROGRESSIVE_HINT_PROMPT,
     SUMMARY_RECONSTRUCTION_PROMPT,
     TEACHER_INTERVENTION_PROMPT,
+    CONVERSATION_SUMMARIZATION_PROMPT,
 )
 from typing import Dict, Any, Optional, List
 import json
@@ -402,13 +403,19 @@ Answer: {ground_truth}
                 "learning_points": List[str]
             }
         """
-        formatted_history = self._format_conversation_history(conversation_history)
+        # AI 기반 대화 히스토리 축약 (JSON 파싱 오류 방지)
+        # Teacher 모델이 중요한 학습 포인트를 파악하여 축약
+        summarized_history = self.summarize_conversation_with_ai(
+            problem_text=problem_text,
+            ground_truth=ground_truth,
+            conversation_history=conversation_history
+        )
 
         prompt = SUMMARY_RECONSTRUCTION_PROMPT.format(
             problem_text=problem_text,
             ground_truth=ground_truth,
             task_analysis=task_analysis[:1500],
-            conversation_history=formatted_history
+            conversation_history=summarized_history
         )
 
         try:
@@ -463,6 +470,60 @@ Answer: {ground_truth}""",
                 formatted.append(f"[Student Response {iteration}]\n{response}")
 
         return "\n\n".join(formatted)
+
+    def summarize_conversation_with_ai(
+        self,
+        problem_text: str,
+        ground_truth: str,
+        conversation_history: List[Dict]
+    ) -> str:
+        """
+        AI 기반 대화 히스토리 축약
+
+        Teacher 모델이 대화 히스토리를 분석하여 중요한 학습 포인트를 파악하고 축약.
+        Rule-based 축약보다 맥락을 더 잘 보존함.
+
+        Args:
+            problem_text: 문제 텍스트
+            ground_truth: 정답
+            conversation_history: 전체 대화 기록
+
+        Returns:
+            축약된 대화 요약 문자열
+        """
+        # 전체 히스토리를 포맷팅
+        formatted_history = self._format_conversation_history(conversation_history)
+
+        prompt = CONVERSATION_SUMMARIZATION_PROMPT.format(
+            problem_text=problem_text,
+            ground_truth=ground_truth,
+            conversation_history=formatted_history
+        )
+
+        try:
+            # 일반 텍스트로 생성 (JSON 아님)
+            summary = self.llm.generate(prompt)
+            return summary
+        except Exception as e:
+            print(f"  Warning: AI summarization failed: {e}")
+            # Fallback: 기본 포맷 사용 (truncated)
+            return self._fallback_truncate_history(conversation_history)
+
+    def _fallback_truncate_history(self, history: List[Dict], max_total_length: int = 1500) -> str:
+        """
+        Fallback: AI 축약 실패 시 단순 truncation
+
+        Args:
+            history: 대화 기록
+            max_total_length: 최대 총 길이
+
+        Returns:
+            truncated 히스토리
+        """
+        formatted = self._format_conversation_history(history)
+        if len(formatted) > max_total_length:
+            return formatted[:max_total_length] + "\n\n[... truncated ...]"
+        return formatted
 
 
 if __name__ == "__main__":
