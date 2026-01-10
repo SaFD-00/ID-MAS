@@ -1,7 +1,7 @@
 """
 5단계: Test Item 개발
 """
-from models.gpt_wrapper import GPTWrapper
+from models.llm_wrapper import LLMWrapper
 from prompts.design_prompts import TEST_ITEM_DEVELOPMENT_PROMPT
 from typing import Dict, Any, List, Optional
 import json
@@ -15,7 +15,7 @@ class TestItemDevelopment:
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
         """
-        self.gpt = GPTWrapper(teacher_config)
+        self.llm = LLMWrapper(teacher_config)
 
     def generate_test_items(
         self,
@@ -41,7 +41,7 @@ class TestItemDevelopment:
                 ground_truth=ground_truth or "N/A"
             )
 
-            result = self.gpt.generate_json(prompt)
+            result = self.llm.generate_json(prompt)
             all_items.extend(result.get("assessment_items", []))
 
         return {"assessment_items": all_items}

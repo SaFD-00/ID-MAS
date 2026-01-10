@@ -5,7 +5,7 @@
 - Phase 2: score_by_performance_objectives, analyze_weak_objectives, generate_coaching_db
 - Phase 3: generate_modeling_response
 """
-from models.gpt_wrapper import GPTWrapper
+from models.llm_wrapper import LLMWrapper
 from prompts.learning_prompts import (
     PERFORMANCE_SCORING_PROMPT,
     WEAK_OBJECTIVE_ANALYSIS_PROMPT,
@@ -14,6 +14,7 @@ from prompts.learning_prompts import (
     INITIAL_HINT_PROMPT,
     PROGRESSIVE_HINT_PROMPT,
     SUMMARY_RECONSTRUCTION_PROMPT,
+    TEACHER_INTERVENTION_PROMPT,
 )
 from typing import Dict, Any, Optional, List
 import json
@@ -29,7 +30,7 @@ class TeacherModel:
         Args:
             config: Teacher model 설정 딕셔너리 (None이면 기본 설정 사용)
         """
-        self.gpt = GPTWrapper(config)
+        self.llm = LLMWrapper(config)
 
     def score_by_performance_objectives(
         self,
@@ -66,7 +67,7 @@ class TeacherModel:
         )
 
         try:
-            result = self.gpt.generate_json(prompt)
+            result = self.llm.generate_json(prompt)
             # Ensure required fields exist
             if 'overall_correct' not in result:
                 result['overall_correct'] = False
@@ -81,6 +82,75 @@ class TeacherModel:
                 "overall_correct": False,
                 "objective_scores": [],
                 "weak_objectives": []
+            }
+
+    def evaluate_with_performance_objectives(
+        self,
+        student_response: str,
+        performance_objectives: List[Dict],
+        problem_text: str,
+        ground_truth: str
+    ) -> Dict[str, Any]:
+        """
+        Phase 1 Iterative: ReAct-style PO 평가 및 Socratic 질문 생성
+
+        학생 응답을 Performance Objectives 기준으로 평가하고,
+        미충족 목표에 대해 Socratic 질문을 생성합니다.
+
+        Args:
+            student_response: 학생의 응답
+            performance_objectives: Performance Objectives 리스트
+            problem_text: 문제 텍스트
+            ground_truth: 정답 (교사 참고용, 공개 금지)
+
+        Returns:
+            {
+                "performance_evaluation": [
+                    {
+                        "objective_content": str,
+                        "is_satisfied": bool,
+                        "reason_for_unmet_objective": str or None,
+                        "socratic_question": str or None
+                    }
+                ],
+                "overall_assessment": {
+                    "objectives_met": str,
+                    "all_satisfied": bool,
+                    "primary_weakness": str or None,
+                    "recommended_focus": str or None
+                }
+            }
+        """
+        prompt = TEACHER_INTERVENTION_PROMPT.format(
+            problem_text=problem_text,
+            student_response=student_response,
+            performance_objectives=json.dumps(performance_objectives, ensure_ascii=False, indent=2),
+            ground_truth=ground_truth
+        )
+
+        try:
+            result = self.llm.generate_json(prompt)
+            # Ensure required fields exist
+            if 'performance_evaluation' not in result:
+                result['performance_evaluation'] = []
+            if 'overall_assessment' not in result:
+                result['overall_assessment'] = {
+                    "objectives_met": "0 of 0",
+                    "all_satisfied": False,
+                    "primary_weakness": "Unable to evaluate",
+                    "recommended_focus": "Review the problem"
+                }
+            return result
+        except Exception as e:
+            print(f"  Warning: Failed to evaluate with POs: {e}")
+            return {
+                "performance_evaluation": [],
+                "overall_assessment": {
+                    "objectives_met": "0 of 0",
+                    "all_satisfied": False,
+                    "primary_weakness": "Evaluation failed",
+                    "recommended_focus": "Try again"
+                }
             }
 
     def analyze_weak_objectives(
@@ -114,7 +184,7 @@ class TeacherModel:
         )
 
         try:
-            result = self.gpt.generate_json(prompt)
+            result = self.llm.generate_json(prompt)
             if 'weak_performance_areas' not in result:
                 result['weak_performance_areas'] = []
             if 'recommended_strategies' not in result:
@@ -159,7 +229,7 @@ class TeacherModel:
         )
 
         try:
-            result = self.gpt.generate_json(prompt)
+            result = self.llm.generate_json(prompt)
             if 'learning_objective' not in result:
                 result['learning_objective'] = learning_objective
             if 'task_analysis_summary' not in result:
@@ -204,7 +274,7 @@ class TeacherModel:
         )
 
         try:
-            response = self.gpt.generate(prompt)
+            response = self.llm.generate(prompt)
             return response
         except Exception as e:
             print(f"  Warning: Failed to generate modeling response: {e}")
@@ -250,7 +320,7 @@ Answer: {ground_truth}
         )
 
         try:
-            response = self.gpt.generate(prompt)
+            response = self.llm.generate(prompt)
             return response
         except Exception as e:
             print(f"  Warning: Failed to generate initial hint: {e}")
@@ -297,7 +367,7 @@ Answer: {ground_truth}
         )
 
         try:
-            response = self.gpt.generate(prompt)
+            response = self.llm.generate(prompt)
             return response
         except Exception as e:
             print(f"  Warning: Failed to generate progressive hint: {e}")
@@ -342,7 +412,7 @@ Answer: {ground_truth}
         )
 
         try:
-            result = self.gpt.generate_json(prompt)
+            result = self.llm.generate_json(prompt)
             # Ensure required fields exist
             if 'summary' not in result:
                 result['summary'] = "Student struggled with this problem after multiple attempts."

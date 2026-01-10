@@ -11,22 +11,25 @@ Phase 3: Modeling - Teacher's Articulate Reasoning
 # Phase 1: Scaffolding System Prompt
 # ==============================================================================
 
-SCAFFOLDING_SYSTEM_PROMPT = """You are solving problems using a structured approach based on the task analysis below.
+SCAFFOLDING_SYSTEM_PROMPT = """The purpose of your response is to demonstrate the attainment of the Terminal Goal: {terminal_goal}
 
-[Task Analysis (Scaffolding)]
+You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
+
+[Instructional Analysis (Learning Structure)]
 {task_analysis}
 
 [Instructions]
-1. Read the problem carefully
-2. Identify which skills and sub-skills from the task analysis are relevant
-3. Apply the appropriate reasoning strategy for each step
-4. Show your work step by step
+1. Identify which skills and sub-skills from the instructional analysis are relevant to this problem
+2. Plan your problem-solving strategy based on the terminal goal and subskills
+3. Execute each step systematically, demonstrating the required performance behaviors
+4. Ensure your solution describes the full reasoning process using all provided steps and resources
 5. Provide your final answer clearly
 
 [Output Format]
 Problem-solving strategy and flow:
-- Relevant skills: [list the relevant skills from task analysis]
-- Reasoning steps: [describe your step-by-step approach]
+- Terminal goal alignment: [how this solution demonstrates the terminal goal]
+- Relevant skills applied: [list the relevant skills from instructional analysis]
+- Step-by-step reasoning: [your detailed solution following the instructional structure]
 
 Answer: [your final answer]
 """
@@ -66,6 +69,96 @@ For each Performance Objective:
   ],
   "weak_objectives": ["list of objective targets with score < 0.6"]
 }}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
+"""
+
+
+# ==============================================================================
+# Phase 2: Teacher Intervention Prompt (ReAct-style with Socratic Questions)
+# ==============================================================================
+
+TEACHER_INTERVENTION_PROMPT = """You are a teacher model supporting the learning of a student model (a small LLM).
+
+Your role is NOT to provide correct answers, but to generate a reasoning state that guides the student model's next response. You must monitor the student model's reasoning steps to ensure they meet the established performance objectives.
+
+In cases of non-compliance or error, you must generate tailored feedback to guide the model toward the desired outcome using Socratic questioning. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student model's next reasoning action.
+
+[Input Data]
+- Problem: {problem_text}
+- Student model response: {student_response}
+- Performance objectives: {performance_objectives}
+- Ground truth (FOR REFERENCE ONLY - DO NOT REVEAL): {ground_truth}
+
+[Instructions]
+1. Assess student performance according to each performance objective
+2. Use the Criterion defined in each performance objective as the evaluation standard
+3. DO NOT reveal correct answers or model solutions
+4. Analyze the student response and determine which performance objectives are satisfied and which are not
+5. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed
+6. Avoid vague or abstract evaluations
+7. For each unsatisfied performance objective, derive a reasoning action that the student model should perform in the next iteration
+8. Do not provide final conclusions, correct answers, or complete reasoning paths
+9. Instead, specify what type of reasoning process, analytical step, or judgment perspective should be explicitly carried out next
+
+[Output Format - JSON]
+{{
+  "performance_evaluation": [
+    {{
+      "objective_content": "The specific objective being evaluated (copy from performance objectives)",
+      "is_satisfied": true or false,
+      "reason_for_unmet_objective": "Detailed description of the cause if false; null if true",
+      "socratic_question": "Socratic question to bridge the gap if false; null if true"
+    }}
+  ],
+  "overall_assessment": {{
+    "objectives_met": "X of Y objectives satisfied",
+    "all_satisfied": true or false,
+    "primary_weakness": "Main area needing improvement if any; null if all satisfied",
+    "recommended_focus": "What the student should focus on next if not all satisfied; null if complete"
+  }}
+}}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
+"""
+
+
+# ==============================================================================
+# Phase 2: Student Response to Socratic Questions
+# ==============================================================================
+
+STUDENT_SOCRATIC_RESPONSE_PROMPT = """You are a student model learning to solve problems with teacher guidance.
+
+Your teacher has evaluated your previous response and provided Socratic questions to guide your thinking. You must carefully consider this feedback and improve your response.
+
+[Problem]
+{problem_text}
+
+[Your Previous Response]
+{previous_response}
+
+[Teacher's Evaluation and Socratic Questions]
+{teacher_evaluation}
+
+[Instructional Analysis (Learning Structure)]
+{task_analysis}
+
+[Instructions]
+1. Carefully read and consider each Socratic question from your teacher
+2. Identify where your previous reasoning was incomplete or incorrect
+3. Address each unsatisfied performance objective
+4. Show your improved thinking step by step
+5. Provide your final answer clearly
+
+[Output Format]
+Reflection on teacher feedback:
+- Questions to address: [summarize the Socratic questions]
+- Improvements to make: [what you will change in your approach]
+
+Improved reasoning:
+[Your detailed improved solution addressing the teacher's questions]
+
+Answer: [your final answer]
 """
 
 
@@ -103,6 +196,8 @@ WEAK_OBJECTIVE_ANALYSIS_PROMPT = """You are analyzing systematic weaknesses acro
   "recommended_strategies": ["general strategies for improvement"],
   "examples_needed": ["types of examples that would help"]
 }}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """
 
 
@@ -110,41 +205,72 @@ WEAK_OBJECTIVE_ANALYSIS_PROMPT = """You are analyzing systematic weaknesses acro
 # Phase 2: Coaching DB Generation Prompt
 # ==============================================================================
 
-COACHING_DB_GENERATION_PROMPT = """Generate a Coaching Database to help students overcome identified weaknesses.
+COACHING_DB_GENERATION_PROMPT = """You are a Teacher Model with expertise in instructional design (Dick & Carey).
 
-[Learning Objective]
-{learning_objective}
+Your role is to design pedagogical scaffolding artifacts for the Student Model's next attempt (fixed response). This scaffolding:
+- Does NOT provide correct answers directly
+- Provides strategies and cognitive scaffolds for restructuring performance
+- Will be used as a reference DB during the rollout process
 
-[Task Analysis]
-{task_analysis}
+[Input Data]
+- Learning Objective (Terminal Goal): {learning_objective}
+- Instructional Analysis (Task Hierarchy): {task_analysis}
+- Performance Evaluation Summary: {performance_evaluation}
+- Initial Response Error Summary: {initial_response_error_summary}
 
-[Weakness Analysis]
-{weak_analysis}
+[Design Principles]
+1. Scaffolding Target Selection:
+   - Select only performance objectives with high error rates (e.g., ≥40%)
+   - Focus on objectives critical to achieving the Terminal Goal
 
-[Instructions]
-Create a structured coaching database that:
-1. Summarizes the learning objective and task analysis
-2. Provides targeted interventions for each weak area
-3. Includes worked examples and correct strategies
+2. Skill Level Classification (based on Bloom's Taxonomy):
+   - High Order Skills (HOT): Analyze / Evaluate / Create
+   - Low Order Skills (LOT): Remember / Understand / Apply
+
+3. Pedagogical Intervention by Skill Level:
+   - For HOT:
+     · Suggest performance strategies
+     · Provide examples showing student's partial performance or errors (up to the error point)
+     · Include Socratic questions
+     · Do NOT include final answer derivation steps
+   - For LOT:
+     · Specify concepts or information the learner missed
+     · Provide explanations that minimize cognitive load
 
 [Output Format - JSON]
 {{
-  "learning_objective": "summary of the learning goal",
-  "task_analysis_summary": "key steps and skills needed",
-  "performance_areas": [
+  "learning_objective": "{learning_objective}",
+  "task_analysis_summary": "Key performance steps and required knowledge/information for achieving the terminal goal",
+  "high_order_skill_scaffolding": [
     {{
-      "area_name": "name of the performance area",
-      "what_went_wrong": "common mistakes students make",
-      "correct_strategy": "how to approach this correctly",
-      "key_considerations": ["important points to remember"],
-      "worked_example": {{
-        "problem": "example problem",
-        "correct_approach": "step-by-step solution"
-      }}
+      "skill_reference": "[Subskill/Subtask number from instructional analysis]",
+      "skill_type": "HOT",
+      "bloom_level": "Analyze / Evaluate / Create",
+      "repeated_failure_point": "Where the learner repeatedly failed",
+      "strategies_for_next_attempt": [
+        {{
+          "strategy_name": "Strategy 1",
+          "partial_performance_example": "Example showing student's work up to error point",
+          "teacher_reasoning_clarification": "Why this strategy should be considered"
+        }}
+      ],
+      "key_considerations": "Critical points to note during performance",
+      "socratic_question": "Guiding question to prompt reflection"
     }}
   ],
-  "general_tips": ["overall tips for success"]
+  "low_order_skill_scaffolding": [
+    {{
+      "skill_reference": "[Subskill/Subtask number from instructional analysis]",
+      "skill_type": "LOT",
+      "bloom_level": "Remember / Understand / Apply",
+      "missed_information": "Concepts or information the learner missed",
+      "concise_explanation": "Brief, clear explanation to minimize cognitive load"
+    }}
+  ],
+  "scaffolding_summary": "3-5 sentence summary of key strategies and concepts the Student Model must reference when using this scaffolding"
 }}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """
 
 
@@ -152,33 +278,32 @@ Create a structured coaching database that:
 # Phase 2: Fixed Response Generation Prompt (with Coaching DB)
 # ==============================================================================
 
-COACHING_RESPONSE_PROMPT = """Based on the coaching information below, solve this problem correctly.
+COACHING_RESPONSE_PROMPT = """Solve this problem by referencing the Coaching DB below.
 
 [Learning Objective]
 {learning_objective}
 
-[Task Analysis]
+[Instructional Analysis]
 {task_analysis}
 
-[Coaching Information - Areas for Improvement]
-{coaching_areas}
-
-[General Tips]
-{general_tips}
+[Coaching DB]
+{coaching_db}
 
 [Problem]
 {problem_text}
 
 [Instructions]
-1. Apply the strategies from the coaching information
-2. Explicitly mention which strategies you are using
-3. Show your reasoning step by step
-4. Provide a clear final answer
+1. Review the scaffolding strategies and explanations in the Coaching DB
+2. Apply the relevant strategies (HOT scaffolding for analysis/evaluation tasks, LOT scaffolding for foundational knowledge)
+3. You MUST explicitly mention which information from the Coaching DB you are using in your solution
+4. Show your reasoning step by step, demonstrating how the scaffolding guided your approach
+5. Provide a clear final answer
 
 [Output Format]
 Problem-solving strategy and flow:
-- Strategy selection: [which strategies from coaching you're applying]
-- Step-by-step reasoning: [your detailed solution]
+- Information retrieved from Coaching DB: [explicitly state what strategies/concepts you used from the DB]
+- Strategy application: [how you applied the scaffolding strategies]
+- Step-by-step reasoning: [your detailed solution incorporating the DB guidance]
 
 Answer: [your final answer]
 """
@@ -337,6 +462,8 @@ The reconstructed solution should explicitly address and correct the student's e
         "Key takeaway 2"
     ]
 }}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """
 
 

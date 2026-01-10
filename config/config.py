@@ -23,9 +23,10 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 AVAILABLE_TEACHER_MODELS = [
     # OpenAI
     "gpt-5-2025-08-07",
-    # LLaMA-Factory vLLM
+    # LLaMA-Factory API (OpenAI-compatible)
     "openai/gpt-oss-20b",
     "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
     "Qwen/Qwen3-30B-A3B-Thinking-2507",
     "Qwen/Qwen3-30B-A3B-Thinking-2507-FP8",
     "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
@@ -61,11 +62,12 @@ def create_teacher_config(model_name: str = None) -> dict:
             "text": {"verbosity": "medium"},
             "max_tokens": 8192
         }
-    # LLaMA-Factory vLLM 모델 (기본값 고정: localhost:2000/v1)
+    # LLaMA-Factory API 모델 (OpenAI-compatible endpoint)
     else:
+        base_url = os.getenv("LLAMA_FACTORY_BASE_URL", "http://localhost:2000/v1")
         return {
             "model": model_name,
-            "base_url": "http://localhost:2000/v1",
+            "base_url": base_url,
             "api_key": "0",
             "max_tokens": 8192
         }

@@ -11,6 +11,7 @@ from prompts.learning_prompts import (
     COACHING_RESPONSE_PROMPT,
     ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT,
     STUDENT_WITH_HINT_PROMPT,
+    STUDENT_SOCRATIC_RESPONSE_PROMPT,
 )
 from typing import Dict, Any, Optional, List
 import json
@@ -69,21 +70,25 @@ class StudentModel:
     def generate_initial_response_with_scaffolding(
         self,
         problem_text: str,
-        task_analysis: str
+        task_analysis: str,
+        terminal_goal: str = ""
     ) -> str:
         """
         Phase 1: Scaffolding과 함께 초기 응답 생성
 
         과제분석 결과를 System Prompt에 포함하여 문제 풀이 지원
+        Terminal Goal 달성을 목표로 응답 생성
 
         Args:
             problem_text: 문제 설명
             task_analysis: 과제분석 결과 (Instructional Analysis)
+            terminal_goal: 학습 목표 (Terminal Goal)
 
         Returns:
             생성된 응답
         """
         system_message = SCAFFOLDING_SYSTEM_PROMPT.format(
+            terminal_goal=terminal_goal if terminal_goal else "solve the problem correctly",
             task_analysis=task_analysis
         )
 
@@ -106,44 +111,62 @@ class StudentModel:
 
         Args:
             problem_text: 문제 설명
-            coaching_db: Coaching Database (취약 영역, 전략, 예시 포함)
+            coaching_db: Coaching Database (HOT/LOT 스캐폴딩 포함)
             task_analysis: 과제분석 결과
             learning_objective: 학습 목표 (Terminal Goal)
 
         Returns:
             생성된 응답
         """
-        # Format coaching areas
-        coaching_areas = ""
-        for area in coaching_db.get('performance_areas', []):
-            coaching_areas += f"\n[{area.get('area_name', 'Unknown Area')}]\n"
-            coaching_areas += f"- Common mistakes: {area.get('what_went_wrong', 'N/A')}\n"
-            coaching_areas += f"- Correct strategy: {area.get('correct_strategy', 'N/A')}\n"
-
-            considerations = area.get('key_considerations', [])
-            if considerations:
-                coaching_areas += f"- Key considerations: {', '.join(considerations)}\n"
-
-            example = area.get('worked_example', {})
-            if example:
-                coaching_areas += f"- Example:\n"
-                coaching_areas += f"  Problem: {example.get('problem', 'N/A')}\n"
-                coaching_areas += f"  Approach: {example.get('correct_approach', 'N/A')}\n"
-
-        general_tips = coaching_db.get('general_tips', [])
-        general_tips_str = '\n'.join(f"- {tip}" for tip in general_tips) if general_tips else "N/A"
+        # Format coaching DB as JSON string for the new prompt format
+        coaching_db_str = json.dumps(coaching_db, ensure_ascii=False, indent=2)
 
         prompt = COACHING_RESPONSE_PROMPT.format(
             learning_objective=learning_objective,
             task_analysis=task_analysis[:2000],  # Truncate if too long
-            coaching_areas=coaching_areas if coaching_areas else "No specific areas identified.",
-            general_tips=general_tips_str,
+            coaching_db=coaching_db_str,
             problem_text=problem_text
         )
 
         response = self.model.generate(
             prompt=prompt,
-            system_message="You are a student using coaching guidance to solve a problem correctly."
+            system_message="You are a student using coaching guidance to solve a problem correctly. You MUST explicitly cite which information from the Coaching DB you are using."
+        )
+
+        return response
+
+    def respond_to_socratic_questions(
+        self,
+        problem_text: str,
+        teacher_evaluation: Dict[str, Any],
+        previous_response: str,
+        task_analysis: str
+    ) -> str:
+        """
+        Phase 1 Iterative: 교사의 Socratic 질문에 응답하여 개선된 풀이 생성
+
+        Args:
+            problem_text: 문제 텍스트
+            teacher_evaluation: 교사의 PO 평가 및 Socratic 질문
+            previous_response: 이전 응답
+            task_analysis: 과제분석 결과
+
+        Returns:
+            개선된 응답
+        """
+        # Format teacher evaluation for the prompt
+        teacher_eval_str = json.dumps(teacher_evaluation, ensure_ascii=False, indent=2)
+
+        prompt = STUDENT_SOCRATIC_RESPONSE_PROMPT.format(
+            problem_text=problem_text,
+            previous_response=previous_response[:1500],  # Truncate if too long
+            teacher_evaluation=teacher_eval_str,
+            task_analysis=task_analysis[:1500]
+        )
+
+        response = self.model.generate(
+            prompt=prompt,
+            system_message="You are a student learning from teacher feedback. Carefully address the Socratic questions and improve your solution."
         )
 
         return response

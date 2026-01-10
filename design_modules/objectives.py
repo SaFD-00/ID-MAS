@@ -1,7 +1,7 @@
 """
 4단계: 수행목표 진술 (Performance Objectives)
 """
-from models.gpt_wrapper import GPTWrapper
+from models.llm_wrapper import LLMWrapper
 from prompts.design_prompts import PERFORMANCE_OBJECTIVES_PROMPT
 from typing import Dict, Any, List
 import json
@@ -15,7 +15,7 @@ class PerformanceObjectives:
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
         """
-        self.gpt = GPTWrapper(teacher_config)
+        self.llm = LLMWrapper(teacher_config)
 
     def generate_objectives(
         self,
@@ -34,8 +34,8 @@ class PerformanceObjectives:
             instructional_analysis=instructional_analysis
         )
 
-        # GPT로 JSON 형식으로 생성
-        result = self.gpt.generate_json(prompt)
+        # LLM으로 JSON 형식으로 생성
+        result = self.llm.generate_json(prompt)
 
         return result
 

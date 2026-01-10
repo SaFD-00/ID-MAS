@@ -1,7 +1,7 @@
 """
 2단계: 교수 분석 (Instructional Analysis)
 """
-from models.gpt_wrapper import GPTWrapper
+from models.llm_wrapper import LLMWrapper
 from prompts.design_prompts import INSTRUCTIONAL_ANALYSIS_PROMPT
 from typing import Dict, Any
 import json
@@ -15,7 +15,7 @@ class InstructionalAnalysis:
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
         """
-        self.gpt = GPTWrapper(teacher_config)
+        self.llm = LLMWrapper(teacher_config)
 
     def analyze(self, learning_objective: str) -> Dict[str, Any]:
         """
@@ -31,8 +31,8 @@ class InstructionalAnalysis:
             learning_objective=learning_objective
         )
 
-        # GPT로 분석 수행
-        result_text = self.gpt.generate(prompt)
+        # LLM으로 분석 수행
+        result_text = self.llm.generate(prompt)
 
         # 결과 파싱
         parsed_result = self._parse_analysis_result(result_text)
@@ -48,7 +48,7 @@ class InstructionalAnalysis:
         분석 결과 텍스트를 구조화된 데이터로 파싱
 
         Args:
-            result_text: GPT 출력 텍스트
+            result_text: LLM 출력 텍스트
 
         Returns:
             구조화된 분석 결과

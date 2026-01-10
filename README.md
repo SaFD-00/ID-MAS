@@ -6,7 +6,7 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 
 - **데이터셋별 분리 학습**: 각 데이터셋(GSM8K, MATH)별 고유 Terminal Goal로 학습
 - **3-Phase Pipeline 학습**: Scaffolding → Coaching → Modeling 단계별 학습
-- **State Machine 기반 워크플로우**: 상태 관리, 체크포인트 기반 Resume 지원
+- **LangGraph 기반 워크플로우**: StateGraph 상태 관리, 조건부 라우팅, 체크포인트 기반 Resume 지원
 - **다양한 평가 방법**: Baseline, SFT, SFT_ID-MAS 모델 평가 지원
 - **유연한 도메인 구조**: 설정 파일만 수정하여 새로운 도메인 쉽게 추가 가능
 
@@ -28,15 +28,18 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 ```
 ID-MAS/
 ├── design_modules/          # 교수 설계 단계별 모듈
-│   ├── step2_analysis.py   # 교수 분석 (Goal & Sub-skills)
-│   ├── step4_objectives.py # 수행목표 진술 (B-C-CR)
-│   ├── step5_test.py       # Test item 개발
-│   └── step5_rubric.py     # 루브릭 개발 (Essay형)
-├── learning_loop/           # 3-Phase 학습 파이프라인
-│   ├── state_machine.py    # 상태 머신 및 체크포인트 관리
+│   ├── analysis.py         # 교수 분석 (Goal & Sub-skills)
+│   ├── objectives.py       # 수행목표 진술 (B-C-CR)
+│   ├── test.py             # Test item 개발
+│   └── rubric.py           # 루브릭 개발 (Essay형)
+├── learning_loop/           # 3-Phase 학습 파이프라인 (LangGraph 기반)
+│   ├── graph/              # LangGraph StateGraph 구현
+│   │   ├── __init__.py     # 모듈 export
+│   │   ├── state.py        # 상태 스키마 (IDMASState, QuestionResult)
+│   │   ├── nodes.py        # 노드 함수 (phase1, phase2, phase3 등)
+│   │   └── graph.py        # StateGraph 구성 및 IDMASGraphRunner
 │   ├── student_model.py    # Ms: 학생 모델
-│   ├── teacher_model.py    # Mt: 교사 모델
-│   └── pipeline_controller.py  # 3-Phase Pipeline 제어
+│   └── teacher_model.py    # Mt: 교사 모델
 ├── utils/                   # 유틸리티
 │   ├── base_loader.py      # 데이터셋 로더 베이스 클래스
 │   ├── dataset_preparer.py # 데이터셋 다운로드 및 전처리
@@ -46,27 +49,20 @@ ID-MAS/
 │   └── reparse_eval_results.py  # 평가 결과 재처리
 ├── models/                  # 모델 래퍼
 │   ├── base_wrapper.py     # 모델 래퍼 베이스 클래스
-│   ├── gpt_wrapper.py      # GPT-5 래퍼
-│   ├── qwen_wrapper.py     # Qwen 모델 래퍼
-│   └── student_wrapper.py  # 학생 모델 래퍼
-├── config/                  # 설정 모듈 (리팩토링됨)
-│   ├── __init__.py         # 통합 인터페이스
-│   ├── api.py              # API 키 및 인증
+│   ├── llm_wrapper.py      # LLM API 래퍼 (OpenAI, vLLM 호환)
+│   └── student_wrapper.py  # 학생 모델 래퍼 (Qwen, Llama 등)
+├── config/                  # 설정 모듈 (서브모듈 구조)
+│   ├── __init__.py         # 통합 인터페이스 (backward compatibility)
+│   ├── api.py              # API 키 및 인증 (OPENAI_API_KEY, HF_TOKEN)
 │   ├── models.py           # Teacher/Student 모델 설정
 │   ├── sft.py              # SFT 모델 매핑
 │   ├── domains.py          # 도메인 및 데이터셋 설정
-│   └── paths.py            # 디렉토리 경로 헬퍼
-├── tests/                   # 테스트 스위트
-│   ├── test_answer_extractor.py
-│   ├── test_config.py
-│   ├── test_domain_loader.py
-│   ├── test_model_wrappers.py
-│   └── test_state_machine.py
+│   ├── paths.py            # 디렉토리 경로 헬퍼
+│   └── config.py           # 레거시 호환성 유지
 ├── data/                    # 데이터 저장
 │   └── math/               # Math 도메인 데이터
-├── pytest.ini              # pytest 설정
-├── main.py                 # 메인 실행 파일
-└── requirements.txt        # 의존성 (pytest 포함)
+├── main.py                 # 메인 실행 파일 (LangGraph 기반)
+└── requirements.txt        # 의존성
 ```
 
 ## 사용 모델
@@ -157,12 +153,21 @@ python main.py --mode eval --method baseline \
 
 ## 디버그 로그
 
-OpenAI 응답 원문을 확인하려면 `IDMAS_DEBUG_OPENAI`를 설정합니다.
+LLM API 응답 원문을 확인하려면 `IDMAS_DEBUG_API`를 설정합니다.
 
 ```bash
-# OpenAI raw response 출력
-IDMAS_DEBUG_OPENAI=1 python main.py --mode train --domain math --train-dataset gsm8k
+# LLM API raw response 출력
+IDMAS_DEBUG_API=1 python main.py --mode train --domain math --train-dataset gsm8k
 ```
+
+## 환경변수
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `OPENAI_API_KEY` | OpenAI API 키 | (필수, gpt-* 모델 사용 시) |
+| `HF_TOKEN` | HuggingFace 토큰 | (필수, 학생 모델 사용 시) |
+| `LLAMA_FACTORY_BASE_URL` | LLaMA-Factory API 주소 | `http://localhost:2000/v1` |
+| `IDMAS_DEBUG_API` | API 디버그 로그 출력 | `0` |
 
 ## 실행 예제
 
@@ -348,6 +353,67 @@ data/
             ├── gsm8k_eval_results-SFT.json        # SFT 평가
             └── gsm8k_eval_results-SFT_ID-MAS.json # SFT_ID-MAS 평가
 ```
+
+## 데이터 형식
+
+### 원본 학습/평가 데이터 형식
+
+```json
+{
+  "instruction": "You are a helpful math assistant.\nSolve the problem step by step and provide your final answer within \\boxed{}.",
+  "input": "문제 텍스트",
+  "output": "풀이 과정... \\boxed{정답}"
+}
+```
+
+### Pipeline 로그 형식 (`*_logs.json`)
+
+```json
+{
+  "phase1_results": [
+    {
+      "id": "question_id",
+      "instruction": "시스템 프롬프트",
+      "input": "문제 텍스트",
+      "output": "정답 (ground truth)",
+      "initial_response": "학생 모델 응답",
+      "predicted_answer": "추출된 답",
+      "phase1_correct": true,
+      "sft_case": "A",
+      "sft_response": "SFT용 응답",
+      "iterative_scaffolding": {
+        "success": true,
+        "iterations_needed": 1,
+        "conversation_history": [...]
+      }
+    }
+  ],
+  "phase2_results": [...],
+  "phase3_results": [...],
+  "coaching_db": {...}
+}
+```
+
+### SFT 데이터 형식 (`*_id-mas_{Model}.json`)
+
+```json
+[
+  {
+    "instruction": "시스템 프롬프트",
+    "input": "문제 텍스트",
+    "output": "SFT용 응답 (Phase 1/2/3 결과)"
+  }
+]
+```
+
+### SFT Case 분류
+
+| Case | 설명 | 응답 출처 |
+|------|------|-----------|
+| `A` | Phase 1 정답 | 학생 모델 초기 응답 |
+| `A-Failed` | Phase 1 실패 후 재구성 | 재구성된 응답 |
+| `B` | Phase 2 정답 | Coaching 후 수정된 응답 |
+| `C` | Phase 3 모델링 | 교사 모델 응답 |
 
 ## 데이터 준비
 

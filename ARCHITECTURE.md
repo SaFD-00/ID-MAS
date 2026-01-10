@@ -2,7 +2,7 @@
 
 ## 개요
 
-ID-MAS는 Dick & Carey 교수 설계 모델을 기반으로 LLM을 학습시키는 Multi-Agent 시스템입니다. **데이터셋별 분리 학습**을 지원하며, 각 데이터셋(GSM8K, MATH)은 고유한 Terminal Goal을 가집니다. **3-Phase Pipeline** (Scaffolding → Coaching → Modeling) 방식으로 SFT 학습 데이터를 생성합니다. **유연한 도메인 구조**를 통해 설정 파일만 수정하여 새로운 도메인을 쉽게 추가할 수 있습니다.
+ID-MAS는 Dick & Carey 교수 설계 모델을 기반으로 LLM을 학습시키는 Multi-Agent 시스템입니다. **데이터셋별 분리 학습**을 지원하며, 각 데이터셋(GSM8K, MATH)은 고유한 Terminal Goal을 가집니다. **LangGraph 기반 3-Phase Pipeline** (Scaffolding → Coaching → Modeling) 방식으로 SFT 학습 데이터를 생성합니다. **유연한 도메인 구조**를 통해 설정 파일만 수정하여 새로운 도메인을 쉽게 추가할 수 있습니다.
 
 ## 시스템 구성
 
@@ -110,25 +110,25 @@ class BaseDatasetLoader(ABC):
 
 ### 2. 교수 설계 모듈 (Design Modules)
 
-모든 설계 단계 모듈은 `GPTWrapper(teacher_config)`를 사용합니다. `--teacher-model`로 선택한 설정이 공유되며 기본값은 OpenAI `gpt-5-2025-08-07`입니다. 모델 설정은 [config/models.py](config/models.py)의 `create_teacher_config()`를 통해 생성됩니다.
+모든 설계 단계 모듈은 `LLMWrapper(teacher_config)`를 사용합니다 (GPTWrapper는 backward compatibility alias). `--teacher-model`로 선택한 설정이 공유되며 기본값은 OpenAI `gpt-5-2025-08-07`입니다. 모델 설정은 [config/models.py](config/models.py)의 `create_teacher_config()`를 통해 생성됩니다.
 
-#### 2.1 교수 분석 (step2_analysis.py)
+#### 2.1 교수 분석 (analysis.py)
 - **목적**: 학습 목표를 Terminal Goal, Subskills, Subtasks로 분해
 - **모델**: `teacher_config` (기본 gpt-5-2025-08-07, vLLM 가능)
 - **출력**: 계층적 기능 분석 트리 + Anderson's Taxonomy 분류
 
-#### 2.2 수행목표 진술 (step4_objectives.py)
+#### 2.2 수행목표 진술 (objectives.py)
 - **목적**: 각 기능에 대한 측정 가능한 수행목표 작성
 - **구성**: Behavior-Condition-Criterion (B-C-CR)
 - **참조**: Anderson & Krathwohl's Taxonomy (인지과정 차원 + 지식 차원)
 - **모델**: `teacher_config` (기본 gpt-5-2025-08-07, vLLM 가능)
 
-#### 2.3 Test Item 개발 (step5_test.py)
+#### 2.3 Test Item 개발 (test.py)
 - **목적**: 수행목표 달성 여부를 평가하는 문항 생성
 - **타입**: MCQ, TF, ShortAnswer, OneSentence, Essay
 - **모델**: `teacher_config` (기본 gpt-5-2025-08-07, vLLM 가능)
 
-#### 2.4 루브릭 개발 (step5_rubric.py)
+#### 2.4 루브릭 개발 (rubric.py)
 - **목적**: Essay형 평가를 위한 분석적 루브릭 생성
 - **템플릿**: 6가지 출력 유형별 criterion 템플릿
 - **레벨**: 4단계 (명시적 수행 → 부분 수행 → 최소 수행 → 미수행)
@@ -148,7 +148,6 @@ class BaseDatasetLoader(ABC):
   - `generate_initial_response()`: 기본 응답 생성
   - `generate_initial_response_with_scaffolding()`: Phase 1 - Task Analysis와 함께 응답 생성
   - `generate_fixed_response_with_coaching()`: Phase 2 - Coaching DB 기반 수정 응답 생성
-  - `generate_with_reflection()`: 상위 클래스에서 공통 구현 (ReAct 스타일 reflection)
 
 #### 3.2 교사 모델 (teacher_model.py)
 - **역할**: 학생 응답 평가 및 피드백 생성
@@ -162,94 +161,78 @@ class BaseDatasetLoader(ABC):
   - `generate_coaching_db()`: Phase 2 Coaching DB 생성
   - `generate_modeling_response()`: Phase 3 교사 모델링 응답 생성
 
-#### 3.3 파이프라인 제어기 (pipeline_controller.py)
-- **역할**: 3-Phase Pipeline 전체 제어
-- **흐름**:
-  ```
-  Phase 1: Initial Response with Scaffolding
-      ↓ (모든 문제)
-  Phase 2: Teacher Coaching + Fixed Response
-      ↓ (오답 문제만)
-  Phase 3: Teacher Modeling
-      ↓ (여전히 오답인 문제만)
-  SFT Training Data 생성
-  ```
-- **출력**:
-  - `learning_logs/{identifier}_sft_data.json`: SFT 학습 데이터
-  - `learning_logs/train_learning_results.json`: 학습 결과 요약
+#### 3.3 LangGraph 파이프라인 (learning_loop/graph/)
 
-#### 3.4 상태 머신 (state_machine.py)
+LangGraph 기반의 3-Phase Pipeline 구현입니다.
 
-학습 파이프라인의 상태를 관리하고 체크포인트 기반 Resume 기능을 제공합니다.
-
-**LearningState Enum** (번호 및 색상 포함):
-
-| # | 상태 | 색상 | 설명 |
-|---|------|------|------|
-| **Initial** ||||
-| 00 | `INIT` | Gray | 초기 상태 |
-| **Design Phase** ||||
-| 01 | `DESIGN_ANALYSIS` | Cyan | 교수 분석 중 |
-| 02 | `DESIGN_OBJECTIVES` | Cyan | 수행목표 생성 중 |
-| 03 | `DESIGN_RUBRIC` | Cyan | 루브릭 개발 중 |
-| 04 | `DESIGN_COMPLETE` | Cyan | 설계 완료 |
-| **Phase 1: Scaffolding** ||||
-| 05 | `PHASE1_RUNNING` | Blue | Phase 1 진행 중 |
-| 06 | `PHASE1_COMPLETE` | Blue | Phase 1 완료 |
-| **Phase 2: Coaching** ||||
-| 07 | `PHASE2_SCORING` | Yellow | PO 기반 채점 중 |
-| 08 | `PHASE2_COACHING` | Yellow | Coaching DB 생성 중 |
-| 09 | `PHASE2_FIXING` | Yellow | Fixed Response 생성 중 |
-| 10 | `PHASE2_COMPLETE` | Yellow | Phase 2 완료 |
-| **Phase 3: Modeling** ||||
-| 11 | `PHASE3_MODELING` | Magenta | Modeling Response 생성 중 |
-| 12 | `PHASE3_COMPLETE` | Magenta | Phase 3 완료 |
-| **Finalization** ||||
-| 13 | `SAVING` | Green | 결과 저장 중 |
-| 14 | `COMPLETE` | Green | 전체 완료 |
-| **Special States** ||||
-| 99 | `ERROR` | Red | 에러 상태 |
-| 98 | `PAUSED` | White | 일시 정지 (Resume 대기) |
-
-```python
-# 터미널에서 색상 출력
-print(state.colored_name)  # [96m[01] DESIGN_ANALYSIS[0m
-
-# 번호 포함 이름
-print(state.display_name)  # [01] DESIGN_ANALYSIS
-
-# Phase 조회
-print(state.get_phase())   # "Design"
+**구조**:
+```
+learning_loop/graph/
+├── __init__.py          # 모듈 export
+├── state.py             # IDMASState (TypedDict 기반 상태 스키마)
+├── nodes.py             # 노드 함수 정의
+└── graph.py             # StateGraph 구성 및 IDMASGraphRunner
 ```
 
-**핵심 기능**:
-- **상태 전이 관리**: 유효한 상태 전이만 허용
-- **체크포인트**: 10문제마다 자동 저장, 중단 시 복원 가능
-- **콜백 시스템**: `on_enter()`, `on_exit()`, `on_transition()` 콜백 지원
-- **진행 상황 추적**: 질문별 처리 상태 (`QuestionProgress`) 관리
+**상태 스키마 (state.py)**:
+- `IDMASState`: TypedDict 기반 파이프라인 상태
+- `QuestionResult`: 각 문제의 처리 결과
+- `SFTCase`: SFT 데이터 분류 (A, A-Failed, B, C)
+
+**노드 함수 (nodes.py)**:
+- `process_question_phase1()`: Phase 1 Scaffolding 처리
+- `generate_coaching_db()`: Coaching DB 생성
+- `process_question_phase2()`: Phase 2 Coaching 처리
+- `process_question_phase3()`: Phase 3 Modeling 처리
+- `generate_sft_data()`: SFT 데이터 생성
+
+**그래프 흐름 (graph.py)**:
+```
+START → phase1 → advance → [조건부 라우팅]
+                              ├─ (더 많은 문제) → phase1
+                              └─ (Phase 1 완료) → coaching_db
+                                                    ↓
+                                              [조건부 라우팅]
+                                              ├─ (오답 있음) → phase2
+                                              └─ (모두 정답) → finalize
+                                                    ↓
+                                              [조건부 라우팅]
+                                              ├─ (여전히 오답) → phase3
+                                              └─ (모두 수정됨) → finalize
+                                                                   ↓
+                                                                 END
+```
 
 **사용 예시**:
 ```python
-from learning_loop.state_machine import LearningStateMachine, LearningState
+from learning_loop.graph import IDMASGraphRunner
 
-# 새 학습 시작
-sm = LearningStateMachine()
-sm.transition_to(LearningState.DESIGN_ANALYSIS, "Starting design")
+# Runner 생성
+runner = IDMASGraphRunner(
+    student_model=student,
+    teacher_model=teacher,
+    answer_extractor=extractor,
+)
 
-# 체크포인트에서 복원
-sm = LearningStateMachine.load_checkpoint(checkpoint_path)
-resumable_state = sm.get_resumable_state()
-sm.transition_to(resumable_state, "Resuming from checkpoint")
-
-# 체크포인트 저장
-checkpoint_path = sm.save_checkpoint()
+# 파이프라인 실행
+result = runner.run(
+    domain="math",
+    train_dataset="gsm8k",
+    terminal_goal=terminal_goal,
+    student_model_name="Qwen/Qwen2.5-3B-Instruct",
+    teacher_model_name="gpt-5",
+    model_short="Qwen2.5-3B-Instruct",
+    questions=questions,
+    design_result=design_result,
+    output_dir=output_dir,
+)
 ```
 
-**체크포인트 저장 위치**:
-```
-data/{domain}/checkpoints/
-  checkpoint_{train_dataset}_{timestamp}.json
-```
+**핵심 기능**:
+- **StateGraph 기반**: LangGraph의 상태 그래프로 워크플로우 관리
+- **조건부 라우팅**: 정답/오답에 따른 자동 Phase 전환
+- **체크포인트**: MemorySaver 기반 상태 저장
+- **배치 처리**: 각 Phase에서 여러 문제를 순차 처리
 
 ## 3-Phase Pipeline 프레임워크
 
@@ -319,7 +302,7 @@ flowchart LR
     OPENAI --> CONFIG["create_teacher_config()"]
     VLLM --> CONFIG
 
-    CONFIG --> DESIGN["설계 모듈<br/>(GPTWrapper)"]
+    CONFIG --> DESIGN["설계 모듈<br/>(LLMWrapper)"]
     CONFIG --> TEACHER["교사 모델<br/>(TeacherModel)"]
 
     style OPENAI fill:#e3f2fd
@@ -750,8 +733,7 @@ AVAILABLE_TEACHER_MODELS = [
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
 ]
 
-DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"  # Overall default (OpenAI)
-DEFAULT_VLLM_TEACHER_MODEL = "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8"  # Recommended for vLLM/GPU
+DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
 
 def create_teacher_config(model_name: str = None) -> dict:
     if model_name is None:
@@ -788,11 +770,9 @@ AVAILABLE_STUDENT_MODELS = [
 ```
 `main.py`에서 `--teacher-model` CLI 인자로 `create_teacher_config()`를 호출해 교사/설계 모델 설정을 생성합니다. `gpt-` 계열은 OpenAI API를, 그 외 모델은 vLLM 서버(`http://localhost:2000/v1`, API key `0`)를 사용합니다.
 
-**Teacher Model Defaults**:
-- `DEFAULT_TEACHER_MODEL`: Overall default using OpenAI API (gpt-5-2025-08-07)
-- `DEFAULT_VLLM_TEACHER_MODEL`: Recommended for vLLM GPU servers (Qwen/Qwen3-30B-A3B-Instruct-2507-FP8)
+**Teacher Model Default**: `gpt-5-2025-08-07` (OpenAI API)
 
-When using `--teacher-model` CLI option, you can specify either model type.
+vLLM 모델을 사용하려면 `--teacher-model` 옵션으로 `AVAILABLE_TEACHER_MODELS` 중 하나를 지정하세요.
 
 ## 새로운 도메인 추가 가이드
 

@@ -9,10 +9,6 @@ DISABLE_VERSION_CHECK=1 CUDA_VISIBLE_DEVICES=0 API_PORT=2000 llamafactory-cli ap
 cd project/ID-MAS
 conda activate ID-MAS
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset gsm8k \
-    --student-model Qwen/Qwen3-4B-Instruct-2507 \
-    --teacher-model Qwen/Qwen3-30B-A3B-Instruct-2507-FP8
-
 CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
-    --student-model Qwen/Qwen3-4B-Instruct-2507 \
-    --teacher-model Qwen/Qwen3-30B-A3B-Instruct-2507-FP8
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-14B-Instruct

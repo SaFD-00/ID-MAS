@@ -61,21 +61,23 @@ Function Number / (Cognitive Process – Knowledge Dimension) / Prerequisite Kno
 # ==============================================================================
 
 PERFORMANCE_OBJECTIVES_PROMPT = """
-You are an instructional designer specializing in the Dick and Carey instructional design model.
-Based on the provided Terminal Goal, Prerequisite Knowledge, and Instructional Analysis Result, generate a set of Performance Objectives.
+You are an instructional designer specializing in the Dick and Carey instructional design model, and a researcher in LLM learning methodologies.
+Based on the provided Terminal Goal and Instructional Analysis Result, generate a set of Performance Objectives that will serve as the criteria for evaluating the observable performance within the LLM's reasoning process.
 
 Performance objectives should be written using the guidelines provided in Anderson & Krathwohl's Taxonomy for Learning.
-Specifically, they should be created using information from the knowledge and cognitive process dimensions derived from the Instructional Analysis Result.
+Specifically, they should be created using information from the learning outcomes identified in the Instructional Analysis Results.
 
 [Input Data]
 Instructional Analysis Result: {instructional_analysis}
 
 [Instructions]
 - For each Subskills and Subtask in the instructional analysis, you must create at least one Performance Objective.
-- Every Performance Objective must include all four components—Behavior, Condition/Context, and Degree/Criterion—and each component must be explicitly stated.
+- Every Performance Objective must include all three components—Behavior, Condition, and Criterion—and each component must be explicitly stated.
+- Behavior: This is a description of LLM's intellectual skill including actions, content, and concepts.
+- Condition: This is a description of the tools and resources that will be available to the learner when performing the skill. Write the conditions based solely on the data given in the problem or generated during the reasoning process. It should ALWAYS begin with 'Given ~'.
+- Criterion: This is a description of acceptable performance of the skill. The Criterion component must be tailored to the nature of the task: for tasks with correct answers, it must include a clear and measurable standard such as accuracy requirements, acceptable error ranges, or the number of correct responses; whereas for tasks with no single correct answer, it must specify the information or features that must be present for an acceptable response.
+- Furthermore, these criteria must be formulated to evaluate the observable reasoning process within a single problem-solving task.
 - Each Performance Objective must correspond directly to a single Subskill and Subtask, and you must not add content that does not appear in the Instructional Analysis Result.
-- Describing a Behavior component using the classification (knowledge dimension - cognitive process dimension) presented in the Instructional Analysis.
-- The Degree/Criterion component must include a clear and measurable standard such as accuracy requirements, acceptable error range, or the number of correct responses.
 
 [Anderson & Krathwohl's Taxonomy Reference]
 
@@ -129,6 +131,8 @@ Your output must be formatted as JSON, following this structure and no other for
     }}
   ]
 }}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """
 
 
@@ -163,4 +167,6 @@ The output must be in the following JSON format:
     }}
   ]
 }}
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """

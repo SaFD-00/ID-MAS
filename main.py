@@ -1,20 +1,20 @@
 """
-ID-MAS 메인 실행 파일 (3-Phase Pipeline with State Machine)
+ID-MAS 메인 실행 파일 (LangGraph 기반 3-Phase Pipeline)
 Domain-based Multi-Dataset Support for LLM Learning and Evaluation
 
 학습(train)과 평가(eval)를 분리하여 실행:
 - Train Mode: 설계 → 3-Phase 학습 → SFT 데이터 생성
 - Eval Mode: Baseline, SFT, SFT_ID-MAS 평가
 
-3-Phase Learning Pipeline:
+3-Phase Learning Pipeline (LangGraph):
 - Phase 1: Initial Response with Scaffolding
 - Phase 2: Fixed Response with Coaching DB
 - Phase 3: Modeling (Teacher's articulate reasoning)
 
-State Machine Features:
-- Checkpoint-based resume support
-- Progress tracking per question
-- Automatic checkpoint saving every 10 questions
+LangGraph Features:
+- StateGraph based workflow management
+- Conditional routing for phase transitions
+- Built-in checkpointing support
 
 Terminal Goals:
 - GSM8K: Generate coherent, step-by-step mathematical reasoning for grade-school math
@@ -32,26 +32,21 @@ from typing import Dict, Optional, List
 # 프로젝트 루트를 path에 추가
 sys.path.insert(0, str(Path(__file__).parent))
 
-from design_modules.step2_analysis import InstructionalAnalysis
-from design_modules.step4_objectives import PerformanceObjectives
-from design_modules.step5_test import TestItemDevelopment
-from design_modules.step5_rubric import RubricDevelopment
-from learning_loop.pipeline_controller import IDMASPipelineController
+from design_modules.analysis import InstructionalAnalysis
+from design_modules.objectives import PerformanceObjectives
+from design_modules.test import TestItemDevelopment
+from design_modules.rubric import RubricDevelopment
+from learning_loop.graph import IDMASGraphRunner
+from learning_loop.graph.state import get_statistics
 from learning_loop.student_model import StudentModel
 from learning_loop.teacher_model import TeacherModel
-from learning_loop.state_machine import (
-    LearningStateMachine,
-    LearningState,
-    LearningContext,
-    StateTransition,
-)
 from utils.base_loader import QuestionData
 from utils.domain_loader import DomainLoader
 from utils.answer_extractor import get_extractor, AnswerExtractor
 from config.config import (
     DATA_DIR,
     AVAILABLE_STUDENT_MODELS, DEFAULT_STUDENT_MODEL,
-    AVAILABLE_TEACHER_MODELS, DEFAULT_TEACHER_MODEL, DEFAULT_VLLM_TEACHER_MODEL,
+    AVAILABLE_TEACHER_MODELS, DEFAULT_TEACHER_MODEL,
     create_teacher_config, MODEL_NAME_TO_SHORT, get_model_short_name,
     get_domain_data_dirs, get_available_domains, get_eval_datasets_for_domain,
     get_training_datasets_for_domain, get_terminal_goal,
@@ -61,14 +56,15 @@ from config.config import (
 
 class IDMASPipeline:
     """
-    ID-MAS 3-Phase Pipeline with State Machine (PDF Proposal Based)
+    ID-MAS 3-Phase Pipeline with LangGraph (Research Proposal Based)
 
-    Each training dataset (GSM8K, MATH, SciBench, ARC) has its own Terminal Goal
-    and is trained separately.
+    Each training dataset (GSM8K, MATH) has its own Terminal Goal
+    and is trained separately using LangGraph StateGraph.
 
     Features:
-    - State Machine based workflow management
-    - Checkpoint-based resume support
+    - LangGraph based workflow management
+    - Conditional routing for phase transitions
+    - Built-in checkpointing support
     - Per-question progress tracking
     """
 
@@ -86,7 +82,7 @@ class IDMASPipeline:
             domain: Domain name (e.g., "math")
             train_dataset: Training dataset name (e.g., "gsm8k", "math")
             student_model_name: Student model name (None for default)
-            teacher_config: Teacher model configuration (None for default GPT-5)
+            teacher_config: Teacher model configuration (None for default OpenAI model)
             resume: Whether to resume from checkpoint
             checkpoint_interval: Save checkpoint every N questions (default: 10)
         """
@@ -95,6 +91,7 @@ class IDMASPipeline:
         self.student_model_name = student_model_name or DEFAULT_STUDENT_MODEL
         self.teacher_config = teacher_config
         self.checkpoint_interval = checkpoint_interval
+        self.resume = resume
 
         # Identifier for design files (domain_dataset)
         self.identifier = f"{self.domain}_{self.train_dataset}"
@@ -127,67 +124,16 @@ class IDMASPipeline:
         self.student_model = StudentModel(model_name=self.student_model_name)
         self.teacher_model = TeacherModel(teacher_config)
 
-        # Initialize State Machine
-        self._init_state_machine(resume)
+        # Teacher model name for state
+        self.teacher_model_name = teacher_config.get('model', DEFAULT_TEACHER_MODEL) if teacher_config else DEFAULT_TEACHER_MODEL
 
-        # Initialize Pipeline Controller with State Machine
-        self.pipeline = IDMASPipelineController(
+        # Initialize LangGraph Runner
+        self.graph_runner = IDMASGraphRunner(
             student_model=self.student_model,
             teacher_model=self.teacher_model,
             answer_extractor=self.answer_extractor,
-            state_machine=self.state_machine,
-            checkpoint_interval=checkpoint_interval
+            checkpoint_dir=self.model_dir,
         )
-
-    def _init_state_machine(self, resume: bool):
-        """Initialize or restore State Machine."""
-        if resume:
-            checkpoint_path = LearningStateMachine.find_latest_checkpoint(
-                self.domain, self.train_dataset, self.student_model_name
-            )
-            if checkpoint_path:
-                print(f"\n[Resume] Loading checkpoint: {checkpoint_path}")
-                self.state_machine = LearningStateMachine.load_checkpoint(checkpoint_path)
-                print(f"[Resume] Current state: {self.state_machine.state.name}")
-                print(f"[Resume] Progress: {self.state_machine.context.get_progress_summary()}")
-            else:
-                print("\n[Resume] No checkpoint found, starting fresh")
-                self.state_machine = LearningStateMachine()
-        else:
-            self.state_machine = LearningStateMachine()
-
-        # Initialize context
-        ctx = self.state_machine.context
-        ctx.domain = self.domain
-        ctx.train_dataset = self.train_dataset
-        ctx.terminal_goal = self.terminal_goal
-        ctx.student_model = self.student_model_name
-        ctx.teacher_model = self.teacher_config.get('model', DEFAULT_TEACHER_MODEL) if self.teacher_config else DEFAULT_TEACHER_MODEL
-        if not ctx.started_at:
-            ctx.started_at = datetime.now()
-
-        # Register callbacks
-        self._register_callbacks()
-
-    def _register_callbacks(self):
-        """Register State Machine callbacks."""
-        sm = self.state_machine
-
-        # Log state transitions
-        def log_transition(transition: StateTransition):
-            print(f"\n>>> State: {transition.from_state.name} -> {transition.to_state.name}")
-            if transition.reason:
-                print(f"    Reason: {transition.reason}")
-
-        sm.on_transition(log_transition)
-
-        # Handle error state
-        def handle_error(machine, context):
-            print(f"\n!!! Error occurred: {context.last_error}")
-            print(f"    Error count: {context.error_count}")
-            machine.save_checkpoint()
-
-        sm.on_enter(LearningState.ERROR, handle_error)
 
     def run_design_phase(
         self,
@@ -202,9 +148,6 @@ class IDMASPipeline:
         Returns:
             설계 결과 딕셔너리
         """
-        sm = self.state_machine
-        ctx = sm.context
-
         print("\n" + "=" * 60)
         print("INSTRUCTIONAL DESIGN PHASE")
         print("=" * 60)
@@ -217,29 +160,23 @@ class IDMASPipeline:
         print(f"  {learning_objective}")
 
         # 2. 교수 분석
-        sm.transition_to(LearningState.DESIGN_ANALYSIS, "Starting instructional analysis")
         print(f"\n[Step 2] Instructional Analysis")
         analysis_result = self.analysis.analyze(learning_objective)
         print(f"  Analysis completed")
-        ctx.task_analysis = analysis_result["raw_output"]
 
         # 3. 수행목표 진술
-        sm.transition_to(LearningState.DESIGN_OBJECTIVES, "Generating performance objectives")
         print(f"\n[Step 4] Performance Objectives")
         objectives_result = self.objectives.generate_objectives(
             analysis_result["raw_output"]
         )
         print(f"  Generated {len(objectives_result['performance_objectives'])} objectives")
-        ctx.performance_objectives = objectives_result['performance_objectives']
 
         # 4. 루브릭 개발 (Essay 평가용)
-        sm.transition_to(LearningState.DESIGN_RUBRIC, "Developing rubrics")
         print(f"\n[Step 5] Rubric Development")
         rubric_dev = RubricDevelopment()
 
         # output_type 결정 로직 (Default for math domain)
         output_type = "explanatory_text"
-        # TODO: Add domain-specific output_type to DOMAIN_CONFIG for extensibility
 
         rubric = rubric_dev.generate_rubric(
             task_description=self.terminal_goal,
@@ -249,7 +186,6 @@ class IDMASPipeline:
 
         criteria_count = len(rubric.get('rubric', {}).get('criteria', []))
         print(f"  Generated rubric with {criteria_count} criteria for {output_type}")
-        ctx.rubric = rubric
 
         # 설계 결과 저장
         design_result = {
@@ -270,11 +206,6 @@ class IDMASPipeline:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(design_result, f, ensure_ascii=False, indent=2)
 
-        # Update context
-        ctx.design_result = design_result
-
-        sm.transition_to(LearningState.DESIGN_COMPLETE, "Design phase completed")
-
         print(f"\n Design phase completed")
         print(f"  Saved to: {output_path}")
 
@@ -287,7 +218,7 @@ class IDMASPipeline:
         resume: bool = False
     ) -> Dict:
         """
-        3-Phase Learning Pipeline 실행
+        LangGraph 기반 3-Phase Learning Pipeline 실행
 
         Args:
             design_result: 설계 결과
@@ -297,127 +228,48 @@ class IDMASPipeline:
         Returns:
             학습 결과 딕셔너리
         """
-        sm = self.state_machine
-        ctx = sm.context
-
-        print("\n" + "=" * 60)
-        print("3-PHASE LEARNING PIPELINE")
-        print("=" * 60)
-        print(f"Training Dataset: {self.train_dataset.upper()}")
-        print(f"Terminal Goal: {self.terminal_goal[:80]}...")
-
-        # Load training data (if not already loaded)
-        if not ctx.questions:
-            questions = self.loader.load_training_data(
-                dataset=self.train_dataset,
-                limit=num_questions,
-                shuffle=False
-            )
-
-            print(f"\nLoaded {len(questions)} training questions")
-
-            # Prepare question data
-            question_data = []
-            for q in questions:
-                question_data.append({
-                    'question_id': q.question_id,
-                    'question': q.question,
-                    'problem_text': self.loader.format_question_as_prompt(q),
-                    'ground_truth': self.loader.format_ground_truth(q),
-                    'instruction': q.metadata.get('instruction', '')
-                })
-
-            ctx.questions = question_data
-            ctx.total_questions = len(question_data)
-        else:
-            question_data = ctx.questions
-            print(f"\n[Resume] Using {len(question_data)} questions from checkpoint")
-
-        # Get design components
-        task_analysis = design_result['instructional_analysis']['raw_output']
-        performance_objectives = design_result['performance_objectives']['performance_objectives']
-
-        # Phase 1: Initial Responses with Scaffolding
-        if sm.state in [LearningState.DESIGN_COMPLETE, LearningState.INIT, LearningState.PAUSED]:
-            if ctx.phase1_processed < ctx.total_questions:
-                sm.transition_to(LearningState.PHASE1_RUNNING, "Starting Phase 1")
-
-        if sm.state == LearningState.PHASE1_RUNNING:
-            print("\n" + "=" * 60)
-            print("[Phase 1] Generating Initial Responses with Scaffolding")
-            print("=" * 60)
-            correct_p1, incorrect_p1 = self.pipeline.run_phase1_batch(
-                questions=question_data,
-                task_analysis=task_analysis,
-                performance_objectives=performance_objectives
-            )
-            print(f"\nPhase 1 Results: Correct={len(correct_p1)}, Incorrect={len(incorrect_p1)}")
-            sm.transition_to(LearningState.PHASE1_COMPLETE, "Phase 1 completed")
-        else:
-            # Resume: get results from context
-            correct_p1 = [r for r in ctx.phase1_results if r.get('phase1_correct')]
-            incorrect_p1 = ctx.incorrect_after_phase1
-
-        # Phase 2: Teacher Intervention + Fixed Responses
-        if incorrect_p1 and sm.state == LearningState.PHASE1_COMPLETE:
-            sm.transition_to(LearningState.PHASE2_SCORING, "Starting Phase 2")
-
-        if sm.state in [LearningState.PHASE2_SCORING, LearningState.PHASE2_COACHING, LearningState.PHASE2_FIXING]:
-            print("\n" + "=" * 60)
-            print("[Phase 2] Teacher Intervention + Fixed Responses")
-            print("=" * 60)
-
-            if sm.state == LearningState.PHASE2_SCORING:
-                sm.transition_to(LearningState.PHASE2_COACHING, "Scoring complete, generating coaching DB")
-
-            if sm.state == LearningState.PHASE2_COACHING:
-                sm.transition_to(LearningState.PHASE2_FIXING, "Coaching DB ready, generating fixed responses")
-
-            fixed_correct, still_incorrect, coaching_db = self.pipeline.run_phase2_batch(
-                incorrect_results=incorrect_p1,
-                performance_objectives=performance_objectives,
-                task_analysis=task_analysis,
-                learning_objective=self.terminal_goal
-            )
-            print(f"\nPhase 2 Results: Fixed={len(fixed_correct)}, Still Incorrect={len(still_incorrect)}")
-            sm.transition_to(LearningState.PHASE2_COMPLETE, "Phase 2 completed")
-        else:
-            still_incorrect = ctx.still_incorrect_after_phase2
-            coaching_db = ctx.coaching_db
-
-        # Phase 3: Modeling (if still incorrect)
-        if still_incorrect and sm.state == LearningState.PHASE2_COMPLETE:
-            sm.transition_to(LearningState.PHASE3_MODELING, "Starting Phase 3")
-
-        if sm.state == LearningState.PHASE3_MODELING:
-            print("\n" + "=" * 60)
-            print("[Phase 3] Modeling (Teacher's Articulate Reasoning)")
-            print("=" * 60)
-            self.pipeline.run_phase3_batch(
-                still_incorrect=still_incorrect,
-                task_analysis=task_analysis
-            )
-            print(f"\nPhase 3 Results: Modeling applied to {len(still_incorrect)} questions")
-            sm.transition_to(LearningState.PHASE3_COMPLETE, "Phase 3 completed")
-
-        # Move to saving state
-        if sm.state in [LearningState.PHASE1_COMPLETE, LearningState.PHASE2_COMPLETE, LearningState.PHASE3_COMPLETE]:
-            sm.transition_to(LearningState.SAVING, "Saving results")
-
-        # Save results and generate SFT data
-        # New file naming: {dataset}_train_id-mas_{Model}.json, {dataset}_train_id-mas_{Model}_logs.json
-        sft_filename = f"{self.train_dataset}_train_id-mas_{self.model_short}.json"
-        logs_filename = f"{self.train_dataset}_train_id-mas_{self.model_short}_logs.json"
-
-        results_path, sft_path = self.pipeline.save_results(
-            output_dir=self.model_dir,
-            sft_filename=sft_filename,
-            logs_filename=logs_filename
+        # Load training data
+        questions = self.loader.load_training_data(
+            dataset=self.train_dataset,
+            limit=num_questions,
+            shuffle=False
         )
 
-        # Get statistics
-        stats = self.pipeline.get_statistics()
-        sft_data = self.pipeline.generate_sft_data()
+        print(f"\nLoaded {len(questions)} training questions")
+
+        # Prepare question data (new field names: id, instruction, input, output)
+        question_data = []
+        for q in questions:
+            question_data.append({
+                'id': q.question_id,
+                'instruction': q.metadata.get('instruction', ''),
+                'input': q.question,
+                'output': q.metadata.get('full_output', q.ground_truth_formatted),
+                'problem_text': self.loader.format_question_as_prompt(q),
+            })
+
+        # Run LangGraph pipeline
+        thread_id = f"{self.domain}_{self.train_dataset}_{self.model_short}"
+
+        final_state = self.graph_runner.run(
+            domain=self.domain,
+            train_dataset=self.train_dataset,
+            terminal_goal=self.terminal_goal,
+            student_model_name=self.student_model_name,
+            teacher_model_name=self.teacher_model_name,
+            model_short=self.model_short,
+            questions=question_data,
+            design_result=design_result,
+            output_dir=self.model_dir,
+            checkpoint_interval=self.checkpoint_interval,
+            use_iterative_scaffolding=True,
+            max_iterations=5,
+            thread_id=thread_id,
+            resume=resume,
+        )
+
+        # Extract statistics
+        stats = get_statistics(final_state)
 
         learning_results = {
             "domain": self.domain,
@@ -427,10 +279,9 @@ class IDMASPipeline:
             "phase1_correct": stats['phase1_correct'],
             "phase2_fixed": stats['phase2_fixed'],
             "phase3_modeling": stats['phase3_modeling'],
-            "sft_data_count": len(sft_data),
-            "sft_data_path": str(sft_path),
-            "results_path": str(results_path),
-            "state_machine_summary": sm.get_summary(),
+            "sft_data_count": len(final_state.get('sft_data', [])),
+            "sft_data_path": final_state.get('sft_path', ''),
+            "results_path": final_state.get('results_path', ''),
             "timestamp": datetime.now().isoformat()
         }
 
@@ -438,19 +289,6 @@ class IDMASPipeline:
         summary_path = self.model_dir / f"{self.train_dataset}_train_summary_{self.model_short}.json"
         with open(summary_path, 'w', encoding='utf-8') as f:
             json.dump(learning_results, f, ensure_ascii=False, indent=2)
-
-        # Transition to complete
-        sm.transition_to(LearningState.COMPLETE, "Pipeline completed successfully")
-
-        print("\n" + "=" * 60)
-        print("LEARNING PHASE COMPLETED")
-        print("=" * 60)
-        print(f"Total Questions: {stats['total_questions']}")
-        print(f"Phase 1 Correct (Case A): {stats['phase1_correct']}")
-        print(f"Phase 2 Fixed (Case B): {stats['phase2_fixed']}")
-        print(f"Phase 3 Modeling (Case C): {stats['phase3_modeling']}")
-        print(f"SFT Data Generated: {len(sft_data)} entries")
-        print(f"SFT Data Path: {sft_path}")
 
         return learning_results
 
@@ -735,20 +573,9 @@ def run_train_mode(args):
             with open(design_path, 'r', encoding='utf-8') as f:
                 design_result = json.load(f)
             print(f"Loaded existing design from {design_path}")
-
-            # Update context with loaded design
-            ctx = pipeline.state_machine.context
-            ctx.design_result = design_result
-            ctx.task_analysis = design_result['instructional_analysis']['raw_output']
-            ctx.performance_objectives = design_result['performance_objectives']['performance_objectives']
     else:
-        # Check if resuming and design already exists
-        ctx = pipeline.state_machine.context
-        if args.resume and ctx.design_result:
-            design_result = ctx.design_result
-            print(f"[Resume] Using design from checkpoint")
-        else:
-            design_result = pipeline.run_design_phase()
+        # Run design phase
+        design_result = pipeline.run_design_phase()
 
     # 2. 3-Phase 학습 단계
     learning_result = pipeline.run_learning_phase(
@@ -931,8 +758,7 @@ Examples:
         choices=AVAILABLE_TEACHER_MODELS,
         dest="teacher_model",
         help=f"Teacher model for instructional design and evaluation. "
-             f"Default: {DEFAULT_TEACHER_MODEL} (OpenAI). "
-             f"For vLLM (GPU server): {DEFAULT_VLLM_TEACHER_MODEL}"
+             f"Default: {DEFAULT_TEACHER_MODEL}"
     )
 
     args = parser.parse_args()

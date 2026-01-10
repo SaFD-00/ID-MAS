@@ -20,6 +20,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# Claude
+.claude/
+
 # Virtual environments
 venv/
 ENV/
@@ -39,6 +42,7 @@ data/
 *.json
 !config/*.json
 *.log
+USAGE.md
 
 # Testing
 .pytest_cache/
