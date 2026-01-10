@@ -25,7 +25,7 @@ class DatasetRegistry:
             "training_datasets": ["gsm8k", "math"],
             "eval_datasets": ["gsm8k", "math", "svamp", "asdiv", "mawps", "mmlu"],
             "default_eval": "gsm8k",
-            "default_answer_type": AnswerType.NUMERIC,
+            "default_answer_type": AnswerType.LATEX,  # MATH 데이터셋의 좌표, 분수 등 지원
             "category": "math_logic"
         }
     }
