@@ -27,6 +27,29 @@ class DatasetRegistry:
             "default_eval": "gsm8k",
             "default_answer_type": AnswerType.LATEX,  # MATH 데이터셋의 좌표, 분수 등 지원
             "category": "math_logic"
+        },
+        "logical": {
+            "training_datasets": ["reclor"],
+            "eval_datasets": [
+                "reclor", "anli_r2", "anli_r3",
+                "bbh_boolean_expressions", "bbh_formal_fallacies",
+                "bbh_logical_deduction_three_objects", "bbh_logical_deduction_five_objects",
+                "bbh_logical_deduction_seven_objects",
+                "bbh_tracking_shuffled_objects_three_objects",
+                "bbh_tracking_shuffled_objects_five_objects",
+                "bbh_tracking_shuffled_objects_seven_objects",
+                "bbh_web_of_lies"
+            ],
+            "default_eval": "reclor",
+            "default_answer_type": AnswerType.MCQ,
+            "category": "logical_reasoning"
+        },
+        "commonsense": {
+            "training_datasets": ["arc_c"],
+            "eval_datasets": ["arc_c", "strategyqa", "openbookqa"],
+            "default_eval": "arc_c",
+            "default_answer_type": AnswerType.MCQ,
+            "category": "commonsense_reasoning"
         }
     }
 

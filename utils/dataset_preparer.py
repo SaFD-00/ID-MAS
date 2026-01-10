@@ -6,7 +6,7 @@ Downloads and processes datasets from HuggingFace for math and knowledge domains
 Output format:
 [
   {
-    "instruction": "system prompt (different for train vs test)",
+    "instruction": "system prompt (same for train and test)",
     "input": "question text",
     "output": "{reasoning}\n\n\\boxed{answer}" or "\\boxed{answer}"
   },
@@ -14,27 +14,124 @@ Output format:
 ]
 
 System Prompts:
-- Train: "You are a helpful math assistant."
-- Test: "You are a helpful math assistant. Solve the problem step by step and provide your final answer within \\boxed{}."
+- Prompts are dataset-specific and reused for both train and test splits.
 """
 
 import json
+import random
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from datasets import load_dataset
-from sklearn.model_selection import train_test_split
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
 DATA_DIR = Path(__file__).parent.parent / "data"
+RANDOM_SEED = 42
 
-# System prompts - same for both train and test
-TRAIN_SYSTEM_PROMPT = "You are a helpful math assistant.\nSolve the problem step by step and provide your final answer within \\boxed{}."
+# Dataset-specific system prompts
+DATASET_PROMPTS = {
+    # GSM8K - Grade school math, numeric answers
+    "gsm8k": """You are a helpful math assistant.
+Solve this grade-school math problem step by step. Show your calculations clearly using <<calculation=result>> format for each step.
+Your final answer MUST be a single number within \\boxed{}.
+Example: \\boxed{42}""",
 
-TEST_SYSTEM_PROMPT = "You are a helpful math assistant.\nSolve the problem step by step and provide your final answer within \\boxed{}."
+    # MATH - Advanced math, LaTeX answers
+    "math": """You are a helpful math assistant.
+Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
+Your final answer MUST be within \\boxed{}. Use LaTeX notation for fractions (\\frac{a}{b}), exponents, and other mathematical expressions.
+Example: \\boxed{\\frac{1}{8}} or \\boxed{2\\sqrt{3}}""",
+
+    # SVAMP - Simple math word problems, numeric answers
+    "svamp": """You are a helpful math assistant.
+Solve this math word problem step by step. Identify the key information, set up the calculation, and solve.
+Your final answer MUST be a single number within \\boxed{}.
+Example: \\boxed{27}""",
+
+    # ASDiv - Arithmetic word problems, numeric answers
+    "asdiv": """You are a helpful math assistant.
+Solve this arithmetic word problem step by step. Extract the relevant numbers, determine the operation(s) needed, and calculate.
+Your final answer MUST be a single number within \\boxed{}.
+Example: \\boxed{15}""",
+
+    # MAWPS - Math word problems, may include fractions
+    "mawps": """You are a helpful math assistant.
+Solve this math word problem step by step. Show your work clearly.
+Your final answer MUST be within \\boxed{}. If the answer is a fraction, write it as a/b or use \\frac{a}{b}.
+Example: \\boxed{49} or \\boxed{56/9}""",
+
+    # MMLU - Multiple choice questions
+    "mmlu": """You are a helpful math assistant.
+This is a multiple choice question. Solve the problem step by step, then select the correct answer from the given options (A, B, C, or D).
+Your final answer MUST be a single letter (A, B, C, or D) within \\boxed{}.
+Example: \\boxed{A}""",
+
+    # Logical domain
+    "reclor": """You are a logical reasoning assistant. Read the passage and question, then select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "anli": """You are a natural language inference assistant. Determine the relationship between the premise and hypothesis. Choose from: A. entailment, B. neutral, C. contradiction. Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    # Commonsense domain
+    "arc_c": """You are a helpful commonsense science assistant. Solve the problem and select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "strategyqa": """You are a helpful commonsense reasoning assistant. Answer the question with Yes or No based on reliable commonsense knowledge. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
+Example: \\boxed{Yes}""",
+
+    "openbookqa": """You are a helpful science question-answering assistant. Use the given options and choose the best answer (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+}
+
+# BBH subtask-specific prompts
+BBH_PROMPTS = {
+    "boolean_expressions": """You are a helpful reasoning assistant. Evaluate the boolean expression and answer with True or False. Your final answer MUST be \\boxed{True} or \\boxed{False}.
+Example: \\boxed{True}""",
+
+    "formal_fallacies": """You are a helpful reasoning assistant. Determine if the argument is valid or invalid. Your final answer MUST be \\boxed{valid} or \\boxed{invalid}.
+Example: \\boxed{valid}""",
+
+    "logical_deduction_three_objects": """You are a helpful reasoning assistant. Solve the logical deduction problem and select the correct option (A, B, or C). Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "logical_deduction_five_objects": """You are a helpful reasoning assistant. Solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "logical_deduction_seven_objects": """You are a helpful reasoning assistant. Solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "tracking_shuffled_objects_three_objects": """You are a helpful reasoning assistant. Track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "tracking_shuffled_objects_five_objects": """You are a helpful reasoning assistant. Track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "tracking_shuffled_objects_seven_objects": """You are a helpful reasoning assistant. Track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+
+    "web_of_lies": """You are a helpful reasoning assistant. Determine the truth value based on the web of lies. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
+Example: \\boxed{Yes}""",
+
+    "default_mcq": """You are a helpful reasoning assistant. Solve the problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+Example: \\boxed{A}""",
+}
+
+# BBH logical reasoning subtasks
+BBH_LOGICAL_SUBTASKS = [
+    "boolean_expressions",
+    "formal_fallacies",
+    "logical_deduction_three_objects",
+    "logical_deduction_five_objects",
+    "logical_deduction_seven_objects",
+    "tracking_shuffled_objects_three_objects",
+    "tracking_shuffled_objects_five_objects",
+    "tracking_shuffled_objects_seven_objects",
+    "web_of_lies",
+]
 
 # MMLU Math subjects
 MMLU_MATH_SUBJECTS = [
@@ -45,23 +142,26 @@ MMLU_MATH_SUBJECTS = [
     "high_school_statistics",
 ]
 
-# MMLU Science subjects (similar to SciBench/ARC training domains)
-MMLU_SCIENCE_SUBJECTS = [
-    "college_biology",
-    "college_chemistry",
-    "college_physics",
-    "high_school_biology",
-    "high_school_chemistry",
-    "high_school_physics",
-    "anatomy",
-    "astronomy",
-    "conceptual_physics",
-]
 
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+def set_random_seed(seed: int = RANDOM_SEED) -> None:
+    """Set random seed for reproducible dataset processing."""
+    random.seed(seed)
+    try:
+        import numpy as np
+        np.random.seed(seed)
+    except Exception:
+        pass
+    try:
+        import datasets as hf_datasets
+        if hasattr(hf_datasets, "set_seed"):
+            hf_datasets.set_seed(seed)
+    except Exception:
+        pass
 
 def format_output(reasoning: Optional[str], answer: str) -> str:
     """
@@ -136,7 +236,7 @@ def extract_boxed_answer(solution: str) -> str:
 # Dataset Processors
 # =============================================================================
 
-def process_gsm8k(output_dir: Path):
+def process_gsm8k(train_dir: Path, eval_dir: Path):
     """
     Process GSM8K dataset.
 
@@ -165,19 +265,17 @@ def process_gsm8k(output_dir: Path):
                 reasoning = answer_text
                 final_answer = answer_text
 
-            # Use split-aware prompt
-            instruction = TRAIN_SYSTEM_PROMPT if split == "train" else TEST_SYSTEM_PROMPT
-
             records.append({
-                "instruction": instruction,
+                "instruction": DATASET_PROMPTS["gsm8k"],
                 "input": question,
                 "output": format_output(reasoning, final_answer)
             })
 
-        save_json(records, output_dir / f"gsm8k_{split}.json")
+        output_base = train_dir if split == "train" else eval_dir
+        save_json(records, output_base / f"gsm8k_{split}.json")
 
 
-def process_math(output_dir: Path):
+def process_math(train_dir: Path, eval_dir: Path):
     """
     Process MATH (competition_math) dataset.
     Uses EleutherAI/hendrycks_math as alternative since original is DMCA restricted.
@@ -226,11 +324,8 @@ def process_math(output_dir: Path):
                     # Track level distribution
                     level_counts[level] = level_counts.get(level, 0) + 1
 
-                    # Use split-aware prompt
-                    instruction = TRAIN_SYSTEM_PROMPT if split == "train" else TEST_SYSTEM_PROMPT
-
                     records.append({
-                        "instruction": instruction,
+                        "instruction": DATASET_PROMPTS["math"],
                         "input": problem,
                         "output": format_output(solution, boxed_answer)
                     })
@@ -238,7 +333,8 @@ def process_math(output_dir: Path):
                 print(f"      Error loading {config}: {e}")
 
         print(f"  Level distribution: {level_counts}")
-        save_json(records, output_dir / f"math_{split}.json")
+        output_base = train_dir if split == "train" else eval_dir
+        save_json(records, output_base / f"math_{split}.json")
 
 
 def process_mmlu(output_dir: Path, subjects: List[str], output_filename: str, is_math_domain: bool = False):
@@ -252,9 +348,6 @@ def process_mmlu(output_dir: Path, subjects: List[str], output_filename: str, is
     """
     print(f"\n[MMLU] Processing {output_filename}...")
     dataset_id = "cais/mmlu"
-
-    # Always test data - use TEST_SYSTEM_PROMPT
-    system_prompt = TEST_SYSTEM_PROMPT
 
     all_records = []
 
@@ -270,7 +363,7 @@ def process_mmlu(output_dir: Path, subjects: List[str], output_filename: str, is
                 answer_letter = chr(65 + answer_idx)  # 0 -> A, 1 -> B, etc.
 
                 all_records.append({
-                    "instruction": system_prompt,
+                    "instruction": DATASET_PROMPTS["mmlu"],
                     "input": format_mcq_input(question, choices),
                     "output": format_output(None, answer_letter)
                 })
@@ -307,7 +400,7 @@ def process_svamp(output_dir: Path):
         full_question = f"{body} {question}".strip()
 
         records.append({
-            "instruction": TEST_SYSTEM_PROMPT,
+            "instruction": DATASET_PROMPTS["svamp"],
             "input": full_question,
             "output": format_output(None, answer)
         })
@@ -351,7 +444,7 @@ def process_asdiv(output_dir: Path):
 
         if full_question:
             records.append({
-                "instruction": TEST_SYSTEM_PROMPT,
+                "instruction": DATASET_PROMPTS["asdiv"],
                 "input": full_question,
                 "output": format_output(None, answer_clean)
             })
@@ -390,7 +483,7 @@ def process_mawps(output_dir: Path):
 
         if question:
             records.append({
-                "instruction": TEST_SYSTEM_PROMPT,
+                "instruction": DATASET_PROMPTS["mawps"],
                 "input": question,
                 "output": format_output(None, str(answer))
             })
@@ -401,119 +494,247 @@ def process_mawps(output_dir: Path):
         print("  No records processed for MAWPS")
 
 
-def process_scibench(output_dir: Path):
+def process_reclor(train_dir: Path, eval_dir: Path):
     """
-    Process SciBench dataset with 80:20 split.
+    Process ReClor dataset.
 
-    SciBench format:
-    - problem_text: problem description
-    - solution: solution text
-    - answer_number / answer_latex: answer
-    - unit: unit of measurement
+    ReClor format:
+    - context: passage text
+    - question: question text
+    - answers: list of 4 choices
+    - label: answer index (0-3)
     """
-    print("\n[SciBench] Processing...")
-    dataset_id = "xw27/scibench"
+    print("\n[ReClor] Processing...")
+    dataset_id = "community-datasets/reclor"
 
-    print("  Loading dataset...")
-    try:
-        data = load_dataset(dataset_id, split="train")
-    except Exception as e:
-        print(f"  Could not load SciBench dataset: {e}")
-        return
+    for split in ["train", "test"]:
+        print(f"  Loading {split} split...")
+        data = load_dataset(dataset_id, split=split)
 
-    all_records = []
-    for item in data:
-        problem = item.get("problem_text", "")
-        solution = item.get("solution", "")
-        answer = item.get("answer_number", item.get("answer_latex", ""))
-        unit = item.get("unit", "")
+        records = []
+        for item in data:
+            context = item.get("context", "")
+            question = item.get("question", "")
+            answers = item.get("answers", [])
+            label = item.get("label", 0)
 
-        # Include unit in answer if available
-        if unit:
-            answer_with_unit = f"{answer} {unit}"
-        else:
-            answer_with_unit = str(answer)
+            # Format question with choices
+            question_with_choices = format_mcq_input(
+                f"{context}\n\n{question}",
+                answers
+            )
 
-        if problem:
-            all_records.append({
-                "instruction": TEST_SYSTEM_PROMPT,  # Temporary, will update train split
-                "input": problem,
-                "output": format_output(solution if solution else None, answer_with_unit)
+            # Answer label (0-3 -> A-D)
+            answer_letter = chr(65 + label)
+
+            records.append({
+                "instruction": DATASET_PROMPTS["reclor"],
+                "input": question_with_choices,
+                "output": format_output(None, answer_letter)
             })
 
-    # 80:20 split
-    if all_records:
-        train_records, test_records = train_test_split(
-            all_records,
-            test_size=0.2,
-            random_state=42
-        )
-
-        # Update train records to use train prompt
-        for record in train_records:
-            record["instruction"] = TRAIN_SYSTEM_PROMPT
-
-        # test_records already have TEST_SYSTEM_PROMPT
-
-        print(f"  Split: {len(train_records)} train, {len(test_records)} test")
-        save_json(train_records, output_dir / "scibench_train.json")
-        save_json(test_records, output_dir / "scibench_test.json")
+        output_base = train_dir if split == "train" else eval_dir
+        save_json(records, output_base / f"reclor_{split}.json")
 
 
-def process_arc(output_dir: Path):
+def process_arc_c(train_dir: Path, eval_dir: Path):
     """
-    Process ARC dataset (ARC-Challenge and ARC-Easy combined).
+    Process ARC-Challenge dataset.
 
     ARC format:
     - question: question text
     - choices: {"text": [...], "label": [...]}
-    - answerKey: correct answer label
+    - answerKey: answer label (e.g., "A", "1")
     """
-    print("\n[ARC] Processing...")
+    print("\n[ARC-Challenge] Processing...")
     dataset_id = "allenai/ai2_arc"
+    config = "ARC-Challenge"
 
     for split in ["train", "test"]:
-        all_records = []
+        print(f"  Loading {split} split...")
+        data = load_dataset(dataset_id, config, split=split)
 
-        for config in ["ARC-Challenge", "ARC-Easy"]:
-            print(f"  Loading {config} {split} split...")
-            try:
-                data = load_dataset(dataset_id, config, split=split)
+        records = []
+        for item in data:
+            question = item["question"]
+            choices = item["choices"]
+            answer_key = item["answerKey"]
 
-                for item in data:
-                    question = item["question"]
-                    choices_data = item["choices"]
-                    answer_key = item["answerKey"]
+            # Extract choice texts
+            choice_texts = choices["text"]
 
-                    # choices_data is {"text": [...], "label": [...]}
-                    choices_text = choices_data["text"]
-                    choices_labels = choices_data["label"]
+            # Format MCQ
+            question_with_choices = format_mcq_input(question, choice_texts)
 
-                    # Format choices with labels
-                    formatted_choices = []
-                    for label, text in zip(choices_labels, choices_text):
-                        formatted_choices.append(text)
+            # Convert answerKey to A-D (1->A, 2->B or A->A)
+            if answer_key.isdigit():
+                answer_letter = chr(65 + int(answer_key) - 1)
+            else:
+                answer_letter = answer_key
 
-                    # Build input with question and choices
-                    input_text = question + "\n\n"
-                    for label, text in zip(choices_labels, choices_text):
-                        input_text += f"{label}. {text}\n"
+            records.append({
+                "instruction": DATASET_PROMPTS["arc_c"],
+                "input": question_with_choices,
+                "output": format_output(None, answer_letter)
+            })
 
-                    # Use split-aware prompt
-                    instruction = TRAIN_SYSTEM_PROMPT if split == "train" else TEST_SYSTEM_PROMPT
+        output_base = train_dir if split == "train" else eval_dir
+        save_json(records, output_base / f"arc_c_{split}.json")
 
-                    all_records.append({
-                        "instruction": instruction,
-                        "input": input_text.strip(),
-                        "output": format_output(None, answer_key)
-                    })
 
-                print(f"    Loaded {len(data)} questions")
-            except Exception as e:
-                print(f"    Error loading {config}: {e}")
+def process_strategyqa(eval_dir: Path):
+    """
+    Process StrategyQA dataset (test only).
 
-        if all_records:
-            save_json(all_records, output_dir / f"arc_{split}.json")
+    StrategyQA format:
+    - question: yes/no question
+    - answer: boolean (true/false)
+    """
+    print("\n[StrategyQA] Processing...")
+    dataset_id = "wics/strategy-qa"
+
+    print("  Loading test split...")
+    data = load_dataset(dataset_id, split="test")
+
+    records = []
+    for item in data:
+        question = item["question"]
+        answer_bool = item["answer"]
+
+        # Convert boolean to Yes/No
+        answer_text = "Yes" if answer_bool else "No"
+
+        records.append({
+            "instruction": DATASET_PROMPTS["strategyqa"],
+            "input": question,
+            "output": format_output(None, answer_text)
+        })
+
+    save_json(records, eval_dir / "strategyqa_test.json")
+
+
+def process_openbookqa(eval_dir: Path):
+    """
+    Process OpenBookQA dataset.
+
+    OpenBookQA format:
+    - question_stem: question text
+    - choices: {"text": [...], "label": [...]}
+    - answerKey: answer label (e.g., "A")
+    """
+    print("\n[OpenBookQA] Processing...")
+    dataset_id = "allenai/openbookqa"
+    config = "main"
+
+    print("  Loading test split...")
+    data = load_dataset(dataset_id, config, split="test")
+
+    records = []
+    for item in data:
+        question = item["question_stem"]
+        choices = item["choices"]
+        answer_key = item["answerKey"]
+
+        # Extract choice texts
+        choice_texts = choices["text"]
+
+        # Format MCQ
+        question_with_choices = format_mcq_input(question, choice_texts)
+
+        records.append({
+            "instruction": DATASET_PROMPTS["openbookqa"],
+            "input": question_with_choices,
+            "output": format_output(None, answer_key)
+        })
+
+    save_json(records, eval_dir / "openbookqa_test.json")
+
+
+def process_anli(eval_dir: Path, round_name: str):
+    """
+    Process ANLI dataset for a specific round.
+
+    ANLI format:
+    - premise: premise text
+    - hypothesis: hypothesis text
+    - label: 0 (entailment), 1 (neutral), 2 (contradiction)
+
+    Args:
+        eval_dir: Output directory
+        round_name: "r2" or "r3"
+    """
+    print(f"\n[ANLI-{round_name.upper()}] Processing...")
+    dataset_id = "facebook/anli"
+
+    split_name = f"test_{round_name}"
+    print(f"  Loading {split_name} split...")
+    data = load_dataset(dataset_id, split=split_name)
+
+    records = []
+    label_map = {0: "A", 1: "B", 2: "C"}
+
+    for item in data:
+        premise = item["premise"]
+        hypothesis = item["hypothesis"]
+        label = item["label"]
+
+        # Input format: Premise + Hypothesis + choices
+        input_text = f"""Premise: {premise}
+Hypothesis: {hypothesis}
+
+A. entailment
+B. neutral
+C. contradiction"""
+
+        answer_letter = label_map[label]
+
+        records.append({
+            "instruction": DATASET_PROMPTS["anli"],
+            "input": input_text,
+            "output": format_output(None, answer_letter)
+        })
+
+    save_json(records, eval_dir / f"anli_{round_name}_test.json")
+
+
+def process_bbh(eval_dir: Path, subtasks: List[str]):
+    """
+    Process BBH dataset for specific subtasks.
+
+    BBH format varies by subtask:
+    - input: question text
+    - target: answer text
+
+    Args:
+        eval_dir: Output directory
+        subtasks: List of subtask names
+    """
+    print("\n[BBH] Processing...")
+    dataset_id = "lukaemon/bbh"
+
+    for subtask in subtasks:
+        print(f"  Loading subtask: {subtask}...")
+        try:
+            data = load_dataset(dataset_id, subtask, split="test")
+
+            # Select prompt based on subtask
+            prompt = BBH_PROMPTS.get(subtask, BBH_PROMPTS["default_mcq"])
+
+            records = []
+            for item in data:
+                input_text = item["input"]
+                target = item["target"]
+
+                records.append({
+                    "instruction": prompt,
+                    "input": input_text,
+                    "output": format_output(None, target)
+                })
+
+            save_json(records, eval_dir / f"bbh_{subtask}_test.json")
+
+        except Exception as e:
+            print(f"    Error loading {subtask}: {e}")
 
 
 # =============================================================================
@@ -522,19 +743,19 @@ def process_arc(output_dir: Path):
 
 def main():
     """Main entry point."""
+    set_random_seed()
     print("=" * 60)
     print("Dataset Preparation Script")
     print("=" * 60)
 
     math_dir = DATA_DIR / "math"
-    knowledge_dir = DATA_DIR / "knowledge"
+    train_dir = math_dir / "train" / "data"
+    eval_dir = math_dir / "eval" / "data"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    eval_dir.mkdir(parents=True, exist_ok=True)
 
-    math_dir.mkdir(parents=True, exist_ok=True)
-    knowledge_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"\nOutput directories:")
-    print(f"  Math: {math_dir}")
-    print(f"  Knowledge: {knowledge_dir}")
+    print(f"\nOutput directory (train): {train_dir}")
+    print(f"Output directory (eval): {eval_dir}")
 
     # ==========================================
     # Process Math Domain
@@ -544,51 +765,89 @@ def main():
     print("=" * 60)
 
     # 1. GSM8K (train + test)
-    process_gsm8k(math_dir)
+    process_gsm8k(train_dir, eval_dir)
 
     # 2. MATH (train + test)
-    process_math(math_dir)
+    process_math(train_dir, eval_dir)
 
     # 3. MMLU Math subjects (test only)
-    process_mmlu(math_dir, MMLU_MATH_SUBJECTS, "mmlu_test.json", is_math_domain=True)
+    process_mmlu(eval_dir, MMLU_MATH_SUBJECTS, "mmlu_test.json", is_math_domain=True)
 
     # 4. SVAMP (test only)
-    process_svamp(math_dir)
+    process_svamp(eval_dir)
 
     # 5. ASDiv (test only)
-    process_asdiv(math_dir)
+    process_asdiv(eval_dir)
 
     # 6. MAWPS (test only)
-    process_mawps(math_dir)
+    process_mawps(eval_dir)
 
     # ==========================================
-    # Process Knowledge Domain
+    # Process Logical Domain
     # ==========================================
     print("\n" + "=" * 60)
-    print("KNOWLEDGE DOMAIN")
+    print("LOGICAL DOMAIN")
     print("=" * 60)
 
-    # 1. SciBench (80:20 split)
-    process_scibench(knowledge_dir)
+    logical_dir = DATA_DIR / "logical"
+    logical_train_dir = logical_dir / "train" / "data"
+    logical_eval_dir = logical_dir / "eval" / "data"
+    logical_train_dir.mkdir(parents=True, exist_ok=True)
+    logical_eval_dir.mkdir(parents=True, exist_ok=True)
 
-    # 2. ARC (train + test)
-    process_arc(knowledge_dir)
+    # 1. ReClor (train + test)
+    process_reclor(logical_train_dir, logical_eval_dir)
 
-    # 3. MMLU Science subjects (test only)
-    process_mmlu(knowledge_dir, MMLU_SCIENCE_SUBJECTS, "mmlu_test.json")
+    # 2. ANLI R2, R3 (test only)
+    process_anli(logical_eval_dir, "r2")
+    process_anli(logical_eval_dir, "r3")
 
+    # 3. BBH logical subtasks (test only)
+    process_bbh(logical_eval_dir, BBH_LOGICAL_SUBTASKS)
+
+    # ==========================================
+    # Process Commonsense Domain
+    # ==========================================
+    print("\n" + "=" * 60)
+    print("COMMONSENSE DOMAIN")
+    print("=" * 60)
+
+    commonsense_dir = DATA_DIR / "commonsense"
+    commonsense_train_dir = commonsense_dir / "train" / "data"
+    commonsense_eval_dir = commonsense_dir / "eval" / "data"
+    commonsense_train_dir.mkdir(parents=True, exist_ok=True)
+    commonsense_eval_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. ARC-Challenge (train + test)
+    process_arc_c(commonsense_train_dir, commonsense_eval_dir)
+
+    # 2. StrategyQA (test only)
+    process_strategyqa(commonsense_eval_dir)
+
+    # 3. OpenBookQA (test only)
+    process_openbookqa(commonsense_eval_dir)
+
+    # ==========================================
+    # Print Summary
+    # ==========================================
     print("\n" + "=" * 60)
     print("Dataset preparation completed!")
     print("=" * 60)
 
-    # Print summary
     print("\n[Summary]")
-    for domain_dir in [math_dir, knowledge_dir]:
+    for domain_dir in [math_dir, logical_dir, commonsense_dir]:
+        if not domain_dir.exists():
+            continue
         print(f"\n{domain_dir.name}/")
-        for json_file in sorted(domain_dir.glob("*.json")):
-            with open(json_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                print(f"  {json_file.name}: {len(data)} records")
+        for section_name, section_dir in [("train/data", domain_dir / "train" / "data"),
+                                           ("eval/data", domain_dir / "eval" / "data")]:
+            if not section_dir.exists():
+                continue
+            print(f"  {section_name}/")
+            for json_file in sorted(section_dir.glob("*.json")):
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    print(f"    {json_file.name}: {len(data)} records")
 
 
 if __name__ == "__main__":

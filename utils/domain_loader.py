@@ -38,8 +38,15 @@ class DomainLoader(BaseDatasetLoader):
 
     # Terminal Goals for each training dataset
     TERMINAL_GOALS = {
+        # Math domain
         "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
-        "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution."
+        "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution.",
+
+        # Logical domain
+        "reclor": "Analyze logical reasoning problems by comprehending complex passages, identifying logical relationships, and selecting the most appropriate conclusion based on formal reasoning principles.",
+
+        # Commonsense domain
+        "arc_c": "Apply commonsense scientific knowledge to solve elementary science problems by understanding fundamental concepts and selecting the correct answer from multiple choices.",
     }
 
     DOMAIN_CONFIG = {
@@ -59,6 +66,41 @@ class DomainLoader(BaseDatasetLoader):
             "default_answer_type": AnswerType.NUMERIC,
             "domain_category": "math_logic",
             "data_dir": "data/math"
+        },
+        "logical": {
+            "training_datasets": {
+                "reclor": {"filename": "reclor_train.json", "answer_type": AnswerType.MCQ},
+            },
+            "eval_datasets": {
+                "reclor": {"filename": "reclor_test.json", "answer_type": AnswerType.MCQ},
+                "anli_r2": {"filename": "anli_r2_test.json", "answer_type": AnswerType.MCQ},
+                "anli_r3": {"filename": "anli_r3_test.json", "answer_type": AnswerType.MCQ},
+                "bbh_boolean_expressions": {"filename": "bbh_boolean_expressions_test.json", "answer_type": AnswerType.BOOLEAN},
+                "bbh_formal_fallacies": {"filename": "bbh_formal_fallacies_test.json", "answer_type": AnswerType.TEXT},
+                "bbh_logical_deduction_three_objects": {"filename": "bbh_logical_deduction_three_objects_test.json", "answer_type": AnswerType.MCQ},
+                "bbh_logical_deduction_five_objects": {"filename": "bbh_logical_deduction_five_objects_test.json", "answer_type": AnswerType.MCQ},
+                "bbh_logical_deduction_seven_objects": {"filename": "bbh_logical_deduction_seven_objects_test.json", "answer_type": AnswerType.MCQ},
+                "bbh_tracking_shuffled_objects_three_objects": {"filename": "bbh_tracking_shuffled_objects_three_objects_test.json", "answer_type": AnswerType.MCQ},
+                "bbh_tracking_shuffled_objects_five_objects": {"filename": "bbh_tracking_shuffled_objects_five_objects_test.json", "answer_type": AnswerType.MCQ},
+                "bbh_tracking_shuffled_objects_seven_objects": {"filename": "bbh_tracking_shuffled_objects_seven_objects_test.json", "answer_type": AnswerType.MCQ},
+                "bbh_web_of_lies": {"filename": "bbh_web_of_lies_test.json", "answer_type": AnswerType.BOOLEAN},
+            },
+            "default_answer_type": AnswerType.MCQ,
+            "domain_category": "logical_reasoning",
+            "data_dir": "data/logical"
+        },
+        "commonsense": {
+            "training_datasets": {
+                "arc_c": {"filename": "arc_c_train.json", "answer_type": AnswerType.MCQ},
+            },
+            "eval_datasets": {
+                "arc_c": {"filename": "arc_c_test.json", "answer_type": AnswerType.MCQ},
+                "strategyqa": {"filename": "strategyqa_test.json", "answer_type": AnswerType.BOOLEAN},
+                "openbookqa": {"filename": "openbookqa_test.json", "answer_type": AnswerType.MCQ},
+            },
+            "default_answer_type": AnswerType.MCQ,
+            "domain_category": "commonsense_reasoning",
+            "data_dir": "data/commonsense"
         }
     }
 

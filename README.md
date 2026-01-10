@@ -16,12 +16,16 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 |--------|--------------|---------------|
 | **Math** | GSM8K | Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems. |
 | **Math** | MATH | Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution. |
+| **Logical** | ReClor | Analyze logical reasoning problems by comprehending complex passages, identifying logical relationships, and selecting the most appropriate conclusion based on formal reasoning principles. |
+| **Commonsense** | ARC-Challenge | Apply commonsense scientific knowledge to solve elementary science problems by understanding fundamental concepts and selecting the correct answer from multiple choices. |
 
 ### 평가 데이터셋
 
-| 도메인 | 평가 데이터셋 |
-|--------|---------------|
-| **Math** | GSM8K, MATH, SVAMP, ASDiv, MAWPS, MMLU |
+| 도메인 | In-Domain 평가 | OOD 평가 |
+|--------|---------------|----------|
+| **Math** | GSM8K, MATH | SVAMP, ASDiv, MAWPS, MMLU |
+| **Logical** | ReClor | ANLI-R2, ANLI-R3, BBH (논리 추론 9개 태스크) |
+| **Commonsense** | ARC-Challenge | StrategyQA, OpenBookQA |
 
 ## 시스템 구조
 
@@ -169,6 +173,12 @@ python main.py --mode train --domain math --train-dataset gsm8k
 # Math 도메인 - MATH로 학습
 python main.py --mode train --domain math --train-dataset math
 
+# Logical 도메인 - ReClor로 학습
+python main.py --mode train --domain logical --train-dataset reclor
+
+# Commonsense 도메인 - ARC-Challenge로 학습
+python main.py --mode train --domain commonsense --train-dataset arc_c
+
 # 다른 학생 모델로 학습
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B-Instruct-2507
@@ -212,6 +222,18 @@ python main.py --mode eval --method baseline \
 # SVAMP Cross-dataset 평가
 python main.py --mode eval --method baseline \
     --domain math --eval-dataset svamp
+
+# Logical 도메인 - ReClor Baseline 평가
+python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset reclor
+
+# Logical 도메인 - ANLI-R2 OOD 평가
+python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset anli_r2
+
+# Commonsense 도메인 - StrategyQA OOD 평가
+python main.py --mode eval --method baseline \
+    --domain commonsense --eval-dataset strategyqa
 
 # 처음부터 새로 평가 (Resume 비활성화)
 python main.py --mode eval --method baseline \
@@ -275,8 +297,8 @@ python main.py --mode eval --method sft_id-mas \
 
 | 옵션 | 설명 | 기본값 |
 |------|------|--------|
-| `--domain` | 도메인: `math` | (필수) |
-| `--train-dataset` | 학습 데이터셋: `gsm8k`, `math` | (필수) |
+| `--domain` | 도메인: `math`, `logical`, `commonsense` | (필수) |
+| `--train-dataset` | 학습 데이터셋: `gsm8k`, `math`, `reclor`, `arc_c` | (필수) |
 | `--run-design` | 새로운 설계 생성 (기본값: 기존 설계 로드 또는 자동 생성) | False |
 | `--resume` | 기존 로그에서 이어서 학습 (`True`/`False`) | `True` |
 
@@ -311,36 +333,62 @@ ID-MAS Iterative Scaffolding Pipeline으로 생성된 SFT 데이터로 학습된
 
 ```
 data/
-└── math/                                           # Math 도메인
-    ├── train/                                      # 학습 데이터
-    │   ├── data/                                   # 원본 학습 데이터
-    │   │   ├── gsm8k_train.json                   # GSM8K 학습 데이터
-    │   │   └── math_train.json                    # MATH 학습 데이터
-    │   │
-    │   └── {Teacher-Model}/                        # Teacher 모델별 (예: gpt-5-2025-08-07)
-    │       ├── instructional-design/               # 설계 결과
-    │       │   ├── math_gsm8k_design.json         # GSM8K 설계
-    │       │   └── math_math_design.json          # MATH 설계
-    │       │
-    │       └── {Student-Model}/                    # Student 모델별 (예: Qwen3-4B-Instruct-2507)
-    │           ├── gsm8k_train_id-mas_{Model}.json     # SFT 데이터
-    │           ├── gsm8k_train_id-mas_{Model}_logs.json # Pipeline 로그
-    │           ├── gsm8k_checkpoint_{timestamp}.json   # 체크포인트
-    │           └── gsm8k_train_summary_{Model}.json    # 학습 요약
-    │
-    └── eval/                                       # 평가 데이터
-        ├── data/                                   # 원본 평가 데이터
-        │   ├── gsm8k_test.json                    # GSM8K 평가 데이터
-        │   ├── math_test.json                     # MATH 평가 데이터
-        │   ├── svamp_test.json                    # SVAMP 평가 데이터
-        │   ├── asdiv_test.json                    # ASDiv 평가 데이터
-        │   ├── mawps_test.json                    # MAWPS 평가 데이터
-        │   └── mmlu_test.json                     # MMLU (수학) 평가 데이터
-        │
-        └── {Model}/                                # 모델별 평가 결과
-            ├── gsm8k_eval_results-Baseline.json   # Baseline 평가
-            ├── gsm8k_eval_results-SFT.json        # SFT 평가
-            └── gsm8k_eval_results-SFT_ID-MAS.json # SFT_ID-MAS 평가
+├── math/                                           # Math 도메인
+│   ├── train/                                      # 학습 데이터
+│   │   ├── data/                                   # 원본 학습 데이터
+│   │   │   ├── gsm8k_train.json                   # GSM8K 학습 데이터
+│   │   │   └── math_train.json                    # MATH 학습 데이터
+│   │   │
+│   │   └── {Teacher-Model}/                        # Teacher 모델별
+│   │       ├── instructional-design/               # 설계 결과
+│   │       └── {Student-Model}/                    # Student 모델별 SFT 데이터
+│   │
+│   └── eval/                                       # 평가 데이터
+│       ├── data/                                   # 원본 평가 데이터
+│       │   ├── gsm8k_test.json
+│       │   ├── math_test.json
+│       │   ├── svamp_test.json
+│       │   ├── asdiv_test.json
+│       │   ├── mawps_test.json
+│       │   └── mmlu_test.json
+│       └── {Model}/                                # 모델별 평가 결과
+│
+├── logical/                                        # Logical 도메인 (NEW)
+│   ├── train/
+│   │   ├── data/
+│   │   │   └── reclor_train.json
+│   │   └── {Teacher-Model}/
+│   │       ├── instructional-design/
+│   │       └── {Student-Model}/
+│   └── eval/
+│       ├── data/
+│       │   ├── reclor_test.json                   # In-Domain
+│       │   ├── anli_r2_test.json                  # OOD
+│       │   ├── anli_r3_test.json                  # OOD
+│       │   ├── bbh_boolean_expressions_test.json  # OOD
+│       │   ├── bbh_formal_fallacies_test.json     # OOD
+│       │   ├── bbh_logical_deduction_three_objects_test.json
+│       │   ├── bbh_logical_deduction_five_objects_test.json
+│       │   ├── bbh_logical_deduction_seven_objects_test.json
+│       │   ├── bbh_tracking_shuffled_objects_three_objects_test.json
+│       │   ├── bbh_tracking_shuffled_objects_five_objects_test.json
+│       │   ├── bbh_tracking_shuffled_objects_seven_objects_test.json
+│       │   └── bbh_web_of_lies_test.json
+│       └── {Model}/
+│
+└── commonsense/                                    # Commonsense 도메인 (NEW)
+    ├── train/
+    │   ├── data/
+    │   │   └── arc_c_train.json
+    │   └── {Teacher-Model}/
+    │       ├── instructional-design/
+    │       └── {Student-Model}/
+    └── eval/
+        ├── data/
+        │   ├── arc_c_test.json                    # In-Domain
+        │   ├── strategyqa_test.json               # OOD
+        │   └── openbookqa_test.json               # OOD
+        └── {Model}/
 ```
 
 ## 데이터 형식
@@ -420,6 +468,8 @@ python -m utils.dataset_preparer
 
 이 스크립트는 다음 데이터셋을 다운로드합니다:
 - **Math 도메인**: GSM8K, MATH, SVAMP, ASDiv, MAWPS, MMLU (수학 과목)
+- **Logical 도메인**: ReClor, ANLI-R2, ANLI-R3, BBH (논리 추론 9개 태스크)
+- **Commonsense 도메인**: ARC-Challenge, StrategyQA, OpenBookQA
 
 ## HuggingFace 토큰 설정
 
@@ -507,8 +557,6 @@ DOMAIN_CONFIG = {
 }
 ```
 
-**참고**: config 모듈은 리팩토링되어 5개의 서브모듈로 분리되었습니다. backward compatibility를 위해 `from config import ...` 형태의 기존 import는 그대로 작동합니다.
-
 ### 3. 실행 및 테스트
 
 ```bash
@@ -525,12 +573,3 @@ python main.py --mode eval --method baseline --domain your_domain --eval-dataset
 - 데이터 파일 형식은 기존 도메인(math)의 JSON 구조를 참고하세요
 - 새 도메인 추가 시 코드 수정은 불필요합니다 (설정만 수정)
 - 더 자세한 가이드는 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요
-
-## 참고 자료
-
-- **Dick & Carey 모델**: PDF 참고 (prompt 초안.pdf)
-- **OpenAI API**: https://platform.openai.com/docs
-- **GSM8K**: https://huggingface.co/datasets/openai/gsm8k
-- **MATH**: https://huggingface.co/datasets/EleutherAI/hendrycks_math
-- **ARC**: https://huggingface.co/datasets/allenai/ai2_arc
-- **MMLU**: https://huggingface.co/datasets/cais/mmlu
