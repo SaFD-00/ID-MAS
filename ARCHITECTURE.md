@@ -721,12 +721,15 @@ python main.py --mode eval --method sft_id-mas \
 # 교사 모델 (OpenAI API 또는 로컬 HuggingFace)
 AVAILABLE_TEACHER_MODELS = [
     "gpt-5-2025-08-07",                 # 기본 (OpenAI API)
-    "Qwen/Qwen2.5-3B-Instruct",         # 로컬 HuggingFace
+    "meta-llama/Llama-3.1-8B-Instruct", # 로컬 HuggingFace
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
     "Qwen/Qwen3-4B-Instruct-2507",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
 ]
 
 DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
@@ -767,11 +770,15 @@ DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)
 
 # 학생 모델 (CLI에서 선택 가능)
 AVAILABLE_STUDENT_MODELS = [
-    "Qwen/Qwen3-4B-Instruct-2507",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",      # 기본값
     "Qwen/Qwen2.5-7B-Instruct",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "Qwen/Qwen3-4B-Instruct-2507",
 ]
 ```
 `main.py`에서 `--teacher-model` CLI 인자로 `create_teacher_config()`를 호출해 교사/설계 모델 설정을 생성합니다. `gpt-`, `o1-`, `o3-` 계열은 OpenAI API를, 그 외 모델은 로컬 HuggingFace 직접 로드를 사용합니다.

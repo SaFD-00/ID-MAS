@@ -91,12 +91,15 @@ ID-MAS/
 | 유형 | 모델 | 비고 |
 |------|------|------|
 | OpenAI | gpt-5-2025-08-07 | 기본값 (API) |
+| 로컬 | meta-llama/Llama-3.1-8B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | meta-llama/Llama-3.1-70B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | meta-llama/Llama-3.2-3B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | meta-llama/Llama-3.3-70B-Instruct | HuggingFace 직접 로드 |
 | 로컬 | Qwen/Qwen2.5-3B-Instruct | HuggingFace 직접 로드 |
 | 로컬 | Qwen/Qwen2.5-7B-Instruct | HuggingFace 직접 로드 |
 | 로컬 | Qwen/Qwen2.5-14B-Instruct | HuggingFace 직접 로드 |
+| 로컬 | Qwen/Qwen2.5-72B-Instruct | HuggingFace 직접 로드 |
 | 로컬 | Qwen/Qwen3-4B-Instruct-2507 | HuggingFace 직접 로드 |
-| 로컬 | meta-llama/Llama-3.1-8B-Instruct | HuggingFace 직접 로드 |
-| 로컬 | meta-llama/Llama-3.2-3B-Instruct | HuggingFace 직접 로드 |
 
 #### 로컬 모델 사용 예시
 
@@ -114,12 +117,15 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 ### 학생 모델 (선택 가능)
 | 모델 | 설명 |
 |------|------|
-| `Qwen/Qwen3-4B-Instruct-2507` | Qwen3 4B (최신) |
+| `meta-llama/Llama-3.1-8B-Instruct` | Llama 3.1 8B |
+| `meta-llama/Llama-3.1-70B-Instruct` | Llama 3.1 70B |
+| `meta-llama/Llama-3.2-3B-Instruct` | Llama 3.2 3B |
+| `meta-llama/Llama-3.3-70B-Instruct` | Llama 3.3 70B |
 | `Qwen/Qwen2.5-3B-Instruct` | Qwen2.5 3B (기본값) |
 | `Qwen/Qwen2.5-7B-Instruct` | Qwen2.5 7B |
 | `Qwen/Qwen2.5-14B-Instruct` | Qwen2.5 14B |
-| `meta-llama/Llama-3.1-8B-Instruct` | Llama 3.1 8B |
-| `meta-llama/Llama-3.2-3B-Instruct` | Llama 3.2 3B |
+| `Qwen/Qwen2.5-72B-Instruct` | Qwen2.5 72B |
+| `Qwen/Qwen3-4B-Instruct-2507` | Qwen3 4B (최신) |
 
 ## 빠른 시작
 

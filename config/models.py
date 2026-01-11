@@ -12,13 +12,15 @@ AVAILABLE_TEACHER_MODELS = [
     # OpenAI
     "gpt-5-2025-08-07",
     # LLaMA-Factory API (OpenAI-compatible)
-    "openai/gpt-oss-20b",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
     "Qwen/Qwen3-4B-Instruct-2507",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
 ]
 
 # 기본 Teacher 모델
@@ -66,12 +68,15 @@ def create_teacher_config(model_name: str = None) -> dict:
 
 # 지원하는 학생 모델 목록
 AVAILABLE_STUDENT_MODELS = [
-    "Qwen/Qwen3-4B-Instruct-2507",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "Qwen/Qwen3-4B-Instruct-2507",
 ]
 
 # 기본 학생 모델

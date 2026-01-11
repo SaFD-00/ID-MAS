@@ -24,13 +24,15 @@ AVAILABLE_TEACHER_MODELS = [
     # OpenAI
     "gpt-5-2025-08-07",
     # LLaMA-Factory API (OpenAI-compatible)
-    "openai/gpt-oss-20b",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
     "Qwen/Qwen3-4B-Instruct-2507",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
 ]
 
 # 기본 Teacher 모델
@@ -87,12 +89,15 @@ DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)
 
 # 지원하는 학생 모델 목록
 AVAILABLE_STUDENT_MODELS = [
-    "Qwen/Qwen3-4B-Instruct-2507",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.2-3B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen2.5-14B-Instruct",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "Qwen/Qwen3-4B-Instruct-2507",
 ]
 
 # 기본 학생 모델
@@ -164,12 +169,15 @@ def get_model_short_name(model_name: str = None) -> str:
 # Model name mapping for SFT fine-tuned models on HuggingFace Hub
 # Maps base model names to short names used in SaFD-00/{model}-{domain} repos
 MODEL_NAME_TO_SHORT = {
+    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
+    "meta-llama/Llama-3.1-70B-Instruct": "llama3.1-70b",
+    "meta-llama/Llama-3.2-3B-Instruct": "llama3.2-3b",
+    "meta-llama/Llama-3.3-70B-Instruct": "llama3.3-70b",
     "Qwen/Qwen2.5-3B-Instruct": "qwen2.5-3b",
     "Qwen/Qwen2.5-7B-Instruct": "qwen2.5-7b",
     "Qwen/Qwen2.5-14B-Instruct": "qwen2.5-14b",
+    "Qwen/Qwen2.5-72B-Instruct": "qwen2.5-72b",
     "Qwen/Qwen3-4B-Instruct-2507": "qwen3-4b",
-    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
-    "meta-llama/Llama-3.2-3B-Instruct": "llama3.2-3b",
 }
 
 

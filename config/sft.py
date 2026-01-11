@@ -5,12 +5,15 @@ SFT model name mappings and resolution.
 # Model name mapping for SFT fine-tuned models on HuggingFace Hub
 # Maps base model names to short names used in SaFD-00/{model}-{domain} repos
 MODEL_NAME_TO_SHORT = {
+    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
+    "meta-llama/Llama-3.1-70B-Instruct": "llama3.1-70b",
+    "meta-llama/Llama-3.2-3B-Instruct": "llama3.2-3b",
+    "meta-llama/Llama-3.3-70B-Instruct": "llama3.3-70b",
     "Qwen/Qwen2.5-3B-Instruct": "qwen2.5-3b",
     "Qwen/Qwen2.5-7B-Instruct": "qwen2.5-7b",
     "Qwen/Qwen2.5-14B-Instruct": "qwen2.5-14b",
+    "Qwen/Qwen2.5-72B-Instruct": "qwen2.5-72b",
     "Qwen/Qwen3-4B-Instruct-2507": "qwen3-4b",
-    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
-    "meta-llama/Llama-3.2-3B-Instruct": "llama3.2-3b",
 }
 
 
