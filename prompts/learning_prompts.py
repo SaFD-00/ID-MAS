@@ -300,7 +300,7 @@ Extract and preserve:
 4. The final answer attempted in each iteration
 
 [Output Format]
-Keep your summary under 800 characters. Use this structure:
+Keep your summary under 1000 characters. Use this structure:
 
 ATTEMPT SUMMARY:
 - Iter 1: [approach] → [specific error] → Answer: [answer]

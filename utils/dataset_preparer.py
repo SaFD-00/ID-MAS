@@ -147,23 +147,25 @@ def set_random_seed(seed: int = RANDOM_SEED) -> None:
     except Exception:
         pass
 
-def format_output(reasoning: Optional[str], answer: str) -> str:
+def format_output(answer: str, reasoning: Optional[str] = None, include_reasoning: bool = False) -> str:
     """
-    Format output with reasoning and answer in \\boxed{} format.
+    Format output with "The answer is \\boxed{answer}" format.
 
     Args:
-        reasoning: Step-by-step reasoning (can be None)
         answer: Final answer
+        reasoning: Step-by-step reasoning (optional)
+        include_reasoning: If True, include reasoning before answer
 
     Returns:
-        Formatted output string with \\boxed{answer} format
+        Formatted output string with "The answer is \\boxed{answer}" format
     """
     # Format answer in \boxed{} - escape backslash for proper string formatting
     boxed_answer = f"\\boxed{{{answer}}}"
+    final_answer = f"The answer is {boxed_answer}"
 
-    if reasoning and reasoning.strip():
-        return f"{reasoning.strip()}\n\n{boxed_answer}"
-    return boxed_answer
+    if include_reasoning and reasoning and reasoning.strip():
+        return f"{reasoning.strip()}\n\n{final_answer}"
+    return final_answer
 
 
 def format_mcq_input(question: str, choices: List[str]) -> str:
@@ -235,7 +237,9 @@ def process_gsm8k(train_dir: Path, eval_dir: Path):
         print(f"  Loading {split} split...")
         data = load_dataset(dataset_id, "main", split=split)
 
-        records = []
+        records_short = []  # Without reasoning
+        records_full = []   # With reasoning
+
         for item in data:
             question = item["question"]
             answer_text = item["answer"]
@@ -246,17 +250,26 @@ def process_gsm8k(train_dir: Path, eval_dir: Path):
                 reasoning = parts[0].strip()
                 final_answer = parts[1].strip()
             else:
-                reasoning = answer_text
+                reasoning = ""
                 final_answer = answer_text
 
-            records.append({
+            # Short version: "The answer is \boxed{answer}"
+            records_short.append({
                 "instruction": DATASET_PROMPTS["gsm8k"],
                 "input": question,
-                "output": format_output(reasoning, final_answer)
+                "output": format_output(final_answer)
+            })
+
+            # Full version: "{reasoning}\n\nThe answer is \boxed{answer}"
+            records_full.append({
+                "instruction": DATASET_PROMPTS["gsm8k"],
+                "input": question,
+                "output": format_output(final_answer, reasoning=reasoning, include_reasoning=True)
             })
 
         output_base = train_dir if split == "train" else eval_dir
-        save_json(records, output_base / f"gsm8k_{split}.json")
+        save_json(records_short, output_base / f"gsm8k_{split}.json")
+        save_json(records_full, output_base / f"gsm8k_reasoning_{split}.json")
 
 
 def process_math(train_dir: Path, eval_dir: Path):
@@ -287,7 +300,8 @@ def process_math(train_dir: Path, eval_dir: Path):
 
     for split in ["train", "test"]:
         print(f"  Loading {split} split...")
-        records = []
+        records_short = []  # Without reasoning
+        records_full = []   # With reasoning
         level_counts = {}
 
         for config in math_configs:
@@ -308,17 +322,26 @@ def process_math(train_dir: Path, eval_dir: Path):
                     # Track level distribution
                     level_counts[level] = level_counts.get(level, 0) + 1
 
-                    records.append({
+                    # Short version: "The answer is \boxed{answer}"
+                    records_short.append({
                         "instruction": DATASET_PROMPTS["math"],
                         "input": problem,
-                        "output": format_output(solution, boxed_answer)
+                        "output": format_output(boxed_answer)
+                    })
+
+                    # Full version: "{solution}\n\nThe answer is \boxed{answer}"
+                    records_full.append({
+                        "instruction": DATASET_PROMPTS["math"],
+                        "input": problem,
+                        "output": format_output(boxed_answer, reasoning=solution, include_reasoning=True)
                     })
             except Exception as e:
                 print(f"      Error loading {config}: {e}")
 
         print(f"  Level distribution: {level_counts}")
         output_base = train_dir if split == "train" else eval_dir
-        save_json(records, output_base / f"math_{split}.json")
+        save_json(records_short, output_base / f"math_{split}.json")
+        save_json(records_full, output_base / f"math_reasoning_{split}.json")
 
 
 def process_svamp(output_dir: Path):
@@ -348,7 +371,7 @@ def process_svamp(output_dir: Path):
         records.append({
             "instruction": DATASET_PROMPTS["svamp"],
             "input": full_question,
-            "output": format_output(None, answer)
+            "output": format_output(answer)
         })
 
     save_json(records, output_dir / "svamp_test.json")
@@ -392,7 +415,7 @@ def process_asdiv(output_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["asdiv"],
                 "input": full_question,
-                "output": format_output(None, answer_clean)
+                "output": format_output(answer_clean)
             })
 
     if records:
@@ -431,7 +454,7 @@ def process_mawps(output_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["mawps"],
                 "input": question,
-                "output": format_output(None, str(answer))
+                "output": format_output(str(answer))
             })
 
     if records:
@@ -498,7 +521,7 @@ def process_reclor(train_dir: Path, eval_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["reclor"],
                 "input": input_text.strip(),
-                "output": format_output(None, answer_letter)
+                "output": format_output(answer_letter)
             })
 
         # 파일명 결정
@@ -551,7 +574,7 @@ def process_arc_c(train_dir: Path, eval_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["arc_c"],
                 "input": question_with_choices,
-                "output": format_output(None, answer_letter)
+                "output": format_output(answer_letter)
             })
 
         output_base = train_dir if split == "train" else eval_dir
@@ -583,7 +606,7 @@ def process_strategyqa(eval_dir: Path):
         records.append({
             "instruction": DATASET_PROMPTS["strategyqa"],
             "input": question,
-            "output": format_output(None, answer_text)
+            "output": format_output(answer_text)
         })
 
     save_json(records, eval_dir / "strategyqa_test.json")
@@ -620,7 +643,7 @@ def process_openbookqa(eval_dir: Path):
         records.append({
             "instruction": DATASET_PROMPTS["openbookqa"],
             "input": question_with_choices,
-            "output": format_output(None, answer_key)
+            "output": format_output(answer_key)
         })
 
     save_json(records, eval_dir / "openbookqa_test.json")
@@ -667,7 +690,7 @@ C. contradiction"""
         records.append({
             "instruction": DATASET_PROMPTS["anli"],
             "input": input_text,
-            "output": format_output(None, answer_letter)
+            "output": format_output(answer_letter)
         })
 
     save_json(records, eval_dir / f"anli_{round_name}_test.json")
@@ -705,7 +728,7 @@ def process_bbh(eval_dir: Path, subtasks: List[str]):
                 all_records.append({
                     "instruction": prompt,
                     "input": input_text,
-                    "output": format_output(None, target)
+                    "output": format_output(target)
                 })
 
         except Exception as e:

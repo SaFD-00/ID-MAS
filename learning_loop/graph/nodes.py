@@ -87,15 +87,15 @@ def process_question_scaffolding(
     if sft_case == SFTCase.A.value:
         updates["case_a_count"] = state.get("case_a_count", 0) + 1
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
-        print(f"  -> Case A: 한번에 성공! (1회차 PO 충족)")
+        print(f"  -> Case A: Success on first attempt! (PO satisfied at iteration 1)")
     elif sft_case == SFTCase.B.value:
         updates["case_b_count"] = state.get("case_b_count", 0) + 1
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
         iterations = result.get("iterative_scaffolding", {}).get("iterations_needed", 0)
-        print(f"  -> Case B: Iterative Scaffolding 성공! ({iterations}회차 PO 충족)")
+        print(f"  -> Case B: Iterative Scaffolding succeeded! (PO satisfied at iteration {iterations})")
     elif sft_case == SFTCase.C.value:
         updates["case_c_count"] = state.get("case_c_count", 0) + 1
-        print(f"  -> Case C: 5회 실패 후 재구성")
+        print(f"  -> Case C: Reconstruction after 5 failed attempts")
 
     return updates
 
