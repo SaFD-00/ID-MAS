@@ -485,17 +485,15 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
                 "error_message": str(e),
                 "error_position": f"line {e.lineno}, column {e.colno}" if hasattr(e, 'lineno') else "unknown",
                 "response_length": len(text),
-                "response_preview": text[:500] if len(text) > 500 else text,
+                "response": text,
             }
 
             # 상세 오류 메시지 생성
-            error_msg = f"JSON 파싱 오류: {error_details['error_message']}"
+            error_msg = f"JSON Parsing Error: {error_details['error_message']}"
             if error_details['error_position'] != "unknown":
                 error_msg += f" at {error_details['error_position']}"
-            error_msg += f"\n응답 길이: {error_details['response_length']} characters"
-            error_msg += f"\n응답 미리보기:\n{error_details['response_preview']}"
-            if len(text) > 500:
-                error_msg += "\n..."
+            error_msg += f"\nResponse Length: {error_details['response_length']} characters"
+            error_msg += f"\nResponse:\n{error_details['response']}"
 
             raise Exception(error_msg)
 
