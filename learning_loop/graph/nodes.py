@@ -93,9 +93,33 @@ def process_question_scaffolding(
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
         iterations = result.get("iterative_scaffolding", {}).get("iterations_needed", 0)
         print(f"  -> Case B: Iterative Scaffolding succeeded! (PO satisfied at iteration {iterations})")
+
+        # Check if Case B reconstruction used fallback
+        failure = result.get("failure", {})
+        if failure.get("reconstruction", {}).get("is_fallback"):
+            updates["case_b_fallback_count"] = state.get("case_b_fallback_count", 0) + 1
+            print(f"     [Warning] Case B reconstruction failed - using fallback response")
     elif sft_case == SFTCase.C.value:
         updates["case_c_count"] = state.get("case_c_count", 0) + 1
         print(f"  -> Case C: Reconstruction after 5 failed attempts")
+
+        # Check if Case C reconstruction used fallback
+        failure = result.get("failure", {})
+        if failure.get("reconstruction", {}).get("is_fallback"):
+            updates["case_c_fallback_count"] = state.get("case_c_fallback_count", 0) + 1
+            print(f"     [Warning] Case C reconstruction failed - using fallback response")
+
+    # Check for other failures (all cases)
+    failure = result.get("failure", {})
+    if failure.get("evaluation", {}).get("is_fallback"):
+        updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1
+        print(f"     [Warning] PO evaluation failed - using fallback")
+    if failure.get("hint_generation"):  # list이므로 존재 여부만 확인
+        updates["hint_fallback_count"] = state.get("hint_fallback_count", 0) + 1
+        print(f"     [Warning] Hint generation failed - using fallback")
+    if failure.get("summarization", {}).get("is_fallback"):
+        updates["summarization_fallback_count"] = state.get("summarization_fallback_count", 0) + 1
+        print(f"     [Warning] Conversation summarization failed - using fallback")
 
     return updates
 
@@ -162,6 +186,7 @@ def _process_iterative_scaffolding(
     response = None
     last_correct_iteration = None
     last_correct_response = None
+    failures = {}  # failure metadata 수집용
 
     for iteration in range(1, max_iterations + 1):
         # Iteration 1: Student generates initial response with scaffolding
@@ -199,6 +224,12 @@ def _process_iterative_scaffolding(
                 ground_truth=question["output"],
             )
             all_satisfied = evaluation.get("overall_assessment", {}).get("all_satisfied", False)
+
+            # Evaluation failure 메타데이터 수집
+            if evaluation and evaluation.get("_failure_metadata"):
+                eval_failure = evaluation["_failure_metadata"].get("evaluation")
+                if eval_failure:
+                    failures["evaluation"] = eval_failure
         else:
             evaluation = None
             all_satisfied = is_correct
@@ -240,6 +271,7 @@ def _process_iterative_scaffolding(
     if all_satisfied:
         iterations_needed = len(iterations)
 
+        reconstruction = None
         if iterations_needed == 1:
             # Case A: 1회차 성공 - 학생 응답 그대로 사용
             sft_output = response
@@ -256,6 +288,13 @@ def _process_iterative_scaffolding(
             )
             sft_output = reconstruction.get("reconstructed_response", response)
             sft_case = SFTCase.B.value
+
+        # Case B reconstruction failure 메타데이터 추출 및 병합
+        if reconstruction:
+            failure_metadata = reconstruction.get("_failure_metadata")
+            if failure_metadata:
+                # Dict of dicts 병합
+                failures.update(failure_metadata)
 
         return QuestionResult(
             id=question["id"],
@@ -274,6 +313,7 @@ def _process_iterative_scaffolding(
                 "conversation_history": conversation_history,
                 "iterations": iterations,
             },
+            failure=failures if failures else None,  # 모든 failure를 Dict of dicts로 저장
         )
     else:
         # Failed after max iterations - need reconstruction (PO not satisfied)
@@ -288,6 +328,12 @@ def _process_iterative_scaffolding(
         )
 
         reconstructed_response = reconstruction.get("reconstructed_response", "")
+
+        # Case C reconstruction failure 메타데이터 추출 및 병합
+        failure_metadata = reconstruction.get("_failure_metadata")
+        if failure_metadata:
+            # Dict of dicts 병합
+            failures.update(failure_metadata)
 
         return QuestionResult(
             id=question["id"],
@@ -314,6 +360,7 @@ def _process_iterative_scaffolding(
                 "student_weaknesses": reconstruction.get("student_weaknesses", []),
                 "learning_points": reconstruction.get("learning_points", []),
             },
+            failure=failures if failures else None,  # 모든 failure를 Dict of dicts로 저장
         )
 
 
@@ -524,7 +571,6 @@ def save_incremental_checkpoint(
         "scaffolding_results": _prepare_results_for_save(state.get("scaffolding_results", [])),
         "statistics": get_statistics(state),
         "is_complete": state.get("is_complete", False),
-        "current_phase": state.get("current_phase", "scaffolding"),
         "timestamp": datetime.now().isoformat(),
     }
 

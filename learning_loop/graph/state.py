@@ -48,6 +48,7 @@ class QuestionResult(QuestionResultRequired, total=False):
     # Iterative scaffolding details
     iterative_scaffolding: Optional[Dict[str, Any]]
     reconstruction: Optional[Dict[str, Any]]
+    failure: Optional[Dict[str, Dict[str, Any]]]  # 모든 과정의 failure 메타데이터 (Dict of dicts)
 
 
 class DesignResult(TypedDict, total=False):
@@ -115,6 +116,15 @@ class IDMASState(TypedDict, total=False):
     case_a_count: int  # 1회차 성공 (한번에 성공)
     case_b_count: int  # 2~5회차 성공 (Iterative Scaffolding 성공)
     case_c_count: int  # 5회 실패 후 재구성
+
+    # Reconstruction fallback statistics
+    case_b_fallback_count: int  # Case B reconstruction에서 fallback 사용 수
+    case_c_fallback_count: int  # Case C reconstruction에서 fallback 사용 수
+
+    # Other failure statistics
+    evaluation_fallback_count: int  # PO evaluation fallback 사용 수
+    hint_fallback_count: int  # Hint generation fallback 사용 수
+    summarization_fallback_count: int  # Conversation summarization fallback 사용 수
 
     # ==================== SFT Data ====================
     sft_data: List[Dict[str, Any]]
@@ -196,6 +206,11 @@ def create_initial_state(
         case_a_count=0,
         case_b_count=0,
         case_c_count=0,
+        case_b_fallback_count=0,
+        case_c_fallback_count=0,
+        evaluation_fallback_count=0,
+        hint_fallback_count=0,
+        summarization_fallback_count=0,
 
         # SFT Data
         sft_data=[],
@@ -228,21 +243,36 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
     case_a = state.get("case_a_count", 0)
     case_b = state.get("case_b_count", 0)
     case_c = state.get("case_c_count", 0)
+    case_b_fallback = state.get("case_b_fallback_count", 0)
+    case_c_fallback = state.get("case_c_fallback_count", 0)
+    evaluation_fallback = state.get("evaluation_fallback_count", 0)
+    hint_fallback = state.get("hint_fallback_count", 0)
+    summarization_fallback = state.get("summarization_fallback_count", 0)
+
+    total_failures = case_b_fallback + case_c_fallback + evaluation_fallback + hint_fallback + summarization_fallback
+    processed = state.get("scaffolding_processed", 0)
 
     return {
         "total_questions": state.get("total_questions", 0),
-        "scaffolding_processed": state.get("scaffolding_processed", 0),
+        "scaffolding_processed": processed,
         "case_statistics": {
             "case_a": case_a,  # 한번에 성공
             "case_b": case_b,  # Iterative Scaffolding 성공
             "case_c": case_c,  # 5회 실패 후 재구성
             "success_total": case_a + case_b,
-            "success_rate": (case_a + case_b) / state.get("scaffolding_processed", 1) if state.get("scaffolding_processed", 0) > 0 else 0,
+            "success_rate": (case_a + case_b) / processed if processed > 0 else 0,
         },
-        "sft_data_breakdown": {
-            "case_a": case_a,
-            "case_b": case_b,
-            "case_c": case_c,
+        "failures": {
+            "reconstruction": {
+                "case_b": case_b_fallback,
+                "case_c": case_c_fallback,
+                "total": case_b_fallback + case_c_fallback,
+            },
+            "evaluation": evaluation_fallback,
+            "hint": hint_fallback,
+            "summarization": summarization_fallback,
+            "total_failures": total_failures,
+            "failure_rate": total_failures / processed if processed > 0 else 0,
         },
     }
 
@@ -279,6 +309,11 @@ def load_checkpoint_from_logs(
         "case_a_count": 0,
         "case_b_count": 0,
         "case_c_count": 0,
+        "case_b_fallback_count": 0,
+        "case_c_fallback_count": 0,
+        "evaluation_fallback_count": 0,
+        "hint_fallback_count": 0,
+        "summarization_fallback_count": 0,
     }
 
     # Process scaffolding results (supports both old and new field names)
@@ -305,8 +340,35 @@ def load_checkpoint_from_logs(
             elif sft_case == SFTCase.B.value:
                 checkpoint_data["case_b_count"] += 1
                 checkpoint_data["scaffolding_correct_count"] += 1
+                # Check for Case B reconstruction fallback
+                failure = result.get("failure", {})
+                # Backward compatibility: support old reconstruction_failure field
+                if not failure and result.get("reconstruction_failure"):
+                    failure = {"reconstruction": result["reconstruction_failure"]}
+                if failure.get("reconstruction", {}).get("is_fallback"):
+                    checkpoint_data["case_b_fallback_count"] += 1
             elif sft_case == SFTCase.C.value:
                 checkpoint_data["case_c_count"] += 1
+                # Check for Case C reconstruction fallback
+                failure = result.get("failure", {})
+                # Backward compatibility: support old reconstruction_failure field
+                if not failure and result.get("reconstruction_failure"):
+                    failure = {"reconstruction": result["reconstruction_failure"]}
+                if failure.get("reconstruction", {}).get("is_fallback"):
+                    checkpoint_data["case_c_fallback_count"] += 1
+
+            # Check for other failures (regardless of case)
+            failure = result.get("failure", {})
+            # Backward compatibility
+            if not failure and result.get("reconstruction_failure"):
+                failure = {"reconstruction": result["reconstruction_failure"]}
+
+            if failure.get("evaluation", {}).get("is_fallback"):
+                checkpoint_data["evaluation_fallback_count"] += 1
+            if failure.get("hint_generation"):  # list이므로 존재 여부만 확인
+                checkpoint_data["hint_fallback_count"] += 1
+            if failure.get("summarization", {}).get("is_fallback"):
+                checkpoint_data["summarization_fallback_count"] += 1
 
     return checkpoint_data, processed_ids
 
@@ -348,6 +410,11 @@ def restore_state_from_checkpoint(
     restored["case_a_count"] = checkpoint_data.get("case_a_count", 0)
     restored["case_b_count"] = checkpoint_data.get("case_b_count", 0)
     restored["case_c_count"] = checkpoint_data.get("case_c_count", 0)
+    restored["case_b_fallback_count"] = checkpoint_data.get("case_b_fallback_count", 0)
+    restored["case_c_fallback_count"] = checkpoint_data.get("case_c_fallback_count", 0)
+    restored["evaluation_fallback_count"] = checkpoint_data.get("evaluation_fallback_count", 0)
+    restored["hint_fallback_count"] = checkpoint_data.get("hint_fallback_count", 0)
+    restored["summarization_fallback_count"] = checkpoint_data.get("summarization_fallback_count", 0)
 
     # Update questions to remaining ones
     restored["questions"] = remaining_questions

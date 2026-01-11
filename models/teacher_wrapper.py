@@ -100,6 +100,73 @@ def _fix_json_escapes(text: str) -> str:
     return ''.join(result)
 
 
+def _find_matching_brace(text: str, start_pos: int) -> int:
+    """
+    시작 위치의 여는 중괄호에 대응하는 닫는 중괄호의 위치를 찾음
+
+    Args:
+        text: 검색할 텍스트
+        start_pos: 여는 중괄호의 위치
+
+    Returns:
+        닫는 중괄호의 위치, 찾지 못하면 -1
+    """
+    if start_pos >= len(text) or text[start_pos] != '{':
+        return -1
+
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i in range(start_pos, len(text)):
+        char = text[i]
+
+        if escape_next:
+            escape_next = False
+            continue
+
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if not in_string:
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    return i
+
+    return -1
+
+
+def _strip_non_json_content(text: str) -> str:
+    """
+    JSON 외부의 텍스트 제거 (첫 { 이전, 마지막 } 이후)
+
+    Args:
+        text: 원본 텍스트
+
+    Returns:
+        JSON 부분만 추출된 텍스트
+    """
+    # 첫 번째 { 찾기
+    first_brace = text.find('{')
+    if first_brace == -1:
+        return text
+
+    # 마지막 } 찾기 (중첩 고려)
+    last_brace = _find_matching_brace(text, first_brace)
+    if last_brace == -1:
+        return text
+
+    return text[first_brace:last_brace+1]
+
+
 def _is_api_model(model_name: str) -> bool:
     """API 모델인지 확인 (OpenAI 모델)"""
     if not model_name:
@@ -155,7 +222,8 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
             print(f"[TeacherModelWrapper] Using local model: {self.model_name}")
 
         # 로컬 모델용 생성 설정 (LocalModelMixin에서 사용)
-        self.max_new_tokens = self.config.get("max_new_tokens", 2048)
+        # JSON 생성을 위해 기본값을 4096으로 증가 (긴 응답 지원)
+        self.max_new_tokens = self.config.get("max_new_tokens", 8192)
         self.temperature = self.config.get("temperature", 0.7)
         self.do_sample = self.config.get("do_sample", True)
 
@@ -284,7 +352,8 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
     def generate_json(
         self,
         prompt: str,
-        system_message: Optional[str] = None
+        system_message: Optional[str] = None,
+        max_tokens: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         JSON 형식으로 응답 생성
@@ -292,14 +361,26 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         Args:
             prompt: 사용자 프롬프트
             system_message: 시스템 메시지
+            max_tokens: 최대 생성 토큰 (None이면 기본값 사용)
 
         Returns:
             JSON 파싱된 딕셔너리
         """
-        if self._use_api:
-            return self._generate_json_api(prompt, system_message)
-        else:
-            return self._generate_json_local(prompt, system_message)
+        # max_tokens 동적 설정
+        if max_tokens is not None:
+            original_max_tokens = self.max_new_tokens
+            self.max_new_tokens = max_tokens
+
+        try:
+            if self._use_api:
+                result = self._generate_json_api(prompt, system_message)
+            else:
+                result = self._generate_json_local(prompt, system_message)
+            return result
+        finally:
+            # 원래 값으로 복원
+            if max_tokens is not None:
+                self.max_new_tokens = original_max_tokens
 
     def _generate_json_api(
         self,
@@ -350,6 +431,7 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         텍스트에서 JSON 추출
 
         여러 패턴을 시도하여 JSON 추출:
+        0. JSON 외부 텍스트 제거 (첫 { 이전, 마지막 } 이후)
         1. 전체 텍스트가 JSON인 경우
         2. ```json ... ``` 블록
         3. { ... } 패턴
@@ -361,6 +443,9 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         Returns:
             JSON 딕셔너리
         """
+        # 0. JSON 외부 텍스트 제거
+        text = _strip_non_json_content(text)
+
         # 1. 전체 텍스트가 JSON인 경우
         try:
             return json.loads(text.strip())
@@ -394,7 +479,25 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
             fixed_text = _fix_json_escapes(text)
             return json.loads(fixed_text)
         except json.JSONDecodeError as e:
-            raise Exception(f"JSON 파싱 오류: {str(e)}\n응답: {text[:500]}...")
+            # 상세 오류 정보 생성
+            error_details = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "error_position": f"line {e.lineno}, column {e.colno}" if hasattr(e, 'lineno') else "unknown",
+                "response_length": len(text),
+                "response_preview": text[:500] if len(text) > 500 else text,
+            }
+
+            # 상세 오류 메시지 생성
+            error_msg = f"JSON 파싱 오류: {error_details['error_message']}"
+            if error_details['error_position'] != "unknown":
+                error_msg += f" at {error_details['error_position']}"
+            error_msg += f"\n응답 길이: {error_details['response_length']} characters"
+            error_msg += f"\n응답 미리보기:\n{error_details['response_preview']}"
+            if len(text) > 500:
+                error_msg += "\n..."
+
+            raise Exception(error_msg)
 
     @property
     def is_api_model(self) -> bool:

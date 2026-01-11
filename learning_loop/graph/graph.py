@@ -330,6 +330,24 @@ class IDMASGraphRunner:
         print(f"  Success Total (A+B): {case_stats.get('success_total', 0)}")
         print(f"  Success Rate: {case_stats.get('success_rate', 0) * 100:.1f}%")
 
+        failures = stats.get('failures', {})
+        print(f"\n[Failures]")
+
+        reconstruction = failures.get('reconstruction', {})
+        print(f"  Reconstruction:")
+        print(f"    Case B: {reconstruction.get('case_b', 0)}")
+        print(f"    Case C: {reconstruction.get('case_c', 0)}")
+        print(f"    Subtotal: {reconstruction.get('total', 0)}")
+
+        print(f"  Other:")
+        print(f"    Evaluation: {failures.get('evaluation', 0)}")
+        print(f"    Hint Generation: {failures.get('hint', 0)}")
+        print(f"    Summarization: {failures.get('summarization', 0)}")
+
+        print(f"  ────────────────────────────")
+        print(f"  Total Failures: {failures.get('total_failures', 0)}")
+        print(f"  Failure Rate: {failures.get('failure_rate', 0) * 100:.1f}%")
+
         print(f"\nSFT Data Generated: {len(final_state.get('sft_data', []))}")
 
         # Save results if output_dir provided

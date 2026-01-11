@@ -81,6 +81,27 @@ In cases of non-compliance or error, you must generate tailored feedback to guid
   }}
 }}
 
+CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
+1. Your response MUST be ONLY valid JSON - no additional text before or after
+2. Do NOT include explanations, comments, markdown code blocks, or any text outside the JSON
+3. Do NOT include LaTeX expressions, mathematical notation, or equations outside JSON string values
+4. Ensure ALL brackets {{ }}, [ ], and quotes are properly closed
+5. If you need to include mathematical expressions, place them INSIDE JSON string values with proper escaping
+
+Example of CORRECT response:
+{{
+  "performance_evaluation": [...],
+  "overall_assessment": {{...}}
+}}
+
+Example of INCORRECT response (DO NOT DO THIS):
+Here is my evaluation:
+{{
+  "performance_evaluation": [...],
+  "overall_assessment": {{...}}
+}}
+Additional notes about the evaluation...
+
 Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """
 
@@ -241,6 +262,29 @@ The reconstructed solution should explicitly address and correct the student's e
     ]
 }}
 
+CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
+1. Your response MUST be ONLY valid JSON - no additional text before or after
+2. Do NOT include explanations, comments, markdown code blocks, or any text outside the JSON
+3. Do NOT include LaTeX expressions, mathematical notation, or equations outside JSON string values
+4. Ensure ALL brackets {{ }}, [ ], and quotes are properly closed
+5. If you need to include mathematical expressions in the reconstructed_response, place them INSIDE the JSON string value with proper escaping (use double backslashes: \\\\)
+
+Example of CORRECT response:
+{{
+  "summary": "...",
+  "student_weaknesses": [...],
+  "reconstructed_response": "...",
+  "learning_points": [...]
+}}
+
+Example of INCORRECT response (DO NOT DO THIS):
+Let me reconstruct the solution:
+{{
+  "summary": "...",
+  ...
+}}
+The student should focus on...
+
 Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """
 
@@ -352,6 +396,28 @@ The reconstructed response should be what an ideal student would produce after h
     "key_learning_points": ["Point 1", "Point 2", "Point 3"],
     "improvement_summary": "How the student improved through the scaffolding process..."
 }}
+
+CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
+1. Your response MUST be ONLY valid JSON - no additional text before or after
+2. Do NOT include explanations, comments, markdown code blocks, or any text outside the JSON
+3. Do NOT include LaTeX expressions, mathematical notation, or equations outside JSON string values
+4. Ensure ALL brackets {{ }}, [ ], and quotes are properly closed
+5. If you need to include mathematical expressions in the reconstructed_response, place them INSIDE the JSON string value with proper escaping (use double backslashes: \\\\)
+
+Example of CORRECT response:
+{{
+  "reconstructed_response": "...",
+  "key_learning_points": [...],
+  "improvement_summary": "..."
+}}
+
+Example of INCORRECT response (DO NOT DO THIS):
+Based on the scaffolding process:
+{{
+  "reconstructed_response": "...",
+  ...
+}}
+$$x = 5$$
 
 Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 """

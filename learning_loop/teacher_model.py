@@ -14,7 +14,7 @@ from prompts.learning_prompts import (
     CONVERSATION_SUMMARIZATION_PROMPT,
     SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT,
 )
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import json
 
 
@@ -74,30 +74,58 @@ class TeacherModel:
             ground_truth=ground_truth
         )
 
-        try:
-            result = self.llm.generate_json(prompt)
-            # Ensure required fields exist
-            if 'performance_evaluation' not in result:
-                result['performance_evaluation'] = []
-            if 'overall_assessment' not in result:
-                result['overall_assessment'] = {
-                    "objectives_met": "0 of 0",
-                    "all_satisfied": False,
-                    "primary_weakness": "Unable to evaluate",
-                    "recommended_focus": "Review the problem"
+        # 최대 3회 재시도
+        max_retries = 3
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = self.llm.generate_json(prompt)
+                # Ensure required fields exist
+                if 'performance_evaluation' not in result:
+                    result['performance_evaluation'] = []
+                if 'overall_assessment' not in result:
+                    result['overall_assessment'] = {
+                        "objectives_met": "0 of 0",
+                        "all_satisfied": False,
+                        "primary_weakness": "Unable to evaluate",
+                        "recommended_focus": "Review the problem"
+                    }
+                # 성공 시 failure metadata 추가
+                result['_failure_metadata'] = {
+                    "evaluation": {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "stage": "performance_objectives_evaluation"
+                    }
                 }
-            return result
-        except Exception as e:
-            print(f"  Warning: Failed to evaluate with POs: {e}")
-            return {
-                "performance_evaluation": [],
-                "overall_assessment": {
-                    "objectives_met": "0 of 0",
-                    "all_satisfied": False,
-                    "primary_weakness": "Evaluation failed",
-                    "recommended_focus": "Try again"
+                return result
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    print(f"  Warning: PO evaluation attempt {attempt}/{max_retries} failed: {e}. Retrying...")
+                else:
+                    print(f"  Warning: All {max_retries} PO evaluation attempts failed. Last error: {e}")
+
+        # 모든 재시도 실패 시 fallback 반환
+        return {
+            "performance_evaluation": [],
+            "overall_assessment": {
+                "objectives_met": "0 of 0",
+                "all_satisfied": False,
+                "primary_weakness": "Evaluation failed",
+                "recommended_focus": "Try again"
+            },
+            "_failure_metadata": {
+                "evaluation": {
+                    "is_fallback": True,
+                    "failure_reason": "json_parse_error",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "stage": "performance_objectives_evaluation"
                 }
             }
+        }
 
     # =========================================================================
     # Iterative Scaffolding Methods
@@ -108,7 +136,7 @@ class TeacherModel:
         problem_text: str,
         task_analysis: str,
         ground_truth: str
-    ) -> str:
+    ) -> Tuple[str, Optional[Dict]]:
         """
         Iterative Scaffolding: 첫 번째 힌트 생성
 
@@ -121,7 +149,7 @@ class TeacherModel:
             ground_truth: 정답 (교사 참고용)
 
         Returns:
-            첫 번째 힌트 텍스트
+            Tuple[hint_text, failure_metadata]
         """
         prompt = INITIAL_HINT_PROMPT.format(
             problem_text=problem_text,
@@ -131,10 +159,17 @@ class TeacherModel:
 
         try:
             response = self.llm.generate(prompt)
-            return response
+            return response, None
         except Exception as e:
             print(f"  Warning: Failed to generate initial hint: {e}")
-            return "Let's start by carefully reading the problem and identifying what information is given and what we need to find."
+            fallback_hint = "Let's start by carefully reading the problem and identifying what information is given and what we need to find."
+            failure_metadata = {
+                "is_fallback": True,
+                "failure_reason": "generation_failed",
+                "last_error": str(e),
+                "stage": "initial_hint"
+            }
+            return fallback_hint, failure_metadata
 
     def generate_progressive_hint(
         self,
@@ -145,7 +180,7 @@ class TeacherModel:
         iteration_number: int,
         ground_truth: str,
         max_iterations: int = 5
-    ) -> str:
+    ) -> Tuple[str, Optional[Dict]]:
         """
         Iterative Scaffolding: 점진적 힌트 생성
 
@@ -162,7 +197,7 @@ class TeacherModel:
             max_iterations: 최대 반복 횟수
 
         Returns:
-            점진적 힌트 텍스트
+            Tuple[hint_text, failure_metadata]
         """
         formatted_history = self._format_conversation_history(conversation_history)
 
@@ -178,10 +213,18 @@ class TeacherModel:
 
         try:
             response = self.llm.generate(prompt)
-            return response
+            return response, None
         except Exception as e:
             print(f"  Warning: Failed to generate progressive hint: {e}")
-            return f"Look at your previous answer. There seems to be an error. Let me help you: Review step by step and check if the calculation is correct."
+            fallback_hint = f"Look at your previous answer. There seems to be an error. Let me help you: Review step by step and check if the calculation is correct."
+            failure_metadata = {
+                "is_fallback": True,
+                "failure_reason": "generation_failed",
+                "last_error": str(e),
+                "iteration": iteration_number,
+                "stage": "progressive_hint"
+            }
+            return fallback_hint, failure_metadata
 
     def reconstruct_successful_scaffolding(
         self,
@@ -216,7 +259,7 @@ class TeacherModel:
             }
         """
         # AI 기반 대화 히스토리 축약
-        conversation_summary = self.summarize_conversation_with_ai(
+        conversation_summary, summarization_failure = self.summarize_conversation_with_ai(
             problem_text=problem_text,
             ground_truth=ground_truth,
             conversation_history=conversation_history
@@ -237,7 +280,8 @@ class TeacherModel:
 
         for attempt in range(1, max_retries + 1):
             try:
-                result = self.llm.generate_json(prompt)
+                # max_tokens를 4096으로 제한 (컨텍스트 초과 방지)
+                result = self.llm.generate_json(prompt, max_tokens=4096)
                 # Ensure required fields exist
                 if 'reconstructed_response' not in result:
                     result['reconstructed_response'] = final_response
@@ -245,6 +289,17 @@ class TeacherModel:
                     result['key_learning_points'] = ["Successfully solved through iterative refinement"]
                 if 'improvement_summary' not in result:
                     result['improvement_summary'] = f"Improved through {iterations_needed} iterations of scaffolding"
+                # 성공 시 메타데이터를 Dict of dicts로 저장
+                result['_failure_metadata'] = {
+                    "reconstruction": {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "stage": "case_b_reconstruction"
+                    }
+                }
+                # Summarization failure가 있으면 추가
+                if summarization_failure:
+                    result['_failure_metadata']['summarization'] = summarization_failure
                 return result
             except Exception as e:
                 last_error = e
@@ -254,11 +309,25 @@ class TeacherModel:
                     print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
 
         # 모든 재시도 실패 시 fallback 반환
-        return {
+        fallback_result = {
             "reconstructed_response": final_response,
             "key_learning_points": ["Successfully solved through iterative scaffolding"],
-            "improvement_summary": f"Student succeeded after {iterations_needed} iterations with teacher guidance"
+            "improvement_summary": f"Student succeeded after {iterations_needed} iterations with teacher guidance",
+            # Fallback 메타데이터를 Dict of dicts로 저장
+            "_failure_metadata": {
+                "reconstruction": {
+                    "is_fallback": True,
+                    "failure_reason": "case_b_reconstruction_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "stage": "case_b_reconstruction"
+                }
+            }
         }
+        # Summarization failure가 있으면 추가
+        if summarization_failure:
+            fallback_result['_failure_metadata']['summarization'] = summarization_failure
+        return fallback_result
 
     def summarize_and_reconstruct(
         self,
@@ -291,7 +360,7 @@ class TeacherModel:
         """
         # AI 기반 대화 히스토리 축약 (JSON 파싱 오류 방지)
         # Teacher 모델이 중요한 학습 포인트를 파악하여 축약
-        summarized_history = self.summarize_conversation_with_ai(
+        summarized_history, summarization_failure = self.summarize_conversation_with_ai(
             problem_text=problem_text,
             ground_truth=ground_truth,
             conversation_history=conversation_history
@@ -310,7 +379,8 @@ class TeacherModel:
 
         for attempt in range(1, max_retries + 1):
             try:
-                result = self.llm.generate_json(prompt)
+                # max_tokens를 4096으로 제한 (컨텍스트 초과 방지)
+                result = self.llm.generate_json(prompt, max_tokens=4096)
                 # Ensure required fields exist
                 if 'summary' not in result:
                     result['summary'] = "Student struggled with this problem after multiple attempts."
@@ -320,6 +390,17 @@ class TeacherModel:
                     result['reconstructed_response'] = f"Let me solve this correctly.\n\nAnswer: {ground_truth}"
                 if 'learning_points' not in result:
                     result['learning_points'] = ["Review the fundamental concepts"]
+                # 성공 시 메타데이터를 Dict of dicts로 저장
+                result['_failure_metadata'] = {
+                    "reconstruction": {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "stage": "case_c_reconstruction"
+                    }
+                }
+                # Summarization failure가 있으면 추가
+                if summarization_failure:
+                    result['_failure_metadata']['summarization'] = summarization_failure
                 return result
             except Exception as e:
                 last_error = e
@@ -329,7 +410,7 @@ class TeacherModel:
                     print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
 
         # 모든 재시도 실패 시 fallback 반환
-        return {
+        fallback_result = {
             "summary": "Student needed multiple attempts but could not solve the problem.",
             "student_weaknesses": ["Fundamental understanding of the problem"],
             "reconstructed_response": f"""[Understanding the problem]
@@ -339,8 +420,22 @@ Let me break down this problem carefully.
 Following the correct approach:
 
 Answer: {ground_truth}""",
-            "learning_points": ["Review the problem-solving approach", "Practice similar problems"]
+            "learning_points": ["Review the problem-solving approach", "Practice similar problems"],
+            # Fallback 메타데이터를 Dict of dicts로 저장
+            "_failure_metadata": {
+                "reconstruction": {
+                    "is_fallback": True,
+                    "failure_reason": "reconstruction_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "stage": "case_c_reconstruction"
+                }
+            }
         }
+        # Summarization failure가 있으면 추가
+        if summarization_failure:
+            fallback_result['_failure_metadata']['summarization'] = summarization_failure
+        return fallback_result
 
     def _format_conversation_history(self, history: List[Dict]) -> str:
         """
@@ -373,7 +468,7 @@ Answer: {ground_truth}""",
         problem_text: str,
         ground_truth: str,
         conversation_history: List[Dict]
-    ) -> str:
+    ) -> Tuple[str, Optional[Dict]]:
         """
         AI 기반 대화 히스토리 축약
 
@@ -386,7 +481,7 @@ Answer: {ground_truth}""",
             conversation_history: 전체 대화 기록
 
         Returns:
-            축약된 대화 요약 문자열
+            Tuple[summary_text, failure_metadata]
         """
         # 전체 히스토리를 포맷팅
         formatted_history = self._format_conversation_history(conversation_history)
@@ -400,11 +495,18 @@ Answer: {ground_truth}""",
         try:
             # 일반 텍스트로 생성 (JSON 아님)
             summary = self.llm.generate(prompt)
-            return summary
+            return summary, None
         except Exception as e:
             print(f"  Warning: AI summarization failed: {e}")
             # Fallback: 기본 포맷 사용 (truncated)
-            return self._fallback_truncate_history(conversation_history)
+            truncated = self._fallback_truncate_history(conversation_history)
+            failure_metadata = {
+                "is_fallback": True,
+                "failure_reason": "summarization_failed",
+                "last_error": str(e),
+                "stage": "conversation_summarization"
+            }
+            return truncated, failure_metadata
 
     def _fallback_truncate_history(self, history: List[Dict], max_total_length: int = 1500) -> str:
         """
