@@ -37,15 +37,18 @@ env/
 # Environment
 .env
 
-# Data and outputs
-data/
+# outputs
 *.json
 !config/*.json
+!data/**/*.json
+!data/**/data/*.json
+data/**/Llama-*/
+data/**/Qwen*/
+data/**/instructional-design/
 *.log
 USAGE.md
 
 # Data preparation scripts (not for production)
-utils/dataset_preparer.py
 utils/reparse_eval_results.py
 
 # Testing
