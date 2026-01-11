@@ -115,6 +115,33 @@ class BaseDatasetLoader(ABC):
 - **API 모델 (gpt-*, o1-*, o3-*)**: OpenAI API 직접 호출
 - **로컬 모델**: HuggingFace 모델을 `ModelCache`를 통해 로드 및 추론
 
+#### 2.0 Terminal Goal 동적 생성 (terminal_goal.py) - Step 0
+
+- **목적**: 샘플 데이터 분석을 통해 데이터셋에 적합한 Terminal Goal 자동 도출
+- **모델**: `teacher_config` (기본 gpt-5-2025-08-07, 로컬 HuggingFace 가능)
+- **입력**: 15-20개의 대표 샘플 (`*_samples.json` 파일)
+- **출력**:
+  - `terminal_goal`: "The model should be able to..."
+  - `cognitive_level`: Anderson's Taxonomy 레벨 (Remember/Understand/Apply/Analyze/Evaluate/Create)
+  - `primary_verb`: 핵심 행동 동사
+  - `rationale`: 선택 근거
+- **실행 시점**: `--resume False` 사용 시 또는 설계 결과가 없을 때 자동 실행
+- **Fallback**: 샘플 파일이 없으면 하드코딩된 기본 Terminal Goal 사용
+
+**샘플 추출 유틸리티** (`utils/sample_extractor.py`):
+```bash
+# 모든 데이터셋 샘플 추출
+python -m utils.sample_extractor
+
+# 특정 데이터셋, 다양성 기반 샘플링
+python -m utils.sample_extractor --domain math --dataset gsm8k --strategy diverse
+```
+
+샘플링 전략:
+- `random`: 단순 랜덤 샘플링
+- `diverse`: 문제 길이 기반 균등 분배 (기본값)
+- `stratified`: MATH 데이터셋용 난이도 기반 층화 샘플링
+
 #### 2.1 교수 분석 (analysis.py)
 - **목적**: 학습 목표를 Terminal Goal, Subskills, Subtasks로 분해
 - **모델**: `teacher_config` (기본 gpt-5-2025-08-07, 로컬 HuggingFace 가능)
@@ -263,10 +290,12 @@ result = runner.run(
 ```mermaid
 flowchart TB
     subgraph Design["설계 단계 (Design Phase)"]
-        LO[Learning Objective] --> IA[Instructional Analysis]
-        IA --> PO[Performance Objectives]
-        PO --> TI[Test Items]
-        TI --> RB[Rubrics]
+        SAMPLES[Sample Data<br/>*_samples.json] --> TG[Step 0: Terminal Goal Generation]
+        TG --> LO[Learning Objective]
+        LO --> IA[Step 1: Instructional Analysis]
+        IA --> PO[Step 2: Performance Objectives]
+        PO --> TI[Step 3: Test Items]
+        TI --> RB[Step 4: Rubrics]
         RB --> DO[Design Output JSON]
     end
 
@@ -369,15 +398,19 @@ Iterative Scaffolding 결과를 SFT 학습 데이터로 변환합니다.
 
 ### 설계 단계
 ```
+Sample Data (*_samples.json, 15-20개)
+    ↓
+[Step 0: Terminal Goal Generation] → Terminal Goal 동적 생성
+    ↓
 Learning Objective
     ↓
-[Instructional Analysis] → Terminal Goal + Subskills
+[Step 1: Instructional Analysis] → Terminal Goal + Subskills
     ↓
-[Performance Objectives] → B-C-CR 형식 목표
+[Step 2: Performance Objectives] → B-C-CR 형식 목표
     ↓
-[Test Item Development] → 평가 문항
+[Step 3: Test Item Development] → 평가 문항
     ↓
-[Rubric Development] → 루브릭 (Essay형만)
+[Step 4: Rubric Development] → 루브릭 (Essay형만)
     ↓
 Design Output (JSON)
 ```
@@ -429,7 +462,9 @@ data/
     ├── train/                           # 학습 데이터
     │   ├── data/                        # 원본 학습 데이터
     │   │   ├── gsm8k_train.json
-    │   │   └── math_train.json
+    │   │   ├── gsm8k_samples.json       # Terminal Goal 생성용 샘플 (15개)
+    │   │   ├── math_train.json
+    │   │   └── math_samples.json        # Terminal Goal 생성용 샘플 (20개)
     │   │
     │   └── {Teacher-Model}/             # Teacher 모델별 (예: gpt-5-2025-08-07)
     │       ├── instructional-design/    # 설계 결과
@@ -524,9 +559,16 @@ python main.py --mode train --domain math --train-dataset gsm8k
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ Step 1: 설계 단계 (Design Phase)                                 │
-│   - Terminal Goal 로드 (gsm8k → GSM8K-specific goal)            │
-│   - Instructional Analysis (GPT-5)                              │
+│ Step 0: Terminal Goal 동적 생성 (--resume False 시)              │
+│   - 샘플 데이터 로드 (gsm8k_samples.json, 15개)                  │
+│   - Teacher Model로 Terminal Goal 자동 도출                     │
+│   - cognitive_level, primary_verb, rationale 함께 생성          │
+└─────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ Step 1-4: 설계 단계 (Design Phase)                               │
+│   - Terminal Goal 기반 Instructional Analysis (GPT-5)           │
 │   - Performance Objectives (B-C-CR)                             │
 │   - Test Items & Rubrics                                        │
 │                                                                 │
@@ -663,8 +705,12 @@ python main.py --mode eval --method sft_id-mas \
 # Math 도메인 - GSM8K로 학습
 python main.py --mode train --domain math --train-dataset gsm8k
 
-# 처음부터 새로 학습 (Resume 비활성화)
+# 처음부터 새로 학습 (Resume 비활성화 + Terminal Goal 재생성)
 python main.py --mode train --domain math --train-dataset gsm8k --resume False
+# --resume False 사용 시:
+#   1. 샘플 데이터(gsm8k_samples.json)에서 Terminal Goal 자동 생성
+#   2. 새로운 설계 결과 생성 (instructional-design/)
+#   3. 처음부터 학습 시작
 
 # vLLM 교사 모델 사용 (권장: Qwen3-30B-A3B-Instruct-2507-FP8)
 python main.py --mode train --domain math --train-dataset gsm8k \

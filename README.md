@@ -36,10 +36,13 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 ```
 ID-MAS/
 ├── design_modules/          # 교수 설계 단계별 모듈
-│   ├── analysis.py         # 교수 분석 (Goal & Sub-skills)
-│   ├── objectives.py       # 수행목표 진술 (B-C-CR)
-│   ├── test.py             # Test item 개발
-│   └── rubric.py           # 루브릭 개발 (Essay형)
+│   ├── terminal_goal.py    # Step 0: Terminal Goal 동적 생성
+│   ├── analysis.py         # Step 1: 교수 분석 (Goal & Sub-skills)
+│   ├── objectives.py       # Step 2: 수행목표 진술 (B-C-CR)
+│   ├── test.py             # Step 3: Test item 개발
+│   └── rubric.py           # Step 4: 루브릭 개발 (Essay형)
+├── prompts/                 # 프롬프트 템플릿
+│   └── terminal_goal_prompts.py  # Terminal Goal 생성 프롬프트
 ├── learning_loop/           # Iterative Scaffolding Pipeline (LangGraph 기반)
 │   ├── graph/              # LangGraph StateGraph 구현
 │   │   ├── __init__.py     # 모듈 export
@@ -54,6 +57,7 @@ ID-MAS/
 │   ├── domain_loader.py    # 도메인 기반 데이터 로더
 │   ├── dataset_registry.py # 도메인 레지스트리
 │   ├── answer_extractor.py # 답변 추출기 (5가지 유형)
+│   ├── sample_extractor.py # Terminal Goal용 대표 샘플 추출
 │   └── reparse_eval_results.py  # 평가 결과 재처리
 ├── models/                  # 모델 래퍼
 │   ├── base_wrapper.py     # 모델 래퍼 베이스 클래스
@@ -144,6 +148,9 @@ cp .env.example .env
 # 4. 데이터 준비 (HuggingFace에서 다운로드)
 python -m utils.dataset_preparer
 
+# 4-1. 샘플 데이터 추출 (Terminal Goal 동적 생성용, 선택사항)
+python -m utils.sample_extractor
+
 # 5. 학습 실행 (Iterative Scaffolding Pipeline)
 python main.py --mode train --domain math --train-dataset gsm8k
 # 교사 모델 사용 시: --teacher-model meta-llama/Llama-3.3-70B-Instruct 등 추가
@@ -197,13 +204,14 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 python main.py --mode train --domain math --train-dataset gsm8k \
     --teacher-model meta-llama/Llama-3.3-70B-Instruct
 
-# 처음부터 새로 학습 (Resume 비활성화)
+# 처음부터 새로 학습 (Resume 비활성화 + Terminal Goal 재생성)
+# --resume False 사용 시 샘플 데이터 기반으로 Terminal Goal을 다시 생성합니다
 python main.py --mode train --domain math --train-dataset gsm8k --resume False
 ```
 
 ### 로컬 교사 모델 사용 예시
 
-GPU 서버에서 HuggingFace 로컬 모델 사용:
+GPU 서버에서 HuggingFace 로컬 모델 사용: 
 
 ```bash
 # 로컬 모델 직접 로드 (GPU 필요)
@@ -310,7 +318,7 @@ python main.py --mode eval --method sft_id-mas \
 | `--domain` | 도메인: `math`, `logical`, `commonsense` | (필수) |
 | `--train-dataset` | 학습 데이터셋: `gsm8k`, `math`, `reclor`, `arc_c` | (필수) |
 | `--run-design` | 새로운 설계 생성 (기본값: 기존 설계 로드 또는 자동 생성) | False |
-| `--resume` | 기존 로그에서 이어서 학습 (`True`/`False`) | `True` |
+| `--resume` | 기존 로그에서 이어서 학습 (`True`/`False`). `False` 시 Terminal Goal도 재생성 | `True` |
 
 ### 평가 모드 전용 옵션 (--mode eval)
 
@@ -347,7 +355,9 @@ data/
 │   ├── train/                                      # 학습 데이터
 │   │   ├── data/                                   # 원본 학습 데이터
 │   │   │   ├── gsm8k_train.json                   # GSM8K 학습 데이터
-│   │   │   └── math_train.json                    # MATH 학습 데이터
+│   │   │   ├── gsm8k_samples.json                 # GSM8K 샘플 (Terminal Goal용)
+│   │   │   ├── math_train.json                    # MATH 학습 데이터
+│   │   │   └── math_samples.json                  # MATH 샘플 (Terminal Goal용)
 │   │   │
 │   │   └── {Teacher-Model}/                        # Teacher 모델별
 │   │       ├── instructional-design/               # 설계 결과
@@ -365,7 +375,8 @@ data/
 ├── logical/                                        # Logical 도메인
 │   ├── train/
 │   │   ├── data/
-│   │   │   └── reclor_train.json                  # 로컬 데이터에서 생성
+│   │   │   ├── reclor_train.json                  # 로컬 데이터에서 생성
+│   │   │   └── reclor_samples.json                # ReClor 샘플 (Terminal Goal용)
 │   │   └── {Teacher-Model}/
 │   │       ├── instructional-design/
 │   │       └── {Student-Model}/
@@ -380,7 +391,8 @@ data/
 └── commonsense/                                    # Commonsense 도메인
     ├── train/
     │   ├── data/
-    │   │   └── arc_c_train.json
+    │   │   ├── arc_c_train.json
+    │   │   └── arc_c_samples.json                 # ARC-C 샘플 (Terminal Goal용)
     │   └── {Teacher-Model}/
     │       ├── instructional-design/
     │       └── {Student-Model}/

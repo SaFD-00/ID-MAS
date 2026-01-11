@@ -19,9 +19,5 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset
     --teacher-model Qwen/Qwen2.5-7B-Instruct
 
 CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
-    --student-model Qwen/Qwen2.5-14B-Instruct \
-    --teacher-model Qwen/Qwen2.5-14B-Instruct
-
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-4B-Instruct-2507 \
     --teacher-model Qwen/Qwen3-4B-Instruct-2507

@@ -1,13 +1,16 @@
 """
 Domain and dataset configuration.
 """
+import json
+from pathlib import Path
+from typing import Optional
 from config.api import PROJECT_ROOT
 
 # =============================================================================
 # Domain-based Configuration
 # =============================================================================
 
-# Terminal Goals for each training dataset
+# Fallback Terminal Goals for each training dataset (design JSON 파일이 없을 때 사용)
 TERMINAL_GOALS = {
     # Math domain
     "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
@@ -89,8 +92,73 @@ def get_training_datasets_for_domain(domain: str) -> list:
     return DOMAIN_CONFIG[domain]["training_datasets"]
 
 
-def get_terminal_goal(dataset: str) -> str:
-    """Get Terminal Goal for a training dataset."""
+def get_terminal_goal(
+    dataset: str,
+    teacher_model: Optional[str] = None,
+    use_cache: bool = True
+) -> str:
+    """
+    Get Terminal Goal for a training dataset.
+
+    우선순위:
+    1. Design JSON 파일에서 로드 (동적 생성된 terminal_goal)
+    2. Fallback: 하드코딩된 TERMINAL_GOALS
+
+    Args:
+        dataset: 데이터셋 이름 (e.g., "gsm8k", "math")
+        teacher_model: Teacher 모델 이름 (None이면 design JSON 검색 안 함)
+        use_cache: 캐시 사용 여부 (기본 True)
+
+    Returns:
+        Terminal Goal 문자열
+    """
+    # Design JSON에서 로드 시도 (teacher_model이 지정된 경우)
+    if teacher_model:
+        domain = DATASET_TO_DOMAIN.get(dataset)
+        if domain:
+            design_goal = _load_terminal_goal_from_design(domain, dataset, teacher_model)
+            if design_goal:
+                return design_goal
+
+    # Fallback: 하드코딩된 값
     if dataset not in TERMINAL_GOALS:
         raise ValueError(f"Unknown dataset: {dataset}. Available: {list(TERMINAL_GOALS.keys())}")
     return TERMINAL_GOALS[dataset]
+
+
+def _load_terminal_goal_from_design(
+    domain: str,
+    dataset: str,
+    teacher_model: str
+) -> Optional[str]:
+    """
+    Design JSON 파일에서 terminal_goal 로드
+
+    Args:
+        domain: 도메인 이름
+        dataset: 데이터셋 이름
+        teacher_model: Teacher 모델 이름
+
+    Returns:
+        Terminal Goal 또는 None (파일 없거나 필드 없음)
+    """
+    from config.config import get_model_short_name
+
+    try:
+        teacher_short = get_model_short_name(teacher_model)
+        design_dir = DATA_DIR / domain / "train" / teacher_short / "instructional-design"
+        design_path = design_dir / f"{domain}_{dataset}_design.json"
+
+        if design_path.exists():
+            with open(design_path, 'r', encoding='utf-8') as f:
+                design_data = json.load(f)
+
+            terminal_goal = design_data.get("terminal_goal")
+            if terminal_goal:
+                return terminal_goal
+
+    except Exception:
+        # 로드 실패 시 무시하고 fallback 사용
+        pass
+
+    return None

@@ -36,6 +36,7 @@ from design_modules.analysis import InstructionalAnalysis
 from design_modules.objectives import PerformanceObjectives
 from design_modules.test import TestItemDevelopment
 from design_modules.rubric import RubricDevelopment
+from design_modules.terminal_goal import TerminalGoalGenerator, get_fallback_terminal_goal
 from learning_loop.graph import IDMASGraphRunner
 from learning_loop.graph.state import get_statistics
 from learning_loop.student_model import StudentModel
@@ -107,6 +108,7 @@ class IDMASPipeline:
         self.answer_extractor = get_extractor(self.loader.answer_type)
 
         # Design modules (use teacher_config for design modules)
+        self.terminal_goal_gen = TerminalGoalGenerator(teacher_config)
         self.analysis = InstructionalAnalysis(teacher_config)
         self.objectives = PerformanceObjectives(teacher_config)
         self.test_dev = TestItemDevelopment(teacher_config)
@@ -144,13 +146,15 @@ class IDMASPipeline:
 
     def run_design_phase(
         self,
-        learning_objective: Optional[str] = None
+        learning_objective: Optional[str] = None,
+        regenerate_terminal_goal: bool = False
     ) -> Dict:
         """
         교수 설계 단계 실행
 
         Args:
             learning_objective: 학습 목표 (None이면 데이터셋별 Terminal Goal 사용)
+            regenerate_terminal_goal: Terminal Goal 재생성 여부
 
         Returns:
             설계 결과 딕셔너리
@@ -159,7 +163,40 @@ class IDMASPipeline:
         print("INSTRUCTIONAL DESIGN PHASE")
         print("=" * 60)
 
-        # 1. 학습 목표 설정 (데이터셋별 Terminal Goal 사용)
+        # [Step 0] Terminal Goal Generation (NEW)
+        terminal_goal_metadata = None
+        samples_path = self.raw_data_dir / f"{self.train_dataset}_samples.json"
+
+        if samples_path.exists() and (regenerate_terminal_goal or learning_objective is None):
+            print(f"\n[Step 0] Terminal Goal Generation")
+
+            with open(samples_path, 'r', encoding='utf-8') as f:
+                train_samples = json.load(f)
+            print(f"  Loaded {len(train_samples)} samples from {samples_path.name}")
+
+            # Teacher Model로 Terminal Goal 생성
+            try:
+                terminal_goal_result = self.terminal_goal_gen.generate(
+                    train_samples=train_samples,
+                    domain=self.domain,
+                    dataset=self.train_dataset
+                )
+                self.terminal_goal = terminal_goal_result["terminal_goal"]
+                terminal_goal_metadata = terminal_goal_result.get("metadata", {})
+                print(f"  Generated: {self.terminal_goal[:80]}...")
+            except Exception as e:
+                print(f"  [Warning] Terminal Goal generation failed: {e}")
+                print(f"  Using fallback terminal goal.")
+                self.terminal_goal = get_fallback_terminal_goal(self.train_dataset)
+        else:
+            if not samples_path.exists():
+                print(f"\n[Step 0] Terminal Goal Generation (SKIPPED)")
+                print(f"  Samples file not found: {samples_path.name}")
+                print(f"  Run 'python -m utils.sample_extractor' to generate samples.")
+            # 기존 하드코딩 값 사용
+            print(f"  Using default terminal goal.")
+
+        # [Step 1] 학습 목표 설정 (데이터셋별 Terminal Goal 사용)
         if learning_objective is None:
             learning_objective = self.terminal_goal
 
@@ -199,6 +236,7 @@ class IDMASPipeline:
             "train_dataset": self.train_dataset,
             "identifier": self.identifier,
             "terminal_goal": self.terminal_goal,
+            "terminal_goal_metadata": terminal_goal_metadata,
             "learning_objective": learning_objective,
             "instructional_analysis": analysis_result,
             "performance_objectives": objectives_result,
@@ -588,14 +626,20 @@ def run_train_mode(args):
         if not design_path.exists():
             print(f"Design file not found at {design_path}")
             print("Automatically generating new instructional design...")
-            design_result = pipeline.run_design_phase()
+            # resume=False이면 Terminal Goal도 새로 생성
+            design_result = pipeline.run_design_phase(
+                regenerate_terminal_goal=(not args.resume)
+            )
         else:
             with open(design_path, 'r', encoding='utf-8') as f:
                 design_result = json.load(f)
             print(f"Loaded existing design from {design_path}")
     else:
         # Run design phase
-        design_result = pipeline.run_design_phase()
+        # resume=False이면 Terminal Goal도 새로 생성
+        design_result = pipeline.run_design_phase(
+            regenerate_terminal_goal=(not args.resume)
+        )
 
     # 2. Iterative Scaffolding 학습 단계
     learning_result = pipeline.run_learning_phase(

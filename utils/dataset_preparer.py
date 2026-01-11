@@ -21,7 +21,8 @@ import json
 import random
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 from datasets import load_dataset
 
 # =============================================================================
@@ -33,84 +34,80 @@ RANDOM_SEED = 42
 
 # Dataset-specific system prompts
 DATASET_PROMPTS = {
-    # GSM8K - Grade school math, numeric answers
+    # Math domain
     "gsm8k": """You are a helpful math assistant.
-Solve this grade-school math problem step by step. Show your calculations clearly using <<calculation=result>> format for each step.
-Your final answer MUST be a single number within \\boxed{}.
+Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
+Your final answer MUST be within \\boxed{}.
 Example: \\boxed{42}""",
 
-    # MATH - Advanced math, LaTeX answers
     "math": """You are a helpful math assistant.
 Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
 Your final answer MUST be within \\boxed{}. Use LaTeX notation for fractions (\\frac{a}{b}), exponents, and other mathematical expressions.
 Example: \\boxed{\\frac{1}{8}} or \\boxed{2\\sqrt{3}}""",
 
-    # SVAMP - Simple math word problems, numeric answers
     "svamp": """You are a helpful math assistant.
-Solve this math word problem step by step. Identify the key information, set up the calculation, and solve.
-Your final answer MUST be a single number within \\boxed{}.
+Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
+Your final answer MUST be within \\boxed{}.
 Example: \\boxed{27}""",
 
-    # ASDiv - Arithmetic word problems, numeric answers
     "asdiv": """You are a helpful math assistant.
 Solve this arithmetic word problem step by step. Extract the relevant numbers, determine the operation(s) needed, and calculate.
-Your final answer MUST be a single number within \\boxed{}.
+Your final answer MUST be within \\boxed{}.
 Example: \\boxed{15}""",
 
-    # MAWPS - Math word problems, may include fractions
     "mawps": """You are a helpful math assistant.
-Solve this math word problem step by step. Show your work clearly.
+Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
 Your final answer MUST be within \\boxed{}. If the answer is a fraction, write it as a/b or use \\frac{a}{b}.
 Example: \\boxed{49} or \\boxed{56/9}""",
 
     # Logical domain
-    "reclor": """You are a logical reasoning assistant. Read the passage and question, then select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+    "reclor": """You are a logical reasoning assistant. Read the passage and question carefully, then think step by step to select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "anli": """You are a natural language inference assistant. Determine the relationship between the premise and hypothesis. Choose from: A. entailment, B. neutral, C. contradiction. Your final answer MUST be a single letter within \\boxed{}.
+    "anli": """You are a natural language inference assistant. Think step by step to determine the relationship between the premise and hypothesis. Choose from: A. entailment, B. neutral, C. contradiction. Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
     # Commonsense domain
-    "arc_c": """You are a helpful commonsense science assistant. Solve the problem and select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+    "arc_c": """You are a helpful commonsense science assistant. Think step by step to solve the problem and select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "strategyqa": """You are a helpful commonsense reasoning assistant. Answer the question with Yes or No based on reliable commonsense knowledge. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
+    "strategyqa": """You are a helpful commonsense reasoning assistant. Think step by step and answer the question with Yes or No based on reliable commonsense knowledge. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
 Example: \\boxed{Yes}""",
 
-    "openbookqa": """You are a helpful science question-answering assistant. Use the given options and choose the best answer (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+    "openbookqa": """You are a helpful science question-answering assistant. Think step by step, use the given options and choose the best answer (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 }
 
 # BBH subtask-specific prompts
 BBH_PROMPTS = {
-    "boolean_expressions": """You are a helpful reasoning assistant. Evaluate the boolean expression and answer with True or False. Your final answer MUST be \\boxed{True} or \\boxed{False}.
+    "boolean_expressions": """You are a helpful reasoning assistant. Think step by step to evaluate the boolean expression and answer with True or False. Your final answer MUST be \\boxed{True} or \\boxed{False}.
 Example: \\boxed{True}""",
 
-    "formal_fallacies": """You are a helpful reasoning assistant. Determine if the argument is valid or invalid. Your final answer MUST be \\boxed{valid} or \\boxed{invalid}.
+    "formal_fallacies": """You are a helpful reasoning assistant. Think step by step to determine if the argument is valid or invalid. Your final answer MUST be \\boxed{valid} or \\boxed{invalid}.
 Example: \\boxed{valid}""",
 
-    "logical_deduction_three_objects": """You are a helpful reasoning assistant. Solve the logical deduction problem and select the correct option (A, B, or C). Your final answer MUST be a single letter within \\boxed{}.
+    "logical_deduction_three_objects": """You are a helpful reasoning assistant. Think step by step to solve the logical deduction problem and select the correct option (A, B, or C). Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "logical_deduction_five_objects": """You are a helpful reasoning assistant. Solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "logical_deduction_five_objects": """You are a helpful reasoning assistant. Think step by step to solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "logical_deduction_seven_objects": """You are a helpful reasoning assistant. Solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "logical_deduction_seven_objects": """You are a helpful reasoning assistant. Think step by step to solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "tracking_shuffled_objects_three_objects": """You are a helpful reasoning assistant. Track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "tracking_shuffled_objects_three_objects": """You are a helpful reasoning assistant. Think step by step to track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "tracking_shuffled_objects_five_objects": """You are a helpful reasoning assistant. Track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "tracking_shuffled_objects_five_objects": """You are a helpful reasoning assistant. Think step by step to track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "tracking_shuffled_objects_seven_objects": """You are a helpful reasoning assistant. Track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "tracking_shuffled_objects_seven_objects": """You are a helpful reasoning assistant. Think step by step to track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "web_of_lies": """You are a helpful reasoning assistant. Determine the truth value based on the web of lies. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
+    "web_of_lies": """You are a helpful reasoning assistant. Think step by step to determine the truth value based on the web of lies. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
 Example: \\boxed{Yes}""",
 
-    "default_mcq": """You are a helpful reasoning assistant. Solve the problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "default_mcq": """You are a helpful reasoning assistant. Think step by step to solve the problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 }
 
@@ -481,10 +478,10 @@ def process_reclor(train_dir: Path, eval_dir: Path):
     """
     print("\n[ReClor - Local] Processing...")
 
-    # 로컬 데이터 경로
+    # Local data path
     local_data_dir = Path(__file__).parent.parent / ".claude" / "references" / "data" / "reclor_data"
 
-    # 파일 매핑: split -> (파일명, 출력 디렉토리)
+    # File mapping: split -> (filename, output directory)
     split_mapping = {
         "train": ("train.json", train_dir),
         "val": ("val.json", eval_dir),
@@ -510,12 +507,12 @@ def process_reclor(train_dir: Path, eval_dir: Path):
             answers = item.get("answers", [])
             label = item.get("label", 0)
 
-            # 사용자 지정 형식으로 input 구성
+            # Format input with context, question, and options
             input_text = f"Context:\n{context}\nQuestion: {question}\nOptions:\n"
             for i, answer in enumerate(answers):
                 input_text += f"{chr(65 + i)}. {answer}\n"
 
-            # 정답 레터 (0-3 -> A-D)
+            # Convert label index to letter (0-3 -> A-D)
             answer_letter = chr(65 + label)
 
             records.append({
@@ -524,7 +521,7 @@ def process_reclor(train_dir: Path, eval_dir: Path):
                 "output": format_output(answer_letter)
             })
 
-        # 파일명 결정
+        # Determine output filename
         if split_name == "train":
             output_file = "reclor_train.json"
         elif split_name == "val":
@@ -711,7 +708,7 @@ def process_bbh(eval_dir: Path, subtasks: List[str]):
     print("\n[BBH] Processing...")
     dataset_id = "lukaemon/bbh"
 
-    all_records = []  # 모든 subtask의 레코드를 저장할 리스트
+    all_records = []  # List to store records from all subtasks
 
     for subtask in subtasks:
         print(f"  Loading subtask: {subtask}...")
@@ -734,7 +731,7 @@ def process_bbh(eval_dir: Path, subtasks: List[str]):
         except Exception as e:
             print(f"    Error loading {subtask}: {e}")
 
-    # 단일 파일로 저장
+    # Save as a single file
     save_json(all_records, eval_dir / "bbh_test.json")
     print(f"  Saved {len(all_records)} total records to bbh_test.json")
 
