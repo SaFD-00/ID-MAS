@@ -9,9 +9,9 @@ from config.api import OPENAI_API_KEY
 
 # 지원하는 Teacher 모델 목록
 AVAILABLE_TEACHER_MODELS = [
-    # OpenAI
+    # OpenAI API
     "gpt-5-2025-08-07",
-    # LLaMA-Factory API (OpenAI-compatible)
+    # 로컬 HuggingFace 모델 (ModelCache를 통해 직접 로드)
     "meta-llama/Llama-3.1-8B-Instruct",
     "meta-llama/Llama-3.1-70B-Instruct",
     "meta-llama/Llama-3.2-3B-Instruct",
@@ -40,8 +40,15 @@ def create_teacher_config(model_name: str = None) -> dict:
     if model_name is None:
         model_name = DEFAULT_TEACHER_MODEL
 
-    # OpenAI 모델 (gpt-로 시작)
-    if model_name.startswith("gpt-"):
+    # API 모델 판단 (OpenAI 모델)
+    is_openai_model = (
+        model_name.startswith("gpt-") or
+        model_name.startswith("o1") or
+        model_name.startswith("o3")
+    )
+
+    # OpenAI API 모델
+    if is_openai_model:
         return {
             "model": model_name,
             "base_url": None,  # OpenAI 기본 endpoint
@@ -50,16 +57,15 @@ def create_teacher_config(model_name: str = None) -> dict:
             "text": {"verbosity": "medium"},
             "max_tokens": 8192
         }
-    # LLaMA-Factory API 모델 (OpenAI-compatible endpoint)
-    else:
-        import os
-        base_url = os.getenv("LLAMA_FACTORY_BASE_URL", "http://localhost:2000/v1")
-        return {
-            "model": model_name,
-            "base_url": base_url,
-            "api_key": "0",
-            "max_tokens": 8192
-        }
+
+    # 로컬 HuggingFace 모델 (ModelCache를 통해 직접 로드)
+    return {
+        "model": model_name,
+        "device": "cuda",
+        "max_new_tokens": 8192,
+        "temperature": 0.7,
+        "do_sample": True
+    }
 
 
 # =============================================================================

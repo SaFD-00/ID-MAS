@@ -24,11 +24,11 @@ LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 | 도메인 | In-Domain 평가 | OOD 평가 |
 |--------|---------------|----------|
 | **Math** | GSM8K, MATH | SVAMP, ASDiv, MAWPS |
-| **Logical** | ReClor | ANLI-R2, ANLI-R3, BBH (9개 태스크 통합) |
+| **Logical** | ReClor | ANLI-R2, ANLI-R3, BBH (9개 서브태스크) |
 | **Commonsense** | ARC-Challenge | StrategyQA, OpenBookQA |
 
 **참고**:
-- BBH는 9개의 논리 추론 태스크(boolean expressions, formal fallacies, logical deduction 등)가 `bbh_test.json` 하나로 통합되어 있습니다.
+- BBH는 9개의 논리 추론 서브태스크(boolean expressions, formal fallacies, logical deduction 등)로 개별 평가됩니다.
 - ReClor는 로컬 JSON 파일(`.claude/references/data/reclor_data/`)을 사용하며, HuggingFace 대신 직접 준비된 데이터를 활용합니다.
 
 ## 시스템 구조
@@ -200,7 +200,7 @@ python main.py --mode train --domain commonsense --train-dataset arc_c
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B-Instruct-2507
 
-# 교사 모델로 학습 (localhost:2000/v1에서 서버 실행 필요)
+# 로컬 Teacher 모델 사용 (GPU 필요)
 python main.py --mode train --domain math --train-dataset gsm8k \
     --teacher-model meta-llama/Llama-3.3-70B-Instruct
 
@@ -385,7 +385,7 @@ data/
 │       │   ├── reclor_test.json                   # In-Domain (로컬 데이터)
 │       │   ├── anli_r2_test.json                  # OOD
 │       │   ├── anli_r3_test.json                  # OOD
-│       │   └── bbh_test.json                      # OOD (9개 태스크 통합)
+│       │   └── bbh_*.json                         # OOD (9개 서브태스크 개별 파일)
 │       └── {Model}/
 │
 └── commonsense/                                    # Commonsense 도메인
@@ -484,7 +484,7 @@ python -m utils.dataset_preparer
 이 스크립트는 다음 작업을 수행합니다:
 - HuggingFace에서 데이터셋 다운로드
 - 로컬 ReClor 데이터 변환 (`.claude/references/data/reclor_data/`)
-- BBH 9개 태스크를 `bbh_test.json`으로 통합
+- BBH 9개 서브태스크를 개별 파일로 저장 (`bbh_*_test.json`)
 - 통일된 JSON 형식으로 변환
 
 다운로드되는 데이터셋:
@@ -498,7 +498,7 @@ python -m utils.dataset_preparer
 |--------|---------|------|------|
 | Math | GSM8K, MATH, SVAMP, ASDiv, MAWPS | HuggingFace | - |
 | Logical | ANLI-R2, ANLI-R3 | HuggingFace | - |
-| Logical | BBH | HuggingFace (lukaemon/bbh) | 9개 태스크가 `bbh_test.json`로 통합 |
+| Logical | BBH | HuggingFace (lukaemon/bbh) | 9개 서브태스크 개별 파일 (`bbh_*_test.json`) |
 | Logical | ReClor | 로컬 파일 (`.claude/references/data/reclor_data/`) | train/test 로컬 JSON 활용 |
 | Commonsense | ARC-Challenge | HuggingFace | - |
 | Commonsense | StrategyQA | HuggingFace (ChilleD/StrategyQA) | - |
