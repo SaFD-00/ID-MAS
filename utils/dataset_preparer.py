@@ -696,6 +696,7 @@ C. contradiction"""
 def process_bbh(eval_dir: Path, subtasks: List[str]):
     """
     Process BBH dataset for specific subtasks.
+    Each subtask is saved as a separate JSON file.
 
     BBH format varies by subtask:
     - input: question text
@@ -705,13 +706,12 @@ def process_bbh(eval_dir: Path, subtasks: List[str]):
         eval_dir: Output directory
         subtasks: List of subtask names
     """
-    print("\n[BBH] Processing...")
+    print("\n[BBH] Processing (per-subtask files)...")
     dataset_id = "lukaemon/bbh"
-
-    all_records = []  # List to store records from all subtasks
 
     for subtask in subtasks:
         print(f"  Loading subtask: {subtask}...")
+        records = []  # Records for this subtask only
         try:
             data = load_dataset(dataset_id, subtask, split="test")
 
@@ -722,18 +722,19 @@ def process_bbh(eval_dir: Path, subtasks: List[str]):
                 input_text = item["input"]
                 target = item["target"]
 
-                all_records.append({
+                records.append({
                     "instruction": prompt,
                     "input": input_text,
                     "output": format_output(target)
                 })
 
+            # Save as individual file for this subtask
+            filename = f"bbh_{subtask}_test.json"
+            save_json(records, eval_dir / filename)
+            print(f"    Saved {len(records)} records to {filename}")
+
         except Exception as e:
             print(f"    Error loading {subtask}: {e}")
-
-    # Save as a single file
-    save_json(all_records, eval_dir / "bbh_test.json")
-    print(f"  Saved {len(all_records)} total records to bbh_test.json")
 
 
 # =============================================================================

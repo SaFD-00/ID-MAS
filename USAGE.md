@@ -155,59 +155,254 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 
 ---
 
-## 환경 변수
+## 사용
 
-| 변수 | 설명 | 필수 여부 |
-|------|------|----------|
-| `OPENAI_API_KEY` | OpenAI API 키 | gpt-*/o1-*/o3-* 모델 사용 시 필수 |
-| `HF_TOKEN` | HuggingFace 토큰 | 로컬 모델 사용 시 필수 |
-| `IDMAS_DEBUG_API` | API 디버그 로그 출력 | 선택 (기본값: 0) |
+### 학습
 
 ```bash
-# .env 파일 설정 예시
-OPENAI_API_KEY=sk-...
-HF_TOKEN=hf_...
-IDMAS_DEBUG_API=0
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen2.5-72B-Instruct \
+    --teacher-model Qwen/Qwen2.5-72B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen2.5-72B-Instruct \
+    --teacher-model Qwen/Qwen2.5-72B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen2.5-72B-Instruct \
+    --teacher-model Qwen/Qwen2.5-72B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen2.5-72B-Instruct \
+    --teacher-model Qwen/Qwen2.5-72B-Instruct
 ```
 
----
-
-## 사용 예제
-
-### 학습 예제
+### 평가
 
 #### Math 도메인
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
-    --student-model Qwen/Qwen2.5-3B-Instruct \
-    --teacher-model Qwen/Qwen2.5-3B-Instruct
+# Baseline 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-3B-Instruct
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
-    --student-model Qwen/Qwen2.5-7B-Instruct \
-    --teacher-model Qwen/Qwen2.5-7B-Instruct
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-7B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
-    --student-model Qwen/Qwen2.5-3B-Instruct \
-    --teacher-model Qwen/Qwen2.5-3B-Instruct
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-72B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
-    --student-model Qwen/Qwen2.5-7B-Instruct \
-    --teacher-model Qwen/Qwen2.5-7B-Instruct
+# SFT 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-3B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
-    --student-model Qwen/Qwen2.5-3B-Instruct \
-    --teacher-model Qwen/Qwen2.5-3B-Instruct
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-7B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
-    --student-model Qwen/Qwen2.5-7B-Instruct \
-    --teacher-model Qwen/Qwen2.5-7B-Instruct
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-72B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
-    --student-model Qwen/Qwen2.5-3B-Instruct \
-    --teacher-model Qwen/Qwen2.5-3B-Instruct
+# SFT_ID-MAS 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-3B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
-    --student-model Qwen/Qwen2.5-7B-Instruct \
-    --teacher-model Qwen/Qwen2.5-7B-Instruct
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain math --eval-dataset gsm8k \
+    --model Qwen/Qwen2.5-72B-Instruct
+
+# OOD 평가 (SVAMP)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain math --eval-dataset svamp \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain math --eval-dataset svamp \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain math --eval-dataset svamp \
+    --model Qwen/Qwen2.5-3B-Instruct
+```
+
+#### Logical 도메인
+
+```bash
+# Baseline 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-72B-Instruct
+
+# SFT 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-72B-Instruct
+
+# SFT_ID-MAS 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain logical --eval-dataset reclor \
+    --model Qwen/Qwen2.5-72B-Instruct
+
+# OOD 평가 (ANLI-R2)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset anli_r2 \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain logical --eval-dataset anli_r2 \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain logical --eval-dataset anli_r2 \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+# OOD 평가 (BBH 서브태스크 - 개별 평가)
+# 사용 가능한 서브태스크:
+# - bbh_boolean_expressions
+# - bbh_formal_fallacies
+# - bbh_logical_deduction_three_objects
+# - bbh_logical_deduction_five_objects
+# - bbh_logical_deduction_seven_objects
+# - bbh_tracking_shuffled_objects_three_objects
+# - bbh_tracking_shuffled_objects_five_objects
+# - bbh_tracking_shuffled_objects_seven_objects
+# - bbh_web_of_lies
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset bbh_boolean_expressions \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset bbh_web_of_lies \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain logical --eval-dataset bbh_formal_fallacies \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain logical --eval-dataset bbh_logical_deduction_three_objects \
+    --model Qwen/Qwen2.5-3B-Instruct
+```
+
+#### Commonsense 도메인
+
+```bash
+# Baseline 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-72B-Instruct
+
+# SFT 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-72B-Instruct
+
+# SFT_ID-MAS 평가 (In-Domain)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain commonsense --eval-dataset arc_c \
+    --model Qwen/Qwen2.5-72B-Instruct
+
+# OOD 평가 (StrategyQA)
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+    --domain commonsense --eval-dataset strategyqa \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+    --domain commonsense --eval-dataset strategyqa \
+    --model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+    --domain commonsense --eval-dataset strategyqa \
+    --model Qwen/Qwen2.5-3B-Instruct
 ```

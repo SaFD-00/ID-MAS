@@ -249,6 +249,13 @@ python main.py --mode eval --method baseline \
 python main.py --mode eval --method baseline \
     --domain logical --eval-dataset anli_r2
 
+# Logical 도메인 - BBH 서브태스크 OOD 평가 (개별 평가)
+python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset bbh_boolean_expressions
+
+python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset bbh_web_of_lies
+
 # Commonsense 도메인 - StrategyQA OOD 평가
 python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset strategyqa
