@@ -36,7 +36,7 @@ from design_modules.analysis import InstructionalAnalysis
 from design_modules.objectives import PerformanceObjectives
 from design_modules.test import TestItemDevelopment
 from design_modules.rubric import RubricDevelopment
-from design_modules.terminal_goal import TerminalGoalGenerator, get_fallback_terminal_goal
+from design_modules.terminal_goal import TerminalGoalGenerator
 from learning_loop.graph import IDMASGraphRunner
 from learning_loop.graph.state import get_statistics
 from learning_loop.student_model import StudentModel
@@ -45,7 +45,7 @@ from utils.base_loader import QuestionData
 from utils.domain_loader import DomainLoader
 from utils.answer_extractor import get_extractor, AnswerExtractor
 from config import (
-    DATA_DIR,
+    DATA_DIR, TRAINING_DATASETS,
     AVAILABLE_STUDENT_MODELS, DEFAULT_STUDENT_MODEL,
     AVAILABLE_TEACHER_MODELS, DEFAULT_TEACHER_MODEL,
     create_teacher_config, MODEL_NAME_TO_SHORT, get_model_short_name,
@@ -98,8 +98,14 @@ class IDMASPipeline:
         # Identifier for design files (domain_dataset)
         self.identifier = f"{self.domain}_{self.train_dataset}"
 
-        # Get Terminal Goal for this training dataset
-        self.terminal_goal = get_terminal_goal(self.train_dataset)
+        # Model short name for file naming (e.g., "Qwen3-4B-Instruct-2507")
+        self.model_short = get_model_short_name(self.student_model_name)
+
+        # Teacher model name for state (정의를 먼저 해야 get_terminal_goal에서 사용 가능)
+        self.teacher_model_name = teacher_config.get('model', DEFAULT_TEACHER_MODEL) if teacher_config else DEFAULT_TEACHER_MODEL
+
+        # Get Terminal Goal from design JSON (None if not generated yet)
+        self.terminal_goal = get_terminal_goal(self.train_dataset, teacher_model=self.teacher_model_name)
 
         # Domain loader
         self.loader = DomainLoader(domain)
@@ -113,12 +119,6 @@ class IDMASPipeline:
         self.objectives = PerformanceObjectives(teacher_config)
         self.test_dev = TestItemDevelopment(teacher_config)
         self.rubric_dev = RubricDevelopment(teacher_config)
-
-        # Model short name for file naming (e.g., "Qwen3-4B-Instruct-2507")
-        self.model_short = get_model_short_name(self.student_model_name)
-
-        # Teacher model name for state (정의를 먼저 해야 get_domain_data_dirs에서 사용 가능)
-        self.teacher_model_name = teacher_config.get('model', DEFAULT_TEACHER_MODEL) if teacher_config else DEFAULT_TEACHER_MODEL
 
         # Model-specific directories (new structure: data/{domain}/train/{teacher_model}/{student_model}/)
         self.model_dirs = get_domain_data_dirs(
@@ -163,72 +163,103 @@ class IDMASPipeline:
         print("INSTRUCTIONAL DESIGN PHASE")
         print("=" * 60)
 
-        # [Step 0] Terminal Goal Generation (NEW)
+        # [Step 0] Terminal Goal Generation
         terminal_goal_metadata = None
         samples_path = self.raw_data_dir / f"{self.train_dataset}_samples.json"
 
-        if samples_path.exists() and (regenerate_terminal_goal or learning_objective is None):
+        if samples_path.exists() and (regenerate_terminal_goal or self.terminal_goal is None):
             print(f"\n[Step 0] Terminal Goal Generation")
 
             with open(samples_path, 'r', encoding='utf-8') as f:
                 train_samples = json.load(f)
             print(f"  Loaded {len(train_samples)} samples from {samples_path.name}")
 
-            # Teacher Model로 Terminal Goal 생성
+            # Teacher Model로 Terminal Goal 생성 (3번 재시도, 실패 시 종료)
             try:
                 terminal_goal_result = self.terminal_goal_gen.generate(
                     train_samples=train_samples,
                     domain=self.domain,
-                    dataset=self.train_dataset
+                    dataset=self.train_dataset,
+                    max_retries=3
                 )
                 self.terminal_goal = terminal_goal_result["terminal_goal"]
                 terminal_goal_metadata = terminal_goal_result.get("metadata", {})
                 print(f"  Generated: {self.terminal_goal[:80]}...")
+
+            except RuntimeError as e:
+                # 3번 재시도 후 실패 → 프로그램 종료
+                print(f"\n[FATAL] {e}")
+                print(f"Please check:")
+                print(f"  1. Teacher model availability")
+                print(f"  2. Sample data quality ({samples_path.name})")
+                print(f"  3. Network connection (if using API)")
+                sys.exit(1)
+
             except Exception as e:
-                print(f"  [Warning] Terminal Goal generation failed: {e}")
-                print(f"  Using fallback terminal goal.")
-                self.terminal_goal = get_fallback_terminal_goal(self.train_dataset)
+                # 기타 예외 → 프로그램 종료 (fallback 없음)
+                print(f"\n[FATAL] Unexpected error during Terminal Goal generation: {e}")
+                sys.exit(1)
+
+        elif not samples_path.exists():
+            print(f"\n[Step 0] Terminal Goal Generation (SKIPPED)")
+            print(f"  Samples file not found: {samples_path.name}")
+            print(f"  Run 'python -m utils.sample_extractor' to generate samples.")
+            if not self.terminal_goal:
+                print(f"  Terminal Goal: Not generated yet")
         else:
-            if not samples_path.exists():
-                print(f"\n[Step 0] Terminal Goal Generation (SKIPPED)")
-                print(f"  Samples file not found: {samples_path.name}")
-                print(f"  Run 'python -m utils.sample_extractor' to generate samples.")
-            # 기존 하드코딩 값 사용
-            print(f"  Using default terminal goal.")
+            # 기존 design JSON에서 로드된 경우
+            if self.terminal_goal:
+                print(f"\n[Step 0] Terminal Goal (loaded from design JSON)")
+                print(f"  {self.terminal_goal[:80]}...")
 
         # [Step 1] 학습 목표 설정 (데이터셋별 Terminal Goal 사용)
         if learning_objective is None:
+            if not self.terminal_goal:
+                print(f"\n[FATAL] Terminal Goal not found for {self.train_dataset}.")
+                print(f"Run design phase with --run-design flag first.")
+                sys.exit(1)
             learning_objective = self.terminal_goal
 
         print(f"\n[Step 1] Learning Objective (Terminal Goal for {self.train_dataset.upper()})")
         print(f"  {learning_objective}")
 
-        # 2. 교수 분석
-        print(f"\n[Step 2] Instructional Analysis")
-        analysis_result = self.analysis.analyze(learning_objective)
-        print(f"  Analysis completed")
+        # Design Phase Steps (2-4) with RuntimeError handling
+        try:
+            # 2. 교수 분석
+            print(f"\n[Step 2] Instructional Analysis")
+            analysis_result = self.analysis.analyze(learning_objective, max_retries=3)
+            print(f"  Analysis completed")
 
-        # 3. 수행목표 진술
-        print(f"\n[Step 3] Performance Objectives")
-        objectives_result = self.objectives.generate_objectives(
-            analysis_result["raw_output"]
-        )
-        print(f"  Generated {len(objectives_result['performance_objectives'])} objectives")
+            # 3. 수행목표 진술
+            print(f"\n[Step 3] Performance Objectives")
+            objectives_result = self.objectives.generate_objectives(
+                analysis_result["raw_output"],
+                max_retries=3
+            )
+            print(f"  Generated {len(objectives_result['performance_objectives'])} objectives")
 
-        # 4. 루브릭 개발 (Essay 평가용)
-        print(f"\n[Step 4] Rubric Development")
+            # 4. 루브릭 개발 (Essay 평가용)
+            print(f"\n[Step 4] Rubric Development")
 
-        # output_type 결정 로직 (Default for math domain)
-        output_type = "explanatory_text"
+            # output_type 결정 로직 (Default for math domain)
+            output_type = "explanatory_text"
 
-        rubric = self.rubric_dev.generate_rubric(
-            task_description=self.terminal_goal,
-            output_type=output_type,
-            performance_objectives=objectives_result
-        )
+            rubric = self.rubric_dev.generate_rubric(
+                task_description=self.terminal_goal,
+                output_type=output_type,
+                performance_objectives=objectives_result,
+                max_retries=3
+            )
 
-        criteria_count = len(rubric.get('rubric', {}).get('criteria', []))
-        print(f"  Generated rubric with {criteria_count} criteria for {output_type}")
+            criteria_count = len(rubric.get('rubric', {}).get('criteria', []))
+            print(f"  Generated rubric with {criteria_count} criteria for {output_type}")
+
+        except RuntimeError as e:
+            print(f"\n[FATAL] Design Phase failed: {e}")
+            print(f"Please check:")
+            print(f"  1. Teacher model availability")
+            print(f"  2. Network connection (if using API)")
+            sys.exit(1)
 
         # 설계 결과 저장
         design_result = {
@@ -610,7 +641,11 @@ def run_train_mode(args):
         checkpoint_interval=10
     )
 
-    print(f"Terminal Goal: {pipeline.terminal_goal}")
+    if pipeline.terminal_goal:
+        print(f"Terminal Goal: {pipeline.terminal_goal}")
+    else:
+        print(f"Terminal Goal: Not generated yet")
+        print(f"  Run with --run-design flag to generate Terminal Goal first.")
 
     # 1. 교수 설계 단계
     if not args.run_design:
@@ -771,10 +806,12 @@ Examples:
         choices=get_available_domains(),
         help="Domain name (e.g., 'math'). Required for all modes."
     )
+    # Get all available training datasets across all domains
+    all_train_datasets = sorted(set(ds for datasets in TRAINING_DATASETS.values() for ds in datasets))
     parser.add_argument(
         "--train-dataset",
         type=str,
-        choices=["gsm8k", "math"],
+        choices=all_train_datasets,
         help="Training dataset. Required for train mode."
     )
     parser.add_argument(

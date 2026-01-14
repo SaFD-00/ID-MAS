@@ -32,7 +32,6 @@ from config.sft import (
 
 # Domain and dataset config
 from config.domains import (
-    TERMINAL_GOALS,
     DATASET_TO_DOMAIN,
     TRAINING_DATASETS,
     DOMAIN_CONFIG,
@@ -41,6 +40,7 @@ from config.domains import (
     get_eval_datasets_for_domain,
     get_training_datasets_for_domain,
     get_terminal_goal,
+    get_domain_data_dirs,
 )
 
 # Path helpers
@@ -50,8 +50,7 @@ from config.paths import (
     get_dataset_model_dirs,
 )
 
-# Domain data dirs from config.config (has raw_data_dir, design_dir keys)
-from config.config import get_domain_data_dirs
+# Note: get_domain_data_dirs is now imported from config.domains
 
 # Legacy aliases for backward compatibility
 DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)
@@ -75,7 +74,7 @@ __all__ = [
     'MODEL_NAME_TO_SHORT', 'get_sft_model_name', 'get_sft_idmas_model_name',
 
     # Domains
-    'TERMINAL_GOALS', 'DATASET_TO_DOMAIN', 'TRAINING_DATASETS', 'DOMAIN_CONFIG',
+    'DATASET_TO_DOMAIN', 'TRAINING_DATASETS', 'DOMAIN_CONFIG',
     'DATA_DIR', 'get_available_domains', 'get_eval_datasets_for_domain',
     'get_training_datasets_for_domain', 'get_terminal_goal',
 

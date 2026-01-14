@@ -10,19 +10,6 @@ from config.api import PROJECT_ROOT
 # Domain-based Configuration
 # =============================================================================
 
-# Fallback Terminal Goals for each training dataset (design JSON 파일이 없을 때 사용)
-TERMINAL_GOALS = {
-    # Math domain
-    "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
-    "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution.",
-
-    # Logical domain
-    "reclor": "Analyze logical reasoning problems by comprehending complex passages, identifying logical relationships, and selecting the most appropriate conclusion based on formal reasoning principles.",
-
-    # Commonsense domain
-    "arc_c": "Apply commonsense scientific knowledge to solve elementary science problems by understanding fundamental concepts and selecting the correct answer from multiple choices.",
-}
-
 # Dataset to domain mapping
 DATASET_TO_DOMAIN = {
     "gsm8k": "math",
@@ -92,38 +79,81 @@ def get_training_datasets_for_domain(domain: str) -> list:
     return DOMAIN_CONFIG[domain]["training_datasets"]
 
 
+def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str = None, mode: str = "train", teacher_model_name: str = None) -> dict:
+    """
+    도메인별, 모델별 데이터 디렉토리 경로 반환 (새 구조)
+
+    New Structure:
+        Train: data/{domain}/train/{teacher_model}/{student_model}/
+        Eval:  data/{domain}/eval/{student_model}/
+
+    Args:
+        domain: 도메인 이름 (예: "math", "logical", "commonsense")
+        model_name: Student 모델 이름 (None이면 기본 모델 사용)
+        train_dataset: 학습 데이터셋 이름 (파일명 생성에 사용, 폴더 구조에는 미사용)
+        mode: "train" 또는 "eval"
+        teacher_model_name: Teacher 모델 이름 (train 모드에서 사용, None이면 기본 모델 사용)
+
+    Returns:
+        경로 딕셔너리:
+        - model_dir: 모델별 출력 디렉토리
+        - raw_data_dir: 원본 데이터 디렉토리
+        - design_dir: 설계 결과 디렉토리 (train 모드만)
+    """
+    from config.models import get_model_short_name, DEFAULT_TEACHER_MODEL
+
+    if domain not in DOMAIN_CONFIG:
+        raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
+
+    model_short = get_model_short_name(model_name)
+
+    if mode == "train":
+        # Teacher 모델 이름으로 상위 디렉토리 생성
+        teacher_short = get_model_short_name(teacher_model_name) if teacher_model_name else get_model_short_name(DEFAULT_TEACHER_MODEL)
+        model_dir = DATA_DIR / domain / "train" / teacher_short / model_short
+        dirs = {
+            "model_dir": model_dir,
+            "raw_data_dir": DATA_DIR / domain / "train" / "data",
+            "design_dir": DATA_DIR / domain / "train" / teacher_short / "instructional-design",
+        }
+    else:  # eval
+        model_dir = DATA_DIR / domain / "eval" / model_short
+        dirs = {
+            "model_dir": model_dir,
+            "raw_data_dir": DATA_DIR / domain / "eval" / "data",
+        }
+
+    # 디렉토리 생성
+    for dir_path in dirs.values():
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+    return dirs
+
+
 def get_terminal_goal(
     dataset: str,
-    teacher_model: Optional[str] = None,
-    use_cache: bool = True
-) -> str:
+    teacher_model: Optional[str] = None
+) -> Optional[str]:
     """
-    Get Terminal Goal for a training dataset.
+    Get Terminal Goal for a training dataset from design JSON.
 
-    우선순위:
-    1. Design JSON 파일에서 로드 (동적 생성된 terminal_goal)
-    2. Fallback: 하드코딩된 TERMINAL_GOALS
+    Design JSON 파일에서만 로드하며, 없으면 None 반환 (fallback 없음).
 
     Args:
         dataset: 데이터셋 이름 (e.g., "gsm8k", "math")
-        teacher_model: Teacher 모델 이름 (None이면 design JSON 검색 안 함)
-        use_cache: 캐시 사용 여부 (기본 True)
+        teacher_model: Teacher 모델 이름 (필수 - design JSON 경로 결정에 사용)
 
     Returns:
-        Terminal Goal 문자열
+        Terminal Goal 문자열 또는 None (생성된 것이 없는 경우)
     """
-    # Design JSON에서 로드 시도 (teacher_model이 지정된 경우)
-    if teacher_model:
-        domain = DATASET_TO_DOMAIN.get(dataset)
-        if domain:
-            design_goal = _load_terminal_goal_from_design(domain, dataset, teacher_model)
-            if design_goal:
-                return design_goal
+    if not teacher_model:
+        return None
 
-    # Fallback: 하드코딩된 값
-    if dataset not in TERMINAL_GOALS:
-        raise ValueError(f"Unknown dataset: {dataset}. Available: {list(TERMINAL_GOALS.keys())}")
-    return TERMINAL_GOALS[dataset]
+    domain = DATASET_TO_DOMAIN.get(dataset)
+    if not domain:
+        return None
+
+    return _load_terminal_goal_from_design(domain, dataset, teacher_model)
 
 
 def _load_terminal_goal_from_design(

@@ -35,16 +35,18 @@ class TerminalGoalGenerator:
         train_samples: List[Dict],
         domain: str,
         dataset: str,
-        prompt_template: str = None
+        prompt_template: str = None,
+        max_retries: int = 3
     ) -> Dict[str, Any]:
         """
-        Terminal Goal 생성
+        Terminal Goal 생성 (최대 3번 재시도)
 
         Args:
             train_samples: 샘플 데이터 (10-30개)
             domain: 도메인 이름 (e.g., "math", "logical")
             dataset: 데이터셋 이름 (e.g., "gsm8k", "math")
             prompt_template: 커스텀 프롬프트 (None이면 기본 사용)
+            max_retries: 최대 재시도 횟수 (기본 3)
 
         Returns:
             {
@@ -60,51 +62,72 @@ class TerminalGoalGenerator:
                     "prompt_version": "v1"
                 }
             }
+
+        Raises:
+            RuntimeError: max_retries 초과 시 프로그램 종료 필요
         """
-        # 프롬프트 구성
-        prompt = get_terminal_goal_prompt(
-            domain=domain,
-            dataset=dataset,
-            samples=train_samples,
-            custom_template=prompt_template
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                # 프롬프트 구성
+                prompt = get_terminal_goal_prompt(
+                    domain=domain,
+                    dataset=dataset,
+                    samples=train_samples,
+                    custom_template=prompt_template
+                )
+
+                # LLM으로 Terminal Goal 생성 (JSON 형식)
+                try:
+                    result_json = self.llm.generate_json(
+                        prompt=prompt,
+                        system_message=TERMINAL_GOAL_SYSTEM_MESSAGE
+                    )
+                except Exception as e:
+                    # JSON 파싱 실패 시 텍스트로 재시도
+                    raw_text = self.llm.generate(
+                        prompt=prompt,
+                        system_message=TERMINAL_GOAL_SYSTEM_MESSAGE
+                    )
+                    result_json = self._parse_fallback(raw_text)
+
+                # 결과 검증
+                terminal_goal = result_json.get("terminal_goal", "")
+                if not terminal_goal:
+                    raise ValueError("Empty terminal_goal in response")
+
+                # 메타데이터 추가
+                model_name = self.teacher_config.get("model", "unknown") if self.teacher_config else "default"
+
+                return {
+                    "terminal_goal": terminal_goal,
+                    "cognitive_level": result_json.get("cognitive_level", "Apply"),
+                    "primary_verb": result_json.get("primary_verb", ""),
+                    "rationale": result_json.get("rationale", ""),
+                    "raw_output": json.dumps(result_json, ensure_ascii=False),
+                    "metadata": {
+                        "generated_at": datetime.now().isoformat(),
+                        "sample_count": len(train_samples),
+                        "model": model_name,
+                        "prompt_version": "v1"
+                    }
+                }
+
+            except Exception as e:
+                last_error = e
+                print(f"  [Attempt {attempt}/{max_retries}] Terminal Goal generation failed: {e}")
+
+                if attempt < max_retries:
+                    print(f"  Retrying...")
+                else:
+                    print(f"  [FATAL] All {max_retries} attempts failed.")
+
+        # 모든 재시도 실패 → RuntimeError 발생
+        raise RuntimeError(
+            f"Terminal Goal generation failed after {max_retries} attempts. "
+            f"Last error: {last_error}"
         )
-
-        # LLM으로 Terminal Goal 생성 (JSON 형식)
-        try:
-            result_json = self.llm.generate_json(
-                prompt=prompt,
-                system_message=TERMINAL_GOAL_SYSTEM_MESSAGE
-            )
-        except Exception as e:
-            # JSON 파싱 실패 시 텍스트로 재시도
-            print(f"  [Warning] JSON parsing failed, retrying with text mode: {e}")
-            raw_text = self.llm.generate(
-                prompt=prompt,
-                system_message=TERMINAL_GOAL_SYSTEM_MESSAGE
-            )
-            result_json = self._parse_fallback(raw_text)
-
-        # 결과 검증
-        terminal_goal = result_json.get("terminal_goal", "")
-        if not terminal_goal:
-            raise ValueError("Terminal Goal generation failed: empty result")
-
-        # 메타데이터 추가
-        model_name = self.teacher_config.get("model", "unknown") if self.teacher_config else "default"
-
-        return {
-            "terminal_goal": terminal_goal,
-            "cognitive_level": result_json.get("cognitive_level", "Apply"),
-            "primary_verb": result_json.get("primary_verb", ""),
-            "rationale": result_json.get("rationale", ""),
-            "raw_output": json.dumps(result_json, ensure_ascii=False),
-            "metadata": {
-                "generated_at": datetime.now().isoformat(),
-                "sample_count": len(train_samples),
-                "model": model_name,
-                "prompt_version": "v1"
-            }
-        }
 
     def _parse_fallback(self, raw_text: str) -> Dict[str, Any]:
         """
@@ -152,31 +175,6 @@ class TerminalGoalGenerator:
                 result["terminal_goal"] = match.group(1).strip()
 
         return result
-
-
-# Fallback Terminal Goals (샘플 파일이 없을 때 사용)
-FALLBACK_TERMINAL_GOALS = {
-    "gsm8k": "The model should be able to generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
-    "math": "The model should be able to solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution.",
-    "reclor": "The model should be able to analyze logical reasoning problems by comprehending complex passages, identifying logical relationships, and selecting the most appropriate conclusion based on formal reasoning principles.",
-    "arc_c": "The model should be able to apply commonsense scientific knowledge to solve elementary science problems by understanding fundamental concepts and selecting the correct answer from multiple choices.",
-}
-
-
-def get_fallback_terminal_goal(dataset: str) -> str:
-    """
-    Fallback Terminal Goal 반환
-
-    Args:
-        dataset: 데이터셋 이름
-
-    Returns:
-        하드코딩된 기본 Terminal Goal
-    """
-    return FALLBACK_TERMINAL_GOALS.get(
-        dataset,
-        "The model should be able to solve the given problem correctly."
-    )
 
 
 if __name__ == "__main__":

@@ -46,7 +46,6 @@ data/**/Llama-*/
 data/**/Qwen*/
 data/**/instructional-design/
 *.log
-USAGE.md
 
 # Data preparation scripts (not for production)
 utils/reparse_eval_results.py

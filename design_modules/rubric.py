@@ -25,10 +25,11 @@ class RubricDevelopment:
         self,
         task_description: str,
         output_type: str,
-        performance_objectives: Dict[str, Any]
+        performance_objectives: Dict[str, Any],
+        max_retries: int = 3
     ) -> Dict[str, Any]:
         """
-        Essay형 Test Item에 대한 루브릭 생성
+        Essay형 Test Item에 대한 루브릭 생성 (최대 3번 재시도)
 
         Args:
             task_description: 평가 과제 설명
@@ -36,9 +37,13 @@ class RubricDevelopment:
                 (explanatory_text, analytical_essay, evaluative_essay,
                  argumentative_essay, comparative_analysis, design_proposal)
             performance_objectives: 수행목표 딕셔너리
+            max_retries: 최대 재시도 횟수 (기본 3)
 
         Returns:
             루브릭 딕셔너리 (JSON)
+
+        Raises:
+            RuntimeError: max_retries 초과 시
         """
         # 출력 타입 검증
         valid_types = [
@@ -52,24 +57,49 @@ class RubricDevelopment:
                 f"Must be one of {valid_types}"
             )
 
-        prompt = RUBRIC_GENERATION_PROMPT.format(
-            task_description=task_description,
-            performance_objectives=json.dumps(
-                performance_objectives,
-                ensure_ascii=False
-            ),
-            rubric_criterion_templates=json.dumps(
-                self.templates,
-                ensure_ascii=False
-            )
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                prompt = RUBRIC_GENERATION_PROMPT.format(
+                    task_description=task_description,
+                    performance_objectives=json.dumps(
+                        performance_objectives,
+                        ensure_ascii=False
+                    ),
+                    rubric_criterion_templates=json.dumps(
+                        self.templates,
+                        ensure_ascii=False
+                    )
+                )
+
+                # 시스템 메시지에 output_type 포함
+                system_message = f"Expected output type: {output_type}"
+
+                result = self.llm.generate_json(prompt, system_message)
+
+                if not result:
+                    raise ValueError("Empty response from LLM")
+
+                # 결과 검증
+                if not self.validate_rubric(result):
+                    raise ValueError("Invalid rubric format")
+
+                return result
+
+            except Exception as e:
+                last_error = e
+                print(f"  [Attempt {attempt}/{max_retries}] Rubric Development failed: {e}")
+
+                if attempt < max_retries:
+                    print(f"  Retrying...")
+                else:
+                    print(f"  [FATAL] All {max_retries} attempts failed.")
+
+        raise RuntimeError(
+            f"Rubric Development failed after {max_retries} attempts. "
+            f"Last error: {last_error}"
         )
-
-        # 시스템 메시지에 output_type 포함
-        system_message = f"Expected output type: {output_type}"
-
-        result = self.llm.generate_json(prompt, system_message)
-
-        return result
 
     def validate_rubric(self, rubric: Dict[str, Any]) -> bool:
         """

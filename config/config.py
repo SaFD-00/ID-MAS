@@ -312,94 +312,17 @@ TERMINAL_GOALS = {
     "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution."
 }
 
-# Dataset to domain mapping
-DATASET_TO_DOMAIN = {
-    "gsm8k": "math",
-    "math": "math"
-}
-
-# Available training datasets per domain
-TRAINING_DATASETS = {
-    "math": ["gsm8k", "math"]
-}
-
-# Domain configurations
-DOMAIN_CONFIG = {
-    "math": {
-        "data_dir": DATA_DIR / "math",
-        "training_datasets": ["gsm8k", "math"],
-        "eval_datasets": ["gsm8k", "math", "svamp", "asdiv", "mawps"],
-        "default_eval": "gsm8k"
-    }
-}
-
-
-def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str = None, mode: str = "train", teacher_model_name: str = None) -> dict:
-    """
-    도메인별, 모델별 데이터 디렉토리 경로 반환 (새 구조)
-
-    New Structure:
-        Train: data/{domain}/train/{teacher_model}/{student_model}/
-        Eval:  data/{domain}/eval/{student_model}/
-
-    Args:
-        domain: 도메인 이름 (예: "math")
-        model_name: Student 모델 이름 (None이면 기본 모델 사용)
-        train_dataset: 학습 데이터셋 이름 (파일명 생성에 사용, 폴더 구조에는 미사용)
-        mode: "train" 또는 "eval"
-        teacher_model_name: Teacher 모델 이름 (train 모드에서 사용, None이면 기본 모델 사용)
-
-    Returns:
-        경로 딕셔너리:
-        - model_dir: 모델별 출력 디렉토리
-        - raw_data_dir: 원본 데이터 디렉토리
-        - design_dir: 설계 결과 디렉토리 (train 모드만)
-    """
-    if domain not in DOMAIN_CONFIG:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
-
-    model_short = get_model_short_name(model_name)
-
-    if mode == "train":
-        # Teacher 모델 이름으로 상위 디렉토리 생성
-        teacher_short = get_model_short_name(teacher_model_name) if teacher_model_name else get_model_short_name(DEFAULT_TEACHER_MODEL)
-        model_dir = DATA_DIR / domain / "train" / teacher_short / model_short
-        dirs = {
-            "model_dir": model_dir,
-            "raw_data_dir": DATA_DIR / domain / "train" / "data",
-            "design_dir": DATA_DIR / domain / "train" / teacher_short / "instructional-design",
-        }
-    else:  # eval
-        model_dir = DATA_DIR / domain / "eval" / model_short
-        dirs = {
-            "model_dir": model_dir,
-            "raw_data_dir": DATA_DIR / domain / "eval" / "data",
-        }
-
-    # 디렉토리 생성
-    for dir_path in dirs.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    return dirs
-
-
-def get_available_domains() -> list:
-    """Get list of available domains."""
-    return list(DOMAIN_CONFIG.keys())
-
-
-def get_eval_datasets_for_domain(domain: str) -> list:
-    """Get available evaluation datasets for a domain."""
-    if domain not in DOMAIN_CONFIG:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
-    return DOMAIN_CONFIG[domain]["eval_datasets"]
-
-
-def get_training_datasets_for_domain(domain: str) -> list:
-    """Get available training datasets for a domain."""
-    if domain not in DOMAIN_CONFIG:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
-    return DOMAIN_CONFIG[domain]["training_datasets"]
+# =============================================================================
+# Domain Configuration (Moved to config/domains.py)
+# =============================================================================
+# Domain-related configurations are now centralized in config/domains.py:
+# - DATASET_TO_DOMAIN
+# - TRAINING_DATASETS
+# - DOMAIN_CONFIG
+# - get_domain_data_dirs()
+# - get_available_domains()
+# - get_eval_datasets_for_domain()
+# - get_training_datasets_for_domain()
 
 
 def get_terminal_goal(dataset: str) -> str:

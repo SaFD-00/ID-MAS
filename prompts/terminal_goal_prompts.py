@@ -5,56 +5,56 @@ Terminal Goal 자동 생성을 위한 프롬프트 템플릿.
 Design Phase Step 0에서 사용.
 """
 
-TERMINAL_GOAL_PROMPT = """You are an expert instructional designer and AI learning researcher.
-
-## Context
+TERMINAL_GOAL_PROMPT = """## Context
 - Domain: {domain}
 - Dataset: {dataset}
 - Sample Size: {sample_count} items
 
 ## Task
-Analyze the provided test items and derive a single Terminal Goal that captures the core competency required to solve these problems.
-
-## Guidelines
-1. Focus on the highest cognitive level demonstrated in the samples
-2. Use a single, observable, measurable action verb (e.g., generate, solve, analyze, apply)
-3. Start with: "The model should be able to..."
-4. Do NOT mention learning theories by name (e.g., avoid "Bloom's Taxonomy")
-5. Make it actionable and domain-specific
-6. The goal should be achievable through the demonstrated problem types
-
-## Reference Examples
-- Math (GSM8K): "The model should be able to generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems."
-- Math (MATH): "The model should be able to solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution."
-- Logical (ReClor): "The model should be able to analyze logical reasoning problems by comprehending complex passages, identifying logical relationships, and selecting the most appropriate conclusion based on formal reasoning principles."
-- Commonsense (ARC-C): "The model should be able to apply commonsense scientific knowledge to solve elementary science problems by understanding fundamental concepts and selecting the correct answer from multiple choices."
+Analyze the provided samples and derive a single Terminal Goal that captures the core competency required to solve these problems.
 
 ## Input Data
 Below are {sample_count} representative samples from the {dataset} dataset:
 
 {train_data}
 
+## Analysis Steps (Think step by step)
+1. **Pattern Recognition**: Identify common problem types and structures across samples
+2. **Cognitive Demand Analysis**: Determine what mental processes are required (recall, comprehension, application, analysis, evaluation, creation)
+3. **Action Verb Selection**: Choose a single, observable, measurable verb that best represents the required competency
+4. **Goal Formulation**: Synthesize findings into a clear Terminal Goal
+
+## Guidelines
+- Start with: "The model should be able to..."
+- Use action verbs like: generate, solve, analyze, apply, evaluate, construct
+- Make it domain-specific and achievable through the demonstrated problem types
+- Do NOT mention learning theories by name
+
+## Reference Examples
+- Math (GSM8K): "The model should be able to generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems."
+- Logical (ReClor): "The model should be able to analyze logical reasoning problems by comprehending complex passages, identifying logical relationships, and selecting the most appropriate conclusion based on formal reasoning principles."
+
 ## Output (JSON)
-Provide your response in the following JSON format:
 {{
+  "pattern_analysis": "Brief summary of common patterns found in samples",
+  "cognitive_demands": ["list", "of", "required", "cognitive", "processes"],
   "terminal_goal": "The model should be able to ...",
   "cognitive_level": "Remember|Understand|Apply|Analyze|Evaluate|Create",
   "primary_verb": "the main action verb used",
-  "rationale": "Brief explanation of why this goal was chosen based on the sample analysis"
+  "rationale": "Why this goal was chosen based on the analysis"
 }}
 """
 
 
 TERMINAL_GOAL_SYSTEM_MESSAGE = """You are an expert in instructional design and educational assessment.
-Your task is to analyze learning materials and derive clear, measurable learning objectives.
+Your role is to analyze learning materials and derive clear, measurable learning objectives.
 
-Key principles:
-- Learning objectives should be SMART: Specific, Measurable, Achievable, Relevant, Time-bound
-- Use action verbs from Bloom's Taxonomy (but don't name the taxonomy)
+Principles:
+- Objectives must be Specific, Measurable, Achievable, and Relevant
 - Focus on observable behaviors that can be assessed
 - Consider the cognitive complexity required by the tasks
 
-Output must be valid JSON only, with no additional text."""
+Respond with valid JSON only."""
 
 
 def format_samples_for_prompt(samples: list, max_samples: int = 20) -> str:

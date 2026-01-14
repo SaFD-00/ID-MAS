@@ -19,25 +19,55 @@ class PerformanceObjectives:
 
     def generate_objectives(
         self,
-        instructional_analysis: str
+        instructional_analysis: str,
+        max_retries: int = 3
     ) -> Dict[str, Any]:
         """
-        교수 분석 결과로부터 수행목표 생성
+        교수 분석 결과로부터 수행목표 생성 (최대 3번 재시도)
 
         Args:
             instructional_analysis: 교수 분석 결과 텍스트
+            max_retries: 최대 재시도 횟수 (기본 3)
 
         Returns:
             수행목표 딕셔너리 (JSON)
+
+        Raises:
+            RuntimeError: max_retries 초과 시
         """
-        prompt = PERFORMANCE_OBJECTIVES_PROMPT.format(
-            instructional_analysis=instructional_analysis
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                prompt = PERFORMANCE_OBJECTIVES_PROMPT.format(
+                    instructional_analysis=instructional_analysis
+                )
+
+                # LLM으로 JSON 형식으로 생성
+                result = self.llm.generate_json(prompt)
+
+                if not result:
+                    raise ValueError("Empty response from LLM")
+
+                # 결과 검증
+                if not self.validate_objectives(result):
+                    raise ValueError("Invalid objectives format")
+
+                return result
+
+            except Exception as e:
+                last_error = e
+                print(f"  [Attempt {attempt}/{max_retries}] Performance Objectives generation failed: {e}")
+
+                if attempt < max_retries:
+                    print(f"  Retrying...")
+                else:
+                    print(f"  [FATAL] All {max_retries} attempts failed.")
+
+        raise RuntimeError(
+            f"Performance Objectives generation failed after {max_retries} attempts. "
+            f"Last error: {last_error}"
         )
-
-        # LLM으로 JSON 형식으로 생성
-        result = self.llm.generate_json(prompt)
-
-        return result
 
     def validate_objectives(self, objectives: Dict[str, Any]) -> bool:
         """
