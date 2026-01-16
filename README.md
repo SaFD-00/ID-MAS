@@ -13,11 +13,36 @@ ID-MAS는 교수 설계(Instructional Design) 이론을 LLM 학습에 적용한 
 
 ## 지원 도메인 및 데이터셋
 
-| 도메인 | 학습 데이터셋 | 평가 데이터셋 |
-|--------|--------------|---------------|
-| **Math** | gsm8k, math | gsm8k, math, svamp, asdiv, mawps |
-| **Logical** | reclor | reclor, anli_r2, anli_r3, bbh |
-| **Commonsense** | arc_c | arc_c, strategyqa, openbookqa |
+### Math 도메인
+
+| 구분 | 데이터셋 | 답변 유형 | 비고 |
+|------|----------|-----------|------|
+| **학습** | `gsm8k` | Numeric | 초등 수학 문제 |
+| **학습** | `math` | LaTeX | 고급 수학 문제 |
+| **평가 (In-Domain)** | `gsm8k` | Numeric | |
+| **평가 (In-Domain)** | `math` | LaTeX | |
+| **평가 (OOD)** | `svamp` | Numeric | Cross-dataset |
+| **평가 (OOD)** | `asdiv` | Numeric | Cross-dataset |
+| **평가 (OOD)** | `mawps` | Numeric | Cross-dataset |
+
+### Logical 도메인
+
+| 구분 | 데이터셋 | 답변 유형 | 비고 |
+|------|----------|-----------|------|
+| **학습** | `reclor` | MCQ | 논리 추론 |
+| **평가 (In-Domain)** | `reclor` | MCQ | |
+| **평가 (OOD)** | `anli_r2` | MCQ | Adversarial NLI |
+| **평가 (OOD)** | `anli_r3` | MCQ | Adversarial NLI |
+| **평가 (OOD)** | `bbh` | Text | 9개 서브태스크 통합 |
+
+### Commonsense 도메인
+
+| 구분 | 데이터셋 | 답변 유형 | 비고 |
+|------|----------|-----------|------|
+| **학습** | `arc_c` | MCQ | ARC-Challenge |
+| **평가 (In-Domain)** | `arc_c` | MCQ | |
+| **평가 (OOD)** | `strategyqa` | Boolean | Yes/No 질문 |
+| **평가 (OOD)** | `openbookqa` | MCQ | 상식 과학 |
 
 ## 지원 모델
 
@@ -25,30 +50,53 @@ ID-MAS는 교수 설계(Instructional Design) 이론을 LLM 학습에 적용한 
 
 | 유형 | 모델 | 비고 |
 |------|------|------|
-| OpenAI | gpt-5-2025-08-07 | 기본값 (API) |
-| 로컬 | meta-llama/Llama-3.1-8B-Instruct | HuggingFace |
-| 로컬 | meta-llama/Llama-3.1-70B-Instruct | HuggingFace |
-| 로컬 | meta-llama/Llama-3.2-3B-Instruct | HuggingFace |
-| 로컬 | meta-llama/Llama-3.3-70B-Instruct | HuggingFace |
-| 로컬 | Qwen/Qwen2.5-3B-Instruct | HuggingFace |
-| 로컬 | Qwen/Qwen2.5-7B-Instruct | HuggingFace |
-| 로컬 | Qwen/Qwen2.5-14B-Instruct | HuggingFace |
-| 로컬 | Qwen/Qwen2.5-72B-Instruct | HuggingFace |
-| 로컬 | Qwen/Qwen3-4B-Instruct-2507 | HuggingFace |
+| **OpenAI API** | `gpt-5-2025-08-07` | 기본값 (OPENAI_API_KEY 필요) |
+| **OpenAI API** | `o1-*`, `o3-*` | OpenAI Reasoning 모델 |
+| **로컬 HuggingFace** | `meta-llama/Llama-3.1-8B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `meta-llama/Llama-3.1-70B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `meta-llama/Llama-3.2-3B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `meta-llama/Llama-3.3-70B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `Qwen/Qwen2.5-3B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `Qwen/Qwen2.5-7B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `Qwen/Qwen2.5-14B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `Qwen/Qwen2.5-72B-Instruct` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `Qwen/Qwen3-4B-Instruct-2507` | GPU 직접 로드 |
+
+**모델 선택 로직**:
+- `gpt-*`, `o1-*`, `o3-*`로 시작하는 모델 → OpenAI API 사용
+- 그 외 모델 → `ModelCache`를 통해 로컬 HuggingFace 직접 로드
 
 ### Student 모델 (학습 대상)
 
 | 모델 | 비고 |
 |------|------|
-| Qwen/Qwen2.5-3B-Instruct | 기본값 |
-| Qwen/Qwen2.5-7B-Instruct | |
-| Qwen/Qwen2.5-14B-Instruct | |
-| Qwen/Qwen2.5-72B-Instruct | |
-| Qwen/Qwen3-4B-Instruct-2507 | |
-| meta-llama/Llama-3.1-8B-Instruct | |
-| meta-llama/Llama-3.1-70B-Instruct | |
-| meta-llama/Llama-3.2-3B-Instruct | |
-| meta-llama/Llama-3.3-70B-Instruct | |
+| `Qwen/Qwen2.5-3B-Instruct` | **기본값** |
+| `Qwen/Qwen2.5-7B-Instruct` | |
+| `Qwen/Qwen2.5-14B-Instruct` | |
+| `Qwen/Qwen2.5-72B-Instruct` | |
+| `Qwen/Qwen3-4B-Instruct-2507` | |
+| `meta-llama/Llama-3.1-8B-Instruct` | |
+| `meta-llama/Llama-3.1-70B-Instruct` | |
+| `meta-llama/Llama-3.2-3B-Instruct` | |
+| `meta-llama/Llama-3.3-70B-Instruct` | |
+
+**메모리 공유**: Teacher/Student 동일 모델 사용 시 `ModelCache`가 메모리를 공유합니다.
+
+### SFT 모델 (HuggingFace Hub)
+
+Fine-tuning된 모델은 HuggingFace Hub에서 자동 로드됩니다.
+
+| 베이스 모델 | SFT 모델 | SFT_ID-MAS 모델 |
+|-------------|----------|-----------------|
+| `Qwen/Qwen2.5-3B-Instruct` | `SaFD-00/qwen2.5-3b-{domain}` | `SaFD-00/qwen2.5-3b-{domain}_id-mas` |
+| `Qwen/Qwen2.5-7B-Instruct` | `SaFD-00/qwen2.5-7b-{domain}` | `SaFD-00/qwen2.5-7b-{domain}_id-mas` |
+| `Qwen/Qwen2.5-14B-Instruct` | `SaFD-00/qwen2.5-14b-{domain}` | `SaFD-00/qwen2.5-14b-{domain}_id-mas` |
+| `Qwen/Qwen2.5-72B-Instruct` | `SaFD-00/qwen2.5-72b-{domain}` | `SaFD-00/qwen2.5-72b-{domain}_id-mas` |
+| `Qwen/Qwen3-4B-Instruct-2507` | `SaFD-00/qwen3-4b-{domain}` | `SaFD-00/qwen3-4b-{domain}_id-mas` |
+| `meta-llama/Llama-3.1-8B-Instruct` | `SaFD-00/llama3.1-8b-{domain}` | `SaFD-00/llama3.1-8b-{domain}_id-mas` |
+| `meta-llama/Llama-3.1-70B-Instruct` | `SaFD-00/llama3.1-70b-{domain}` | `SaFD-00/llama3.1-70b-{domain}_id-mas` |
+| `meta-llama/Llama-3.2-3B-Instruct` | `SaFD-00/llama3.2-3b-{domain}` | `SaFD-00/llama3.2-3b-{domain}_id-mas` |
+| `meta-llama/Llama-3.3-70B-Instruct` | `SaFD-00/llama3.3-70b-{domain}` | `SaFD-00/llama3.3-70b-{domain}_id-mas` |
 
 ## 빠른 시작
 
@@ -184,9 +232,13 @@ python main.py --mode eval --method sft \
 python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset gsm8k
 
-# Cross-dataset 평가 (SVAMP)
+# OOD 평가 (Cross-dataset)
 python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset svamp
+
+# Logical 도메인 OOD 평가 (BBH)
+python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset bbh
 
 # 처음부터 새로 평가
 python main.py --mode eval --method baseline \
@@ -253,8 +305,14 @@ ID-MAS/
 │   ├── teacher_wrapper.py      # Teacher 래퍼 (API + 로컬)
 │   ├── student_wrapper.py      # Student 래퍼 (로컬)
 │   └── model_cache.py          # 모델 캐시
+├── prompts/                     # 프롬프트 템플릿
+│   ├── design_prompts.py       # 설계 단계 프롬프트
+│   ├── instructional_goal_prompts.py  # Instructional Goal 프롬프트
+│   ├── rubric_templates.py     # 루브릭 템플릿
+│   └── learning_prompts.py     # 학습 루프 프롬프트
 ├── utils/                       # 유틸리티
 │   ├── dataset_preparer.py     # 데이터셋 다운로드/전처리
+│   ├── dataset_enhancer.py     # Enhanced 학습 데이터 생성
 │   ├── sample_extractor.py     # 샘플 추출
 │   ├── domain_loader.py        # 도메인 로더
 │   └── answer_extractor.py     # 답변 추출기
