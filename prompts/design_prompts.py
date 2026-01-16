@@ -25,10 +25,6 @@ Terminal Goal → Subskills → Subtasks
   Examples: (Understand – Conceptual Knowledge), (Apply – Procedural Knowledge)
 - Include only the minimum number of Subskills and Subtasks that are essential to achieving the Terminal Goal.
 
-Present prerequisite knowledge separately in a section titled "Prerequisite Knowledge."
-Each item must follow this formatting:
-"Function Number / Learning Type (Cognitive Process – Knowledge Dimension) / Prerequisite Knowledge Description"
-
 The final output must strictly follow the structure and labels in the Output Format below.
 - Do not change the wording, ordering, line breaks, or section titles.
 - The Output Format example is provided ONLY to specify formatting and structure.
@@ -44,14 +40,9 @@ Terminal Goal: [Learning objective statement] (Cognitive Process Dimension – K
  │   └── [2-2] [Subtask statement] (Cognitive Process Dimension – Knowledge Dimension)
  └── [3] [Subskill statement] (Cognitive Process Dimension – Knowledge Dimension)
 
-### Prerequisite Knowledge
-Function Number / (Cognitive Process – Knowledge Dimension) / Prerequisite Knowledge Description
-Function Number / (Cognitive Process – Knowledge Dimension) / Prerequisite Knowledge Description
-Function Number / (Cognitive Process – Knowledge Dimension) / Prerequisite Knowledge Description
-
 [Requirements]
 - Maintain the exact structure, titles, line breaks, and tree characters (├──, │, └──).
-- Do not change section names ("Instructional Analysis Results", "Prerequisite Knowledge").
+- Do not change section name ("Instructional Analysis Results").
 - Output only the required instructional analysis products; do not include introductions, explanations, or references.
 """
 
@@ -128,42 +119,6 @@ Your output must be formatted as JSON, following this structure and no other for
       "Behavior": "...",
       "Condition": "...",
       "Criterion": "..."
-    }}
-  ]
-}}
-
-Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
-"""
-
-
-# ==============================================================================
-# 5단계: Test Item 개발
-# ==============================================================================
-
-TEST_ITEM_DEVELOPMENT_PROMPT = """
-You are an instructional designer specializing in criterion-referenced assessment development with Anderson & Krathwohl's Taxonomy for Learning.
-Your task is to generate essay-type assessment items based strictly on the given Performance Objective.
-You will be given the Terminal Goal and a set of Performance Objectives in JSON format.
-
-[Input Data]
-Performance Objective: {performance_objective}
-
-[Instructions]
-Using the provided data, generate one essay-type assessment item for each Performance Objective.
-- Every assessment item must directly measure the Behavior stated in that Performance Objective, incorporating the Condition or Criterion.
-- Each item must be unambiguous, aligned to the Performance Objective, and appropriate for evaluating an LLM.
-- Using these rules, generate high-quality, reliable, and valid assessment items that accurately measure whether the learner can achieve the Terminal Goal and each Performance Objective.
-
-[Output Format]
-The output must be in the following JSON format:
-
-{{
-  "assessment_items": [
-    {{
-      "target": "Terminal Goal or Subskill/Subtask Name",
-      "item": "Write the essay-type assessment question here.",
-      "problem context": "Write a problem situation that supports the question.",
-      "condition": "Write down the elements that must be met or considered in order to address the context of the problem."
     }}
   ]
 }}

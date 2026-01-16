@@ -1,5 +1,5 @@
 """
-Iterative Scaffolding Pipeline Prompts (PDF Proposal Based)
+Iterative Scaffolding Pipeline Prompts
 
 Scaffolding - Iterative Response Generation with Teacher Guidance
 - Initial response generation
@@ -12,7 +12,7 @@ Scaffolding - Iterative Response Generation with Teacher Guidance
 # Scaffolding System Prompt
 # ==============================================================================
 
-SCAFFOLDING_SYSTEM_PROMPT = """The purpose of your response is to demonstrate the attainment of the Terminal Goal: {terminal_goal}
+SCAFFOLDING_SYSTEM_PROMPT = """The purpose of your response is to demonstrate the attainment of the Instructional Goal: {instructional_goal}
 
 You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
 
@@ -40,15 +40,15 @@ Answer: [your final answer]
 # Teacher Intervention Prompt (ReAct-style with Socratic Questions)
 # ==============================================================================
 
-TEACHER_INTERVENTION_PROMPT = """You are a teacher model supporting the learning of a student model.
+TEACHER_INTERVENTION_PROMPT = """You are a teacher supporting the learning of a student.
 
-Your role is NOT to provide correct answers, but to generate a reasoning state that guides the student model's next response. You must monitor the student model's reasoning steps to ensure they meet the established performance objectives.
+Your role is NOT to provide correct answers, but to generate a reasoning state that guides the student's next response. You must monitor the student's reasoning steps to ensure they meet the established performance objectives.
 
-In cases of non-compliance or error, you must generate tailored feedback to guide the model toward the desired outcome using Socratic questioning. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student model's next reasoning action.
+In cases of non-compliance or error, you must generate tailored feedback to guide the student toward the desired outcome using Socratic questioning. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student's next reasoning action.
 
 [Input Data]
 - Problem: {problem_text}
-- Student model response: {student_response}
+- Student response: {student_response}
 - Performance objectives: {performance_objectives}
 - Ground truth (FOR REFERENCE ONLY - DO NOT REVEAL): {ground_truth}
 
@@ -59,7 +59,7 @@ In cases of non-compliance or error, you must generate tailored feedback to guid
 4. Analyze the student response and determine which performance objectives are satisfied and which are not
 5. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed
 6. Avoid vague or abstract evaluations
-7. For each unsatisfied performance objective, derive a reasoning action that the student model should perform in the next iteration
+7. For each unsatisfied performance objective, derive a reasoning action that the student should perform in the next iteration
 8. Do not provide final conclusions, correct answers, or complete reasoning paths
 9. Instead, specify what type of reasoning process, analytical step, or judgment perspective should be explicitly carried out next
 
@@ -110,7 +110,7 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 # Student Response to Socratic Questions
 # ==============================================================================
 
-STUDENT_SOCRATIC_RESPONSE_PROMPT = """You are a student model learning to solve problems with teacher guidance.
+STUDENT_SOCRATIC_RESPONSE_PROMPT = """You are a student learning to solve problems with teacher guidance.
 
 Your teacher has evaluated your previous response and provided Socratic questions to guide your thinking. You must carefully consider this feedback and improve your response.
 
@@ -420,4 +420,177 @@ Based on the scaffolding process:
 $$x = 5$$
 
 Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
+"""
+
+
+# ==============================================================================
+# Scaffolding Artifact Generation Prompt (NEW - Replaces Socratic Questioning)
+# ==============================================================================
+
+SCAFFOLDING_ARTIFACT_PROMPT = """You are an instructional design expert (Dick & Carey model) creating a Scaffolding Artifact to help a student improve.
+
+Your role is to design pedagogical scaffolding for Performance Objectives that the student failed to meet. This scaffolding will be stored as a "Scaffolding DB" that the student can reference in their next attempt.
+
+[Input Data]
+- Problem: {problem_text}
+- Student's Response: {student_response}
+- Performance Objectives Evaluation: {po_evaluation}
+- Failed Performance Objectives: {failed_objectives}
+- Instructional Analysis: {task_analysis}
+- Iteration Number: {iteration_number} of {max_iterations}
+
+[Instructions]
+1. **Select scaffolding targets**: Focus on Performance Objectives with high failure rates that are critical for achieving the Instructional Goal.
+
+2. **Classify skill level**: For each unmet PO, determine if it requires:
+   - **HOT (High-Order Thinking)**: Analyze, Evaluate, Create
+   - **LOT (Low-Order Thinking)**: Remember, Understand, Apply
+
+3. **Design appropriate scaffolding**:
+
+   For **HOT skills**:
+   - Strategy suggestion: Propose an approach or reasoning strategy
+   - Partial worked example: Show partial reasoning (stop before the final answer)
+   - Socratic question: Guide thinking without revealing the answer
+   - Key attention points: What the student should focus on
+
+   For **LOT skills**:
+   - Missed concept/information: Explicitly state what the student missed
+   - Brief explanation: Provide a concise explanation to minimize cognitive load
+
+4. **Do NOT reveal correct answers** - guide reasoning, don't solve.
+
+[Output Format - JSON]
+{{
+  "scaffolding_artifacts": [
+    {{
+      "target_objective": "The specific unmet Performance Objective",
+      "skill_type": "HOT" or "LOT",
+      "cognitive_level": "Analyze/Evaluate/Create" or "Remember/Understand/Apply",
+      "failure_analysis": "Why the student failed this objective",
+      "scaffolding_content": {{
+        "strategy_suggestion": "Suggested approach (for HOT) or null",
+        "partial_example": "Partial worked example showing key reasoning (for HOT) or null",
+        "socratic_question": "Guiding question (for HOT) or null",
+        "missed_concept": "Concept the student missed (for LOT) or null",
+        "brief_explanation": "Concise explanation (for LOT) or null",
+        "key_attention_points": "What to focus on in next attempt"
+      }}
+    }}
+  ],
+  "scaffolding_summary": "A 3-5 sentence summary synthesizing the key guidance for the student's next attempt. This should be actionable and reference the specific strategies or concepts without revealing answers."
+}}
+
+CRITICAL INSTRUCTIONS:
+1. Your response MUST be ONLY valid JSON - no additional text
+2. Do NOT reveal correct answers or complete solutions
+3. Focus on guiding the reasoning process
+4. The scaffolding_summary should be directly usable by the student
+
+Output ONLY the JSON object above.
+"""
+
+
+# ==============================================================================
+# Student Response with Scaffolding Artifact Prompt (NEW)
+# ==============================================================================
+
+STUDENT_WITH_ARTIFACT_PROMPT = """You are a student learning to solve problems with scaffolding support.
+
+Your teacher has analyzed your previous attempt and prepared scaffolding guidance to help you improve. You must carefully use this scaffolding information to generate a better solution.
+
+[Problem]
+{problem_text}
+
+[Your Previous Response]
+{previous_response}
+
+[Scaffolding Database]
+The following scaffolding information has been prepared to help you:
+
+{scaffolding_summary}
+
+[Detailed Scaffolding Artifacts]
+{scaffolding_artifacts}
+
+[Instructional Analysis (Learning Structure)]
+{task_analysis}
+
+[Instructions]
+1. Carefully review the Scaffolding Database and identify which guidance applies to your mistakes
+2. For each piece of scaffolding guidance you use, explicitly acknowledge it
+3. Apply the strategies, concepts, or explanations from the scaffolding to improve your solution
+4. Show your improved reasoning step by step
+5. Provide your final answer clearly
+
+CRITICAL: You MUST explicitly state which information you retrieved from the Scaffolding DB. This helps track learning progress.
+
+[Output Format]
+Information Retrieved from Scaffolding DB:
+- [List the specific concepts, strategies, or guidance you are using from the scaffolding]
+- [Be specific about what you learned and will apply]
+
+Improved Reasoning:
+- Applying scaffolding guidance: [explain how you are using the scaffolding]
+- Step-by-step solution: [your detailed improved solution]
+
+Answer: [your final answer]
+"""
+
+
+# ==============================================================================
+# Teacher Final Solution Prompt (NEW - For Case C)
+# ==============================================================================
+
+TEACHER_FINAL_SOLUTION_PROMPT = """You are a teacher providing a complete, correct solution after the student failed to solve the problem after {max_iterations} attempts.
+
+[Problem]
+{problem_text}
+
+[Correct Answer]
+{ground_truth}
+
+[Instructional Analysis]
+{task_analysis}
+
+[Scaffolding History]
+The following scaffolding was provided across {iterations_count} iterations:
+{scaffolding_history}
+
+[Student's Persistent Weaknesses]
+Based on the failed attempts, the student consistently struggled with:
+{student_weaknesses}
+
+[Instructions]
+Generate a complete, educational solution that:
+1. Directly addresses each of the student's identified weaknesses
+2. Demonstrates the correct reasoning process step by step
+3. Highlights the key concepts and strategies the student missed
+4. Explains WHY each step is necessary (not just WHAT to do)
+5. Serves as an ideal learning example for SFT training
+
+The solution should be what an expert student would produce - clear, complete, and pedagogically valuable.
+
+[Output Format - JSON]
+{{
+  "solution_explanation": "Complete step-by-step solution with clear reasoning. Format:\\n[Understanding the Problem]\\n...\\n[Key Concepts Applied]\\n...\\n[Step-by-Step Solution]\\n...\\n[Common Pitfalls Addressed]\\n...\\nAnswer: [correct answer]",
+  "addressed_weaknesses": [
+    "How weakness 1 was addressed in the solution",
+    "How weakness 2 was addressed in the solution"
+  ],
+  "key_learning_points": [
+    "Key takeaway 1 from this problem",
+    "Key takeaway 2 from this problem",
+    "Key takeaway 3 from this problem"
+  ],
+  "final_answer": "The correct answer"
+}}
+
+CRITICAL INSTRUCTIONS:
+1. Your response MUST be ONLY valid JSON - no additional text
+2. The solution_explanation should be comprehensive and educational
+3. Explicitly connect the solution to the student's weaknesses
+4. Ensure all brackets and quotes are properly closed
+
+Output ONLY the JSON object above.
 """

@@ -50,13 +50,25 @@ class QuestionResult(QuestionResultRequired, total=False):
     reconstruction: Optional[Dict[str, Any]]
     failure: Optional[Dict[str, Dict[str, Any]]]  # 모든 과정의 failure 메타데이터 (Dict of dicts)
 
+    # NEW: Scaffolding Artifact fields
+    scaffolding_db: Optional[List[Dict[str, Any]]]  # 누적된 Scaffolding Artifacts
+    db_references: Optional[List[str]]  # Student가 참조한 DB 정보 목록
+    hot_count: Optional[int]  # HOT (High-Order Thinking) scaffolding count
+    lot_count: Optional[int]  # LOT (Low-Order Thinking) scaffolding count
+
+    # NEW: Skip tracking (fallback 발생 시)
+    is_skipped: bool  # fallback 발생으로 skip된 경우 True
+    failure_reason: Optional[str]  # skip 사유 (e.g., "evaluation_fallback")
+    failure_stage: Optional[str]  # 실패 발생 단계
+    failure_details: Optional[Dict[str, Any]]  # 상세 failure 메타데이터
+
 
 class DesignResult(TypedDict, total=False):
     """Instructional design output."""
     domain: str
     train_dataset: str
     identifier: str
-    terminal_goal: str
+    instructional_goal: str
     learning_objective: str
     instructional_analysis: Dict[str, Any]
     performance_objectives: Dict[str, Any]
@@ -86,7 +98,7 @@ class IDMASState(TypedDict, total=False):
     # ==================== Configuration ====================
     domain: str
     train_dataset: str
-    terminal_goal: str
+    instructional_goal: str
     student_model_name: str
     teacher_model_name: str
     model_short: str
@@ -126,6 +138,15 @@ class IDMASState(TypedDict, total=False):
     hint_fallback_count: int  # Hint generation fallback 사용 수
     summarization_fallback_count: int  # Conversation summarization fallback 사용 수
 
+    # NEW: Scaffolding Artifact statistics
+    hot_scaffolding_count: int  # HOT (High-Order Thinking) 스캐폴딩 생성 횟수
+    lot_scaffolding_count: int  # LOT (Low-Order Thinking) 스캐폴딩 생성 횟수
+    scaffolding_artifact_fallback_count: int  # Scaffolding Artifact 생성 실패 수
+    final_solution_fallback_count: int  # Case C final solution 생성 실패 수
+
+    # NEW: Skip statistics (fallback으로 skip된 문제)
+    skipped_count: int  # fallback으로 skip된 문제 수
+
     # ==================== SFT Data ====================
     sft_data: List[Dict[str, Any]]
 
@@ -146,7 +167,7 @@ class IDMASState(TypedDict, total=False):
 def create_initial_state(
     domain: str,
     train_dataset: str,
-    terminal_goal: str,
+    instructional_goal: str,
     student_model_name: str,
     teacher_model_name: str,
     model_short: str,
@@ -162,7 +183,7 @@ def create_initial_state(
     Args:
         domain: Domain name (e.g., "math")
         train_dataset: Training dataset name (e.g., "gsm8k")
-        terminal_goal: Learning objective
+        instructional_goal: Learning objective
         student_model_name: Student model name
         teacher_model_name: Teacher model name
         model_short: Short model name for file naming
@@ -179,7 +200,7 @@ def create_initial_state(
         # Configuration
         domain=domain,
         train_dataset=train_dataset,
-        terminal_goal=terminal_goal,
+        instructional_goal=instructional_goal,
         student_model_name=student_model_name,
         teacher_model_name=teacher_model_name,
         model_short=model_short,
@@ -211,6 +232,13 @@ def create_initial_state(
         evaluation_fallback_count=0,
         hint_fallback_count=0,
         summarization_fallback_count=0,
+        # NEW: Scaffolding Artifact statistics
+        hot_scaffolding_count=0,
+        lot_scaffolding_count=0,
+        scaffolding_artifact_fallback_count=0,
+        final_solution_fallback_count=0,
+        # NEW: Skip statistics
+        skipped_count=0,
 
         # SFT Data
         sft_data=[],
@@ -249,7 +277,20 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
     hint_fallback = state.get("hint_fallback_count", 0)
     summarization_fallback = state.get("summarization_fallback_count", 0)
 
-    total_failures = case_b_fallback + case_c_fallback + evaluation_fallback + hint_fallback + summarization_fallback
+    # NEW: Scaffolding Artifact statistics
+    hot_count = state.get("hot_scaffolding_count", 0)
+    lot_count = state.get("lot_scaffolding_count", 0)
+    artifact_fallback = state.get("scaffolding_artifact_fallback_count", 0)
+    final_solution_fallback = state.get("final_solution_fallback_count", 0)
+
+    # NEW: Skip statistics
+    skipped = state.get("skipped_count", 0)
+
+    total_failures = (
+        case_b_fallback + case_c_fallback +
+        evaluation_fallback + hint_fallback + summarization_fallback +
+        artifact_fallback + final_solution_fallback
+    )
     processed = state.get("scaffolding_processed", 0)
 
     return {
@@ -262,6 +303,11 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
             "success_total": case_a + case_b,
             "success_rate": (case_a + case_b) / processed if processed > 0 else 0,
         },
+        "scaffolding_artifacts": {
+            "hot_count": hot_count,  # High-Order Thinking scaffolding
+            "lot_count": lot_count,  # Low-Order Thinking scaffolding
+            "total": hot_count + lot_count,
+        },
         "failures": {
             "reconstruction": {
                 "case_b": case_b_fallback,
@@ -271,6 +317,10 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
             "evaluation": evaluation_fallback,
             "hint": hint_fallback,
             "summarization": summarization_fallback,
+            "scaffolding_artifact": artifact_fallback,
+            "final_solution": final_solution_fallback,
+            "skipped_count": skipped,
+            "skipped_rate": skipped / processed if processed > 0 else 0,
             "total_failures": total_failures,
             "failure_rate": total_failures / processed if processed > 0 else 0,
         },
@@ -314,6 +364,13 @@ def load_checkpoint_from_logs(
         "evaluation_fallback_count": 0,
         "hint_fallback_count": 0,
         "summarization_fallback_count": 0,
+        # NEW: Scaffolding Artifact statistics
+        "hot_scaffolding_count": 0,
+        "lot_scaffolding_count": 0,
+        "scaffolding_artifact_fallback_count": 0,
+        "final_solution_fallback_count": 0,
+        # NEW: Skip statistics
+        "skipped_count": 0,
     }
 
     # Process scaffolding results (supports both old and new field names)
@@ -369,6 +426,25 @@ def load_checkpoint_from_logs(
                 checkpoint_data["hint_fallback_count"] += 1
             if failure.get("summarization", {}).get("is_fallback"):
                 checkpoint_data["summarization_fallback_count"] += 1
+            # NEW: Scaffolding Artifact failure tracking
+            if failure.get("scaffolding_artifact", {}).get("is_fallback"):
+                checkpoint_data["scaffolding_artifact_fallback_count"] += 1
+            if failure.get("final_solution", {}).get("is_fallback"):
+                checkpoint_data["final_solution_fallback_count"] += 1
+
+            # Count HOT/LOT scaffolding from scaffolding_db
+            scaffolding_db = result.get("scaffolding_db", [])
+            for db_entry in scaffolding_db:
+                for artifact in db_entry.get("artifacts", []):
+                    skill_type = artifact.get("skill_type", "")
+                    if skill_type == "HOT":
+                        checkpoint_data["hot_scaffolding_count"] += 1
+                    elif skill_type == "LOT":
+                        checkpoint_data["lot_scaffolding_count"] += 1
+
+            # NEW: Count skipped questions
+            if result.get("is_skipped", False):
+                checkpoint_data["skipped_count"] += 1
 
     return checkpoint_data, processed_ids
 
@@ -415,6 +491,13 @@ def restore_state_from_checkpoint(
     restored["evaluation_fallback_count"] = checkpoint_data.get("evaluation_fallback_count", 0)
     restored["hint_fallback_count"] = checkpoint_data.get("hint_fallback_count", 0)
     restored["summarization_fallback_count"] = checkpoint_data.get("summarization_fallback_count", 0)
+    # NEW: Scaffolding Artifact statistics
+    restored["hot_scaffolding_count"] = checkpoint_data.get("hot_scaffolding_count", 0)
+    restored["lot_scaffolding_count"] = checkpoint_data.get("lot_scaffolding_count", 0)
+    restored["scaffolding_artifact_fallback_count"] = checkpoint_data.get("scaffolding_artifact_fallback_count", 0)
+    restored["final_solution_fallback_count"] = checkpoint_data.get("final_solution_fallback_count", 0)
+    # NEW: Skip statistics
+    restored["skipped_count"] = checkpoint_data.get("skipped_count", 0)
 
     # Update questions to remaining ones
     restored["questions"] = remaining_questions

@@ -306,8 +306,8 @@ def get_dataset_model_dirs(dataset: str, model_name: str = None) -> dict:
 # Domain-based Configuration (New)
 # =============================================================================
 
-# Terminal Goals for each training dataset
-TERMINAL_GOALS = {
+# Instructional Goals for each training dataset
+INSTRUCTIONAL_GOALS = {
     "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
     "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution."
 }
@@ -325,11 +325,11 @@ TERMINAL_GOALS = {
 # - get_training_datasets_for_domain()
 
 
-def get_terminal_goal(dataset: str) -> str:
-    """Get Terminal Goal for a training dataset."""
-    if dataset not in TERMINAL_GOALS:
-        raise ValueError(f"Unknown dataset: {dataset}. Available: {list(TERMINAL_GOALS.keys())}")
-    return TERMINAL_GOALS[dataset]
+def get_instructional_goal(dataset: str) -> str:
+    """Get Instructional Goal for a training dataset."""
+    if dataset not in INSTRUCTIONAL_GOALS:
+        raise ValueError(f"Unknown dataset: {dataset}. Available: {list(INSTRUCTIONAL_GOALS.keys())}")
+    return INSTRUCTIONAL_GOALS[dataset]
 
 
 # 기본 학생 모델 설정 (하위 호환성)

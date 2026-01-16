@@ -2,13 +2,13 @@
 Domain-based Dataset Loader for ID-MAS.
 Provides unified interface for loading domain data from local JSON files.
 
-Each training dataset has its own Terminal Goal for separate learning.
+Each training dataset has its own Instructional Goal for separate learning.
 
 Usage:
     loader = DomainLoader("math")
     train_data = loader.load_training_data(dataset="gsm8k", limit=100)
     eval_data = loader.load_eval_data("svamp", limit=50)
-    terminal_goal = loader.get_learning_objective("gsm8k")
+    instructional_goal = loader.get_learning_objective("gsm8k")
 """
 import json
 import random
@@ -32,12 +32,12 @@ class DomainLoader(BaseDatasetLoader):
     - math: GSM8K, MATH (training) + SVAMP, ASDiv, MAWPS (evaluation)
 
     New domains can be added by extending DOMAIN_CONFIG.
-    Each training dataset has its own Terminal Goal and is trained separately.
+    Each training dataset has its own Instructional Goal and is trained separately.
     Evaluation data is loaded from a single file per dataset.
     """
 
-    # Terminal Goals for each training dataset
-    TERMINAL_GOALS = {
+    # Instructional Goals for each training dataset
+    INSTRUCTIONAL_GOALS = {
         # Math domain
         "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
         "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution.",
@@ -77,16 +77,8 @@ class DomainLoader(BaseDatasetLoader):
                 "reclor": {"filename": "reclor_test.json", "answer_type": AnswerType.MCQ},
                 "anli_r2": {"filename": "anli_r2_test.json", "answer_type": AnswerType.MCQ},
                 "anli_r3": {"filename": "anli_r3_test.json", "answer_type": AnswerType.MCQ},
-                # BBH subtasks (individual evaluation)
-                "bbh_boolean_expressions": {"filename": "bbh_boolean_expressions_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_formal_fallacies": {"filename": "bbh_formal_fallacies_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_logical_deduction_three_objects": {"filename": "bbh_logical_deduction_three_objects_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_logical_deduction_five_objects": {"filename": "bbh_logical_deduction_five_objects_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_logical_deduction_seven_objects": {"filename": "bbh_logical_deduction_seven_objects_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_tracking_shuffled_objects_three_objects": {"filename": "bbh_tracking_shuffled_objects_three_objects_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_tracking_shuffled_objects_five_objects": {"filename": "bbh_tracking_shuffled_objects_five_objects_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_tracking_shuffled_objects_seven_objects": {"filename": "bbh_tracking_shuffled_objects_seven_objects_test.json", "answer_type": AnswerType.TEXT},
-                "bbh_web_of_lies": {"filename": "bbh_web_of_lies_test.json", "answer_type": AnswerType.TEXT},
+                # BBH unified (all subtasks combined, subtask info in metadata.subtask)
+                "bbh": {"filename": "bbh_test.json", "answer_type": AnswerType.TEXT},
             },
             "default_answer_type": AnswerType.MCQ,
             "domain_category": "logical_reasoning",
@@ -176,7 +168,7 @@ class DomainLoader(BaseDatasetLoader):
         Load a specific training dataset for this domain.
 
         Each training dataset (GSM8K, MATH, SciBench, ARC) is loaded separately
-        because each has its own Terminal Goal.
+        because each has its own Instructional Goal.
 
         Args:
             dataset: Training dataset name (e.g., "gsm8k", "math", "scibench", "arc")
@@ -217,6 +209,112 @@ class DomainLoader(BaseDatasetLoader):
 
         print(f"[{self.domain.upper()}/{dataset.upper()}] Loaded {len(questions)} training questions")
         return questions
+
+    def load_enhanced_training_data(
+        self,
+        dataset: str,
+        model_suffix: str,
+        limit: Optional[int] = None,
+        shuffle: bool = False
+    ) -> List[QuestionData]:
+        """
+        Load enhanced training data with Instructional Goal and Task Analysis.
+
+        Enhanced data files have the naming pattern:
+            {dataset}_train_ID-MAS_{model_suffix}.json
+
+        These files contain instruction fields that include:
+        - Original instruction
+        - Instructional Goal
+        - Task Analysis (subskills and subtasks)
+
+        Args:
+            dataset: Training dataset name (e.g., "gsm8k", "math", "reclor", "arc_c")
+            model_suffix: Model suffix used when generating enhanced data
+                (e.g., "Qwen2.5-72B-Instruct", "gpt-5-2025-08-07")
+            limit: Maximum number of questions to load
+            shuffle: Whether to shuffle the data (default: False)
+
+        Returns:
+            List of QuestionData objects
+
+        Raises:
+            FileNotFoundError: If enhanced data file doesn't exist
+            ValueError: If dataset is not a valid training dataset for this domain
+
+        Example:
+            loader = DomainLoader("math")
+            data = loader.load_enhanced_training_data(
+                dataset="gsm8k",
+                model_suffix="Qwen2.5-72B-Instruct",
+                limit=100
+            )
+        """
+        dataset = dataset.lower()
+        training_datasets = self.config["training_datasets"]
+
+        if dataset not in training_datasets:
+            raise ValueError(
+                f"Unknown training dataset '{dataset}' for {self.domain} domain. "
+                f"Available: {list(training_datasets.keys())}"
+            )
+
+        # Enhanced data filename pattern
+        filename = f"{dataset}_train_ID-MAS_{model_suffix}.json"
+        file_path = self.data_dir / "train" / "data" / filename
+
+        if not file_path.exists():
+            raise FileNotFoundError(
+                f"Enhanced training file not found: {file_path}\n"
+                f"Run 'python scripts/enhance_data.py --domain {self.domain} --dataset {dataset}' first."
+            )
+
+        questions = self._load_json_file(file_path, dataset, "train")
+        print(f"  Loaded {len(questions)} enhanced questions from {filename}")
+
+        # Shuffle data
+        if shuffle and questions:
+            random.shuffle(questions)
+            print(f"  Shuffled {len(questions)} enhanced training questions")
+
+        # Apply limit after shuffling
+        if limit and len(questions) > limit:
+            questions = questions[:limit]
+
+        print(f"[{self.domain.upper()}/{dataset.upper()}] Loaded {len(questions)} enhanced training questions")
+        return questions
+
+    def get_available_enhanced_data(self, dataset: str = None) -> List[Dict[str, str]]:
+        """
+        List available enhanced data files for this domain.
+
+        Args:
+            dataset: Optional filter by dataset name
+
+        Returns:
+            List of dicts with 'dataset', 'model_suffix', 'path' keys
+        """
+        data_dir = self.data_dir / "train" / "data"
+        if not data_dir.exists():
+            return []
+
+        results = []
+        pattern = "*_train_ID-MAS_*.json"
+
+        for file_path in data_dir.glob(pattern):
+            # Parse filename: {dataset}_train_ID-MAS_{model_suffix}.json
+            name = file_path.stem  # Remove .json
+            parts = name.split("_train_ID-MAS_")
+            if len(parts) == 2:
+                ds_name, model_suffix = parts
+                if dataset is None or ds_name.lower() == dataset.lower():
+                    results.append({
+                        "dataset": ds_name,
+                        "model_suffix": model_suffix,
+                        "path": str(file_path)
+                    })
+
+        return results
 
     def load_eval_data(
         self,
@@ -508,9 +606,9 @@ class DomainLoader(BaseDatasetLoader):
 
     def get_learning_objective(self, dataset: str) -> str:
         """
-        Get Terminal Goal (learning objective) for a specific training dataset.
+        Get Instructional Goal (learning objective) for a specific training dataset.
 
-        Each training dataset has its own Terminal Goal:
+        Each training dataset has its own Instructional Goal:
         - GSM8K: Grade-school math step-by-step reasoning
         - MATH: Advanced mathematical problem solving
         - SciBench: Scientific problem solving with mathematical formulations
@@ -520,15 +618,15 @@ class DomainLoader(BaseDatasetLoader):
             dataset: Training dataset name (gsm8k, math, scibench, arc)
 
         Returns:
-            Terminal Goal string for the dataset
+            Instructional Goal string for the dataset
         """
         dataset = dataset.lower()
-        if dataset not in self.TERMINAL_GOALS:
+        if dataset not in self.INSTRUCTIONAL_GOALS:
             raise ValueError(
                 f"Unknown dataset '{dataset}'. "
-                f"Available: {list(self.TERMINAL_GOALS.keys())}"
+                f"Available: {list(self.INSTRUCTIONAL_GOALS.keys())}"
             )
-        return self.TERMINAL_GOALS[dataset]
+        return self.INSTRUCTIONAL_GOALS[dataset]
 
     def get_available_subsets(self) -> Optional[List[str]]:
         """Return list of available evaluation datasets as subsets."""
@@ -563,9 +661,9 @@ if __name__ == "__main__":
     print(f"  Available eval datasets: {math_loader.get_available_eval_datasets()}")
     print(f"  Training datasets: {math_loader.get_available_training_datasets()}")
 
-    # Test Terminal Goals
+    # Test Instructional Goals
     for dataset in math_loader.get_available_training_datasets():
-        print(f"\n  Terminal Goal for {dataset.upper()}:")
+        print(f"\n  Instructional Goal for {dataset.upper()}:")
         print(f"    {math_loader.get_learning_objective(dataset)[:80]}...")
 
     # Load a few training samples from GSM8K

@@ -8,7 +8,8 @@ Output format:
   {
     "instruction": "system prompt (same for train and test)",
     "input": "question text",
-    "output": "{reasoning}\n\n\\boxed{answer}" or "\\boxed{answer}"
+    "output": "{reasoning}\n\n\\boxed{answer}" or "\\boxed{answer}",
+    "metadata": { ... }  // dataset-specific metadata (may be empty)
   },
   ...
 ]
@@ -32,82 +33,152 @@ from datasets import load_dataset
 DATA_DIR = Path(__file__).parent.parent / "data"
 RANDOM_SEED = 42
 
-# Dataset-specific system prompts
+# Dataset-specific system prompts (## header only for Response Format)
 DATASET_PROMPTS = {
     # Math domain
     "gsm8k": """You are a helpful math assistant.
 Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
+
+## Response Format
 Your final answer MUST be within \\boxed{}.
 Example: \\boxed{42}""",
 
     "math": """You are a helpful math assistant.
-Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
-Your final answer MUST be within \\boxed{}. Use LaTeX notation for fractions (\\frac{a}{b}), exponents, and other mathematical expressions.
+Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation. Use LaTeX notation for fractions (\\frac{a}{b}), exponents, and other mathematical expressions.
+
+## Response Format
+Your final answer MUST be within \\boxed{}.
 Example: \\boxed{\\frac{1}{8}} or \\boxed{2\\sqrt{3}}""",
 
     "svamp": """You are a helpful math assistant.
 Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
+
+## Response Format
 Your final answer MUST be within \\boxed{}.
 Example: \\boxed{27}""",
 
     "asdiv": """You are a helpful math assistant.
 Solve this arithmetic word problem step by step. Extract the relevant numbers, determine the operation(s) needed, and calculate.
+
+## Response Format
 Your final answer MUST be within \\boxed{}.
 Example: \\boxed{15}""",
 
     "mawps": """You are a helpful math assistant.
-Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
-Your final answer MUST be within \\boxed{}. If the answer is a fraction, write it as a/b or use \\frac{a}{b}.
+Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation. If the answer is a fraction, write it as a/b or use \\frac{a}{b}.
+
+## Response Format
+Your final answer MUST be within \\boxed{}.
 Example: \\boxed{49} or \\boxed{56/9}""",
 
     # Logical domain
-    "reclor": """You are a logical reasoning assistant. Read the passage and question carefully, then think step by step to select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+    "reclor": """You are a logical reasoning assistant.
+Read the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "anli": """You are a natural language inference assistant. Think step by step to determine the relationship between the premise and hypothesis. Choose from: A. entailment, B. neutral, C. contradiction. Your final answer MUST be a single letter within \\boxed{}.
+    "anli": """You are a natural language inference assistant.
+Think step by step to determine the relationship between the premise and hypothesis. Choose from: A. entailment, B. neutral, C. contradiction.
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
     # Commonsense domain
-    "arc_c": """You are a helpful commonsense science assistant. Think step by step to solve the problem and select the correct option (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+    "arc_c": """You are a helpful commonsense science assistant.
+Think step by step to solve the problem and select the correct option (A, B, C, or D).
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "strategyqa": """You are a helpful commonsense reasoning assistant. Think step by step and answer the question with Yes or No based on reliable commonsense knowledge. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
+    "strategyqa": """You are a helpful commonsense reasoning assistant.
+Think step by step and answer the question with Yes or No based on reliable commonsense knowledge.
+
+## Response Format
+Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
 Example: \\boxed{Yes}""",
 
-    "openbookqa": """You are a helpful science question-answering assistant. Think step by step, use the given options and choose the best answer (A, B, C, or D). Your final answer MUST be a single letter within \\boxed{}.
+    "openbookqa": """You are a helpful science question-answering assistant.
+Think step by step, use the given options and choose the best answer (A, B, C, or D).
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 }
 
-# BBH subtask-specific prompts
+# BBH subtask-specific prompts (## header only for Response Format)
 BBH_PROMPTS = {
-    "boolean_expressions": """You are a helpful reasoning assistant. Think step by step to evaluate the boolean expression and answer with True or False. Your final answer MUST be \\boxed{True} or \\boxed{False}.
+    "boolean_expressions": """You are a helpful reasoning assistant.
+Think step by step to evaluate the boolean expression and answer with True or False.
+
+## Response Format
+Your final answer MUST be \\boxed{True} or \\boxed{False}.
 Example: \\boxed{True}""",
 
-    "formal_fallacies": """You are a helpful reasoning assistant. Think step by step to determine if the argument is valid or invalid. Your final answer MUST be \\boxed{valid} or \\boxed{invalid}.
+    "formal_fallacies": """You are a helpful reasoning assistant.
+Think step by step to determine if the argument is valid or invalid.
+
+## Response Format
+Your final answer MUST be \\boxed{valid} or \\boxed{invalid}.
 Example: \\boxed{valid}""",
 
-    "logical_deduction_three_objects": """You are a helpful reasoning assistant. Think step by step to solve the logical deduction problem and select the correct option (A, B, or C). Your final answer MUST be a single letter within \\boxed{}.
+    "logical_deduction_three_objects": """You are a helpful reasoning assistant.
+Think step by step to solve the logical deduction problem and select the correct option (A, B, or C).
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "logical_deduction_five_objects": """You are a helpful reasoning assistant. Think step by step to solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "logical_deduction_five_objects": """You are a helpful reasoning assistant.
+Think step by step to solve the logical deduction problem and select the correct option.
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "logical_deduction_seven_objects": """You are a helpful reasoning assistant. Think step by step to solve the logical deduction problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "logical_deduction_seven_objects": """You are a helpful reasoning assistant.
+Think step by step to solve the logical deduction problem and select the correct option.
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "tracking_shuffled_objects_three_objects": """You are a helpful reasoning assistant. Think step by step to track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "tracking_shuffled_objects_three_objects": """You are a helpful reasoning assistant.
+Think step by step to track the positions of the shuffled objects and select the correct option.
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "tracking_shuffled_objects_five_objects": """You are a helpful reasoning assistant. Think step by step to track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "tracking_shuffled_objects_five_objects": """You are a helpful reasoning assistant.
+Think step by step to track the positions of the shuffled objects and select the correct option.
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "tracking_shuffled_objects_seven_objects": """You are a helpful reasoning assistant. Think step by step to track the positions of the shuffled objects and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "tracking_shuffled_objects_seven_objects": """You are a helpful reasoning assistant.
+Think step by step to track the positions of the shuffled objects and select the correct option.
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 
-    "web_of_lies": """You are a helpful reasoning assistant. Think step by step to determine the truth value based on the web of lies. Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
+    "web_of_lies": """You are a helpful reasoning assistant.
+Think step by step to determine the truth value based on the web of lies.
+
+## Response Format
+Your final answer MUST be \\boxed{Yes} or \\boxed{No}.
 Example: \\boxed{Yes}""",
 
-    "default_mcq": """You are a helpful reasoning assistant. Think step by step to solve the problem and select the correct option. Your final answer MUST be a single letter within \\boxed{}.
+    "default_mcq": """You are a helpful reasoning assistant.
+Think step by step to solve the problem and select the correct option.
+
+## Response Format
+Your final answer MUST be a single letter within \\boxed{}.
 Example: \\boxed{A}""",
 }
 
@@ -254,19 +325,21 @@ def process_gsm8k(train_dir: Path, eval_dir: Path):
             records_short.append({
                 "instruction": DATASET_PROMPTS["gsm8k"],
                 "input": question,
-                "output": format_output(final_answer)
+                "output": format_output(final_answer),
+                "metadata": {}
             })
 
             # Full version: "{reasoning}\n\nThe answer is \boxed{answer}"
             records_full.append({
                 "instruction": DATASET_PROMPTS["gsm8k"],
                 "input": question,
-                "output": format_output(final_answer, reasoning=reasoning, include_reasoning=True)
+                "output": format_output(final_answer, reasoning=reasoning, include_reasoning=True),
+                "metadata": {}
             })
 
         output_base = train_dir if split == "train" else eval_dir
         save_json(records_short, output_base / f"gsm8k_{split}.json")
-        save_json(records_full, output_base / f"gsm8k_reasoning_{split}.json")
+        save_json(records_full, output_base / f"gsm8k_{split}_reasoning.json")
 
 
 def process_math(train_dir: Path, eval_dir: Path):
@@ -323,14 +396,22 @@ def process_math(train_dir: Path, eval_dir: Path):
                     records_short.append({
                         "instruction": DATASET_PROMPTS["math"],
                         "input": problem,
-                        "output": format_output(boxed_answer)
+                        "output": format_output(boxed_answer),
+                        "metadata": {
+                            "level": level,
+                            "type": config
+                        }
                     })
 
                     # Full version: "{solution}\n\nThe answer is \boxed{answer}"
                     records_full.append({
                         "instruction": DATASET_PROMPTS["math"],
                         "input": problem,
-                        "output": format_output(boxed_answer, reasoning=solution, include_reasoning=True)
+                        "output": format_output(boxed_answer, reasoning=solution, include_reasoning=True),
+                        "metadata": {
+                            "level": level,
+                            "type": config
+                        }
                     })
             except Exception as e:
                 print(f"      Error loading {config}: {e}")
@@ -338,7 +419,7 @@ def process_math(train_dir: Path, eval_dir: Path):
         print(f"  Level distribution: {level_counts}")
         output_base = train_dir if split == "train" else eval_dir
         save_json(records_short, output_base / f"math_{split}.json")
-        save_json(records_full, output_base / f"math_reasoning_{split}.json")
+        save_json(records_full, output_base / f"math_{split}_reasoning.json")
 
 
 def process_svamp(output_dir: Path):
@@ -368,7 +449,12 @@ def process_svamp(output_dir: Path):
         records.append({
             "instruction": DATASET_PROMPTS["svamp"],
             "input": full_question,
-            "output": format_output(answer)
+            "output": format_output(answer),
+            "metadata": {
+                "id": item.get("ID", ""),
+                "equation": item.get("Equation", ""),
+                "type": item.get("Type", "")
+            }
         })
 
     save_json(records, output_dir / "svamp_test.json")
@@ -412,7 +498,11 @@ def process_asdiv(output_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["asdiv"],
                 "input": full_question,
-                "output": format_output(answer_clean)
+                "output": format_output(answer_clean),
+                "metadata": {
+                    "solution_type": item.get("solution_type", ""),
+                    "formula": item.get("formula", "")
+                }
             })
 
     if records:
@@ -451,7 +541,12 @@ def process_mawps(output_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["mawps"],
                 "input": question,
-                "output": format_output(str(answer))
+                "output": format_output(str(answer)),
+                "metadata": {
+                    "id": item.get("id", ""),
+                    "equation": item.get("equation", ""),
+                    "expression": item.get("expression", "")
+                }
             })
 
     if records:
@@ -518,7 +613,10 @@ def process_reclor(train_dir: Path, eval_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["reclor"],
                 "input": input_text.strip(),
-                "output": format_output(answer_letter)
+                "output": format_output(answer_letter),
+                "metadata": {
+                    "id": item.get("id_string", "")
+                }
             })
 
         # Determine output filename
@@ -571,7 +669,10 @@ def process_arc_c(train_dir: Path, eval_dir: Path):
             records.append({
                 "instruction": DATASET_PROMPTS["arc_c"],
                 "input": question_with_choices,
-                "output": format_output(answer_letter)
+                "output": format_output(answer_letter),
+                "metadata": {
+                    "id": item.get("id", "")
+                }
             })
 
         output_base = train_dir if split == "train" else eval_dir
@@ -603,7 +704,13 @@ def process_strategyqa(eval_dir: Path):
         records.append({
             "instruction": DATASET_PROMPTS["strategyqa"],
             "input": question,
-            "output": format_output(answer_text)
+            "output": format_output(answer_text),
+            "metadata": {
+                "qid": item.get("qid", ""),
+                "term": item.get("term", ""),
+                "description": item.get("description", ""),
+                "facts": item.get("facts", "")
+            }
         })
 
     save_json(records, eval_dir / "strategyqa_test.json")
@@ -640,7 +747,13 @@ def process_openbookqa(eval_dir: Path):
         records.append({
             "instruction": DATASET_PROMPTS["openbookqa"],
             "input": question_with_choices,
-            "output": format_output(answer_key)
+            "output": format_output(answer_key),
+            "metadata": {
+                "id": item.get("id", ""),
+                "fact1": item.get("fact1", ""),
+                "humanScore": item.get("humanScore", None),
+                "clarity": item.get("clarity", None)
+            }
         })
 
     save_json(records, eval_dir / "openbookqa_test.json")
@@ -687,7 +800,11 @@ C. contradiction"""
         records.append({
             "instruction": DATASET_PROMPTS["anli"],
             "input": input_text,
-            "output": format_output(answer_letter)
+            "output": format_output(answer_letter),
+            "metadata": {
+                "uid": item.get("uid", ""),
+                "reason": item.get("reason", "")
+            }
         })
 
     save_json(records, eval_dir / f"anli_{round_name}_test.json")
@@ -696,45 +813,57 @@ C. contradiction"""
 def process_bbh(eval_dir: Path, subtasks: List[str]):
     """
     Process BBH dataset for specific subtasks.
-    Each subtask is saved as a separate JSON file.
+    All subtasks are combined into a single JSON file.
 
     BBH format varies by subtask:
     - input: question text
     - target: answer text
 
+    Each record preserves:
+    - instruction: subtask-specific prompt
+    - metadata.subtask: subtask name for later analysis
+
     Args:
         eval_dir: Output directory
         subtasks: List of subtask names
     """
-    print("\n[BBH] Processing (per-subtask files)...")
+    print("\n[BBH] Processing (unified file)...")
     dataset_id = "lukaemon/bbh"
+
+    all_records = []  # All subtasks combined
 
     for subtask in subtasks:
         print(f"  Loading subtask: {subtask}...")
-        records = []  # Records for this subtask only
         try:
             data = load_dataset(dataset_id, subtask, split="test")
 
             # Select prompt based on subtask
             prompt = BBH_PROMPTS.get(subtask, BBH_PROMPTS["default_mcq"])
 
+            subtask_count = 0
             for item in data:
                 input_text = item["input"]
                 target = item["target"]
 
-                records.append({
+                all_records.append({
                     "instruction": prompt,
                     "input": input_text,
-                    "output": format_output(target)
+                    "output": format_output(target),
+                    "metadata": {
+                        "subtask": subtask
+                    }
                 })
+                subtask_count += 1
 
-            # Save as individual file for this subtask
-            filename = f"bbh_{subtask}_test.json"
-            save_json(records, eval_dir / filename)
-            print(f"    Saved {len(records)} records to {filename}")
+            print(f"    Loaded {subtask_count} records from {subtask}")
 
         except Exception as e:
             print(f"    Error loading {subtask}: {e}")
+
+    # Save as single unified file
+    if all_records:
+        save_json(all_records, eval_dir / "bbh_test.json")
+        print(f"  Total: {len(all_records)} records saved to bbh_test.json")
 
 
 # =============================================================================

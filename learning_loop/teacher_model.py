@@ -13,6 +13,9 @@ from prompts.learning_prompts import (
     TEACHER_INTERVENTION_PROMPT,
     CONVERSATION_SUMMARIZATION_PROMPT,
     SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT,
+    # New Scaffolding Artifact prompts
+    SCAFFOLDING_ARTIFACT_PROMPT,
+    TEACHER_FINAL_SOLUTION_PROMPT,
 )
 from typing import Dict, Any, Optional, List, Tuple
 import json
@@ -81,6 +84,11 @@ class TeacherModel:
         for attempt in range(1, max_retries + 1):
             try:
                 result = self.llm.generate_json(prompt)
+
+                # overall_assessment 타입 검증 - 잘못되면 예외 발생시켜 재시도
+                if 'overall_assessment' in result and not isinstance(result['overall_assessment'], dict):
+                    raise ValueError(f"overall_assessment must be dict, got {type(result['overall_assessment']).__name__}")
+
                 # Ensure required fields exist
                 if 'performance_evaluation' not in result:
                     result['performance_evaluation'] = []
@@ -523,6 +531,303 @@ Answer: {ground_truth}""",
         if len(formatted) > max_total_length:
             return formatted[:max_total_length] + "\n\n[... truncated ...]"
         return formatted
+
+    # =========================================================================
+    # Scaffolding Artifact Methods (NEW - Replaces Socratic Questioning)
+    # =========================================================================
+
+    def generate_scaffolding_artifact(
+        self,
+        problem_text: str,
+        student_response: str,
+        po_evaluation: Dict[str, Any],
+        iteration_number: int,
+        task_analysis: str,
+        max_iterations: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Scaffolding Artifact 생성 (Socratic questioning 대체)
+
+        미충족 PO에 대해 HOT/LOT를 구분하여 교수적 스캐폴딩을 설계합니다.
+        이 스캐폴딩은 학생이 다음 시도에서 참조하는 DB로 사용됩니다.
+
+        Args:
+            problem_text: 문제 텍스트
+            student_response: 학생의 응답
+            po_evaluation: PO 평가 결과
+            iteration_number: 현재 반복 횟수
+            task_analysis: 과제 분석 결과
+            max_iterations: 최대 반복 횟수
+
+        Returns:
+            {
+                "scaffolding_artifacts": [
+                    {
+                        "target_objective": str,
+                        "skill_type": "HOT" or "LOT",
+                        "cognitive_level": str,
+                        "failure_analysis": str,
+                        "scaffolding_content": {...}
+                    }
+                ],
+                "scaffolding_summary": str,  # 3-5문장 요약
+                "_failure_metadata": {...}
+            }
+        """
+        # Extract failed POs
+        failed_objectives = [
+            po for po in po_evaluation.get("performance_evaluation", [])
+            if not po.get("is_satisfied", True)
+        ]
+
+        prompt = SCAFFOLDING_ARTIFACT_PROMPT.format(
+            problem_text=problem_text,
+            student_response=student_response[:2000],
+            po_evaluation=json.dumps(po_evaluation, ensure_ascii=False, indent=2),
+            failed_objectives=json.dumps(failed_objectives, ensure_ascii=False, indent=2),
+            task_analysis=task_analysis[:1500],
+            iteration_number=iteration_number,
+            max_iterations=max_iterations
+        )
+
+        # Retry logic
+        max_retries = 3
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = self.llm.generate_json(prompt, max_tokens=4096)
+
+                # Ensure required fields exist
+                if 'scaffolding_artifacts' not in result:
+                    result['scaffolding_artifacts'] = []
+                if 'scaffolding_summary' not in result:
+                    result['scaffolding_summary'] = "Review your previous response and try again with more careful reasoning."
+
+                # Add success metadata
+                result['_failure_metadata'] = {
+                    "scaffolding_artifact": {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "stage": "scaffolding_artifact_generation"
+                    }
+                }
+                return result
+
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    print(f"  Warning: Scaffolding artifact attempt {attempt}/{max_retries} failed: {e}. Retrying...")
+                else:
+                    print(f"  Warning: All {max_retries} scaffolding artifact attempts failed. Last error: {e}")
+
+        # Fallback: create basic scaffolding from failed objectives
+        fallback_artifacts = []
+        for failed_po in failed_objectives[:3]:  # Limit to top 3
+            fallback_artifacts.append({
+                "target_objective": failed_po.get("objective_content", "Unknown objective"),
+                "skill_type": "LOT",
+                "cognitive_level": "Understand",
+                "failure_analysis": failed_po.get("reason_for_unmet_objective", "Unable to analyze"),
+                "scaffolding_content": {
+                    "strategy_suggestion": None,
+                    "partial_example": None,
+                    "socratic_question": failed_po.get("socratic_question", "What key concept might you be missing?"),
+                    "missed_concept": "Review the problem requirements carefully",
+                    "brief_explanation": "Focus on the specific criteria mentioned in the problem",
+                    "key_attention_points": "Pay attention to what the question is actually asking"
+                }
+            })
+
+        return {
+            "scaffolding_artifacts": fallback_artifacts,
+            "scaffolding_summary": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
+            "_failure_metadata": {
+                "scaffolding_artifact": {
+                    "is_fallback": True,
+                    "failure_reason": "scaffolding_artifact_generation_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "stage": "scaffolding_artifact_generation"
+                }
+            }
+        }
+
+    def generate_final_solution(
+        self,
+        problem_text: str,
+        ground_truth: str,
+        task_analysis: str,
+        scaffolding_history: List[Dict],
+        student_weaknesses: List[str],
+        max_iterations: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Case C: 최종 정답 풀이 생성
+
+        학생이 max_iterations 시도 후에도 실패한 경우,
+        Teacher가 학생의 약점을 반영한 교육적 정답 풀이를 생성합니다.
+
+        Args:
+            problem_text: 문제 텍스트
+            ground_truth: 정답
+            task_analysis: 과제 분석 결과
+            scaffolding_history: 누적된 스캐폴딩 히스토리
+            student_weaknesses: 학생의 약점 목록
+            max_iterations: 최대 반복 횟수
+
+        Returns:
+            {
+                "solution_explanation": str,  # 완전한 풀이
+                "addressed_weaknesses": List[str],
+                "key_learning_points": List[str],
+                "final_answer": str,
+                "_failure_metadata": {...}
+            }
+        """
+        # Format scaffolding history
+        history_str = self._format_scaffolding_history(scaffolding_history)
+        weaknesses_str = "\n".join(f"- {w}" for w in student_weaknesses) if student_weaknesses else "- Unable to identify specific weaknesses"
+
+        prompt = TEACHER_FINAL_SOLUTION_PROMPT.format(
+            problem_text=problem_text,
+            ground_truth=ground_truth,
+            task_analysis=task_analysis[:1500],
+            scaffolding_history=history_str,
+            student_weaknesses=weaknesses_str,
+            iterations_count=len(scaffolding_history),
+            max_iterations=max_iterations
+        )
+
+        # Retry logic
+        max_retries = 3
+        last_error = None
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = self.llm.generate_json(prompt, max_tokens=4096)
+
+                # Ensure required fields exist
+                if 'solution_explanation' not in result:
+                    result['solution_explanation'] = f"The correct approach leads to: {ground_truth}"
+                if 'addressed_weaknesses' not in result:
+                    result['addressed_weaknesses'] = student_weaknesses[:3] if student_weaknesses else []
+                if 'key_learning_points' not in result:
+                    result['key_learning_points'] = ["Review the problem-solving approach"]
+                if 'final_answer' not in result:
+                    result['final_answer'] = ground_truth
+
+                # Add success metadata
+                result['_failure_metadata'] = {
+                    "final_solution": {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "stage": "case_c_final_solution"
+                    }
+                }
+                return result
+
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    print(f"  Warning: Final solution attempt {attempt}/{max_retries} failed: {e}. Retrying...")
+                else:
+                    print(f"  Warning: All {max_retries} final solution attempts failed. Last error: {e}")
+
+        # Fallback: create basic solution
+        return {
+            "solution_explanation": f"""[Understanding the Problem]
+Let me solve this problem step by step.
+
+[Step-by-Step Solution]
+Following the correct approach:
+
+[Final Answer]
+Answer: {ground_truth}""",
+            "addressed_weaknesses": student_weaknesses[:3] if student_weaknesses else ["Fundamental problem-solving approach"],
+            "key_learning_points": [
+                "Review the problem requirements carefully",
+                "Apply systematic reasoning",
+                "Verify each step before proceeding"
+            ],
+            "final_answer": ground_truth,
+            "_failure_metadata": {
+                "final_solution": {
+                    "is_fallback": True,
+                    "failure_reason": "final_solution_generation_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "stage": "case_c_final_solution"
+                }
+            }
+        }
+
+    def _format_scaffolding_history(self, scaffolding_history: List[Dict]) -> str:
+        """
+        Scaffolding 히스토리를 프롬프트용 문자열로 포맷
+
+        Args:
+            scaffolding_history: 스캐폴딩 히스토리 리스트
+
+        Returns:
+            포맷된 문자열
+        """
+        if not scaffolding_history:
+            return "(No scaffolding history)"
+
+        formatted = []
+        for entry in scaffolding_history:
+            iteration = entry.get("iteration", "?")
+            summary = entry.get("summary", "")
+            artifacts = entry.get("artifacts", [])
+
+            formatted.append(f"\n[Iteration {iteration}]")
+            if summary:
+                formatted.append(f"Summary: {summary[:500]}")
+
+            for i, artifact in enumerate(artifacts[:2], 1):  # Limit to 2 artifacts per iteration
+                skill_type = artifact.get("skill_type", "Unknown")
+                target = artifact.get("target_objective", "")[:100]
+                formatted.append(f"  Artifact {i} ({skill_type}): {target}")
+
+        return "\n".join(formatted)
+
+    def extract_student_weaknesses(
+        self,
+        conversation_history: List[Dict]
+    ) -> List[str]:
+        """
+        대화 히스토리에서 학생의 약점 추출
+
+        Args:
+            conversation_history: 대화 기록
+
+        Returns:
+            약점 목록
+        """
+        weaknesses = []
+        seen = set()
+
+        for entry in conversation_history:
+            if entry.get("role") == "teacher":
+                # From PO evaluation
+                evaluation = entry.get("evaluation", {})
+                for po in evaluation.get("performance_evaluation", []):
+                    if not po.get("is_satisfied", True):
+                        reason = po.get("reason_for_unmet_objective", "")
+                        if reason and reason not in seen:
+                            weaknesses.append(reason[:200])
+                            seen.add(reason)
+
+                # From scaffolding artifact
+                artifact = entry.get("scaffolding_artifact", {})
+                for art in artifact.get("scaffolding_artifacts", []):
+                    failure = art.get("failure_analysis", "")
+                    if failure and failure not in seen:
+                        weaknesses.append(failure[:200])
+                        seen.add(failure)
+
+        return weaknesses[:5]  # Limit to top 5
 
 
 if __name__ == "__main__":

@@ -11,6 +11,8 @@ from prompts.learning_prompts import (
     ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT,
     STUDENT_WITH_HINT_PROMPT,
     STUDENT_SOCRATIC_RESPONSE_PROMPT,
+    # New Scaffolding Artifact prompt
+    STUDENT_WITH_ARTIFACT_PROMPT,
 )
 from typing import Dict, Any, Optional, List
 import json
@@ -70,7 +72,7 @@ class StudentModel:
         self,
         problem_text: str,
         task_analysis: str,
-        terminal_goal: str = ""
+        instructional_goal: str = ""
     ) -> str:
         """
         Scaffolding과 함께 초기 응답 생성
@@ -81,13 +83,13 @@ class StudentModel:
         Args:
             problem_text: 문제 설명
             task_analysis: 과제분석 결과 (Instructional Analysis)
-            terminal_goal: 학습 목표 (Terminal Goal)
+            instructional_goal: 학습 목표 (Terminal Goal)
 
         Returns:
             생성된 응답
         """
         system_message = SCAFFOLDING_SYSTEM_PROMPT.format(
-            terminal_goal=terminal_goal if terminal_goal else "solve the problem correctly",
+            instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
             task_analysis=task_analysis
         )
 
@@ -208,6 +210,127 @@ class StudentModel:
                 formatted.append(f"[My Attempt {iteration}]\n{response}")
 
         return "\n\n".join(formatted)
+
+    # =========================================================================
+    # Scaffolding Artifact Methods (NEW - Replaces Socratic Questioning)
+    # =========================================================================
+
+    def respond_with_scaffolding_artifact(
+        self,
+        problem_text: str,
+        previous_response: str,
+        scaffolding_artifact: Dict[str, Any],
+        task_analysis: str
+    ) -> str:
+        """
+        Scaffolding Artifact를 참조하여 개선된 응답 생성
+
+        Teacher가 생성한 Scaffolding DB(artifact)를 참조하여
+        개선된 풀이를 생성합니다. 학생은 DB에서 어떤 정보를
+        참조했는지 명시적으로 언급해야 합니다.
+
+        Args:
+            problem_text: 문제 텍스트
+            previous_response: 이전 응답
+            scaffolding_artifact: Scaffolding DB (artifacts + summary)
+            task_analysis: 과제 분석 결과
+
+        Returns:
+            DB 참조 정보를 명시한 개선된 응답
+        """
+        # Format scaffolding artifacts for the prompt
+        artifacts_str = self._format_scaffolding_artifacts(
+            scaffolding_artifact.get("scaffolding_artifacts", [])
+        )
+        scaffolding_summary = scaffolding_artifact.get("scaffolding_summary", "")
+
+        prompt = STUDENT_WITH_ARTIFACT_PROMPT.format(
+            problem_text=problem_text,
+            previous_response=previous_response[:1500],
+            scaffolding_summary=scaffolding_summary,
+            scaffolding_artifacts=artifacts_str,
+            task_analysis=task_analysis[:1500]
+        )
+
+        response = self.model.generate(
+            prompt=prompt,
+            system_message="You are a student learning from scaffolding guidance. Apply the provided scaffolding to improve your solution and explicitly acknowledge what you learned from the Scaffolding DB."
+        )
+
+        return response
+
+    def _format_scaffolding_artifacts(self, artifacts: List[Dict]) -> str:
+        """
+        Scaffolding artifacts를 읽기 쉬운 형식으로 포맷
+
+        Args:
+            artifacts: Scaffolding artifact 리스트
+
+        Returns:
+            포맷된 문자열
+        """
+        if not artifacts:
+            return "(No detailed artifacts available)"
+
+        formatted = []
+        for i, artifact in enumerate(artifacts, 1):
+            skill_type = artifact.get("skill_type", "Unknown")
+            target = artifact.get("target_objective", "Unknown objective")
+            cognitive_level = artifact.get("cognitive_level", "")
+            failure_analysis = artifact.get("failure_analysis", "")
+            content = artifact.get("scaffolding_content", {})
+
+            formatted.append(f"\n=== Artifact {i} ({skill_type} - {cognitive_level}) ===")
+            formatted.append(f"Target Objective: {target}")
+
+            if failure_analysis:
+                formatted.append(f"Your Issue: {failure_analysis}")
+
+            if skill_type == "HOT":
+                # High-Order Thinking scaffolding
+                if content.get("strategy_suggestion"):
+                    formatted.append(f"Suggested Strategy: {content['strategy_suggestion']}")
+                if content.get("partial_example"):
+                    formatted.append(f"Partial Example: {content['partial_example']}")
+                if content.get("socratic_question"):
+                    formatted.append(f"Guiding Question: {content['socratic_question']}")
+            else:
+                # Low-Order Thinking scaffolding
+                if content.get("missed_concept"):
+                    formatted.append(f"Missed Concept: {content['missed_concept']}")
+                if content.get("brief_explanation"):
+                    formatted.append(f"Explanation: {content['brief_explanation']}")
+
+            if content.get("key_attention_points"):
+                formatted.append(f"Key Points to Remember: {content['key_attention_points']}")
+
+        return "\n".join(formatted)
+
+    def extract_db_references(self, response: str) -> List[str]:
+        """
+        학생 응답에서 DB 참조 정보 추출
+
+        Args:
+            response: 학생의 응답
+
+        Returns:
+            참조된 DB 정보 목록
+        """
+        references = []
+
+        # Look for the "Information Retrieved from Scaffolding DB" section
+        if "Information Retrieved from Scaffolding DB:" in response:
+            # Extract the section
+            parts = response.split("Information Retrieved from Scaffolding DB:")
+            if len(parts) > 1:
+                ref_section = parts[1].split("Improved Reasoning:")[0] if "Improved Reasoning:" in parts[1] else parts[1]
+                # Extract bullet points
+                for line in ref_section.strip().split("\n"):
+                    line = line.strip()
+                    if line.startswith("-") or line.startswith("•"):
+                        references.append(line[1:].strip())
+
+        return references
 
 
 if __name__ == "__main__":

@@ -41,13 +41,7 @@ DOMAIN_CONFIG = {
         "training_datasets": ["reclor"],
         "eval_datasets": [
             "reclor", "anli_r2", "anli_r3",
-            "bbh_boolean_expressions", "bbh_formal_fallacies",
-            "bbh_logical_deduction_three_objects", "bbh_logical_deduction_five_objects",
-            "bbh_logical_deduction_seven_objects",
-            "bbh_tracking_shuffled_objects_three_objects",
-            "bbh_tracking_shuffled_objects_five_objects",
-            "bbh_tracking_shuffled_objects_seven_objects",
-            "bbh_web_of_lies"
+            "bbh"  # Unified BBH (all subtasks in single file, subtask info in metadata)
         ],
         "default_eval": "reclor"
     },
@@ -130,12 +124,12 @@ def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str
     return dirs
 
 
-def get_terminal_goal(
+def get_instructional_goal(
     dataset: str,
     teacher_model: Optional[str] = None
 ) -> Optional[str]:
     """
-    Get Terminal Goal for a training dataset from design JSON.
+    Get Instructional Goal for a training dataset from design JSON.
 
     Design JSON 파일에서만 로드하며, 없으면 None 반환 (fallback 없음).
 
@@ -144,7 +138,7 @@ def get_terminal_goal(
         teacher_model: Teacher 모델 이름 (필수 - design JSON 경로 결정에 사용)
 
     Returns:
-        Terminal Goal 문자열 또는 None (생성된 것이 없는 경우)
+        Instructional Goal 문자열 또는 None (생성된 것이 없는 경우)
     """
     if not teacher_model:
         return None
@@ -153,16 +147,16 @@ def get_terminal_goal(
     if not domain:
         return None
 
-    return _load_terminal_goal_from_design(domain, dataset, teacher_model)
+    return _load_instructional_goal_from_design(domain, dataset, teacher_model)
 
 
-def _load_terminal_goal_from_design(
+def _load_instructional_goal_from_design(
     domain: str,
     dataset: str,
     teacher_model: str
 ) -> Optional[str]:
     """
-    Design JSON 파일에서 terminal_goal 로드
+    Design JSON 파일에서 instructional_goal 로드
 
     Args:
         domain: 도메인 이름
@@ -170,7 +164,7 @@ def _load_terminal_goal_from_design(
         teacher_model: Teacher 모델 이름
 
     Returns:
-        Terminal Goal 또는 None (파일 없거나 필드 없음)
+        Instructional Goal 또는 None (파일 없거나 필드 없음)
     """
     from config.config import get_model_short_name
 
@@ -183,9 +177,9 @@ def _load_terminal_goal_from_design(
             with open(design_path, 'r', encoding='utf-8') as f:
                 design_data = json.load(f)
 
-            terminal_goal = design_data.get("terminal_goal")
-            if terminal_goal:
-                return terminal_goal
+            instructional_goal = design_data.get("instructional_goal")
+            if instructional_goal:
+                return instructional_goal
 
     except Exception:
         # 로드 실패 시 무시하고 fallback 사용

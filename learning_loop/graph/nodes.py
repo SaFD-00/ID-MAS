@@ -51,7 +51,7 @@ def process_question_scaffolding(
     use_iterative = state.get("use_iterative_scaffolding", True)
     max_iterations = state.get("max_iterations", 5)
     performance_objectives = state.get("performance_objectives", [])
-    terminal_goal = state.get("terminal_goal", "")
+    instructional_goal = state.get("instructional_goal", "")
 
     qid = question["id"]
     print(f"\n[Scaffolding] Processing: {qid}")
@@ -65,7 +65,7 @@ def process_question_scaffolding(
             answer_extractor=answer_extractor,
             max_iterations=max_iterations,
             performance_objectives=performance_objectives,
-            terminal_goal=terminal_goal,
+            instructional_goal=instructional_goal,
         )
     else:
         result = _process_single_shot(
@@ -73,8 +73,29 @@ def process_question_scaffolding(
             task_analysis=task_analysis,
             student_model=student_model,
             answer_extractor=answer_extractor,
-            terminal_goal=terminal_goal,
+            instructional_goal=instructional_goal,
         )
+
+    # NEW: Handle skipped questions (fallback occurred)
+    if result.get("is_skipped", False):
+        updates = {
+            "scaffolding_results": [result],
+            "scaffolding_processed": state.get("scaffolding_processed", 0) + 1,
+            "skipped_count": state.get("skipped_count", 0) + 1,
+            "updated_at": datetime.now().isoformat(),
+        }
+        failure_reason = result.get("failure_reason", "unknown")
+        failure_stage = result.get("failure_stage", "unknown")
+        print(f"  -> SKIPPED: Fallback detected at {failure_stage} ({failure_reason})")
+
+        # Still track fallback counts for statistics
+        failure = result.get("failure", {})
+        if failure.get("evaluation", {}).get("is_fallback"):
+            updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1
+        if failure.get("scaffolding_artifact", {}).get("is_fallback"):
+            updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1
+
+        return updates
 
     # Build state updates
     updates = {
@@ -120,6 +141,20 @@ def process_question_scaffolding(
     if failure.get("summarization", {}).get("is_fallback"):
         updates["summarization_fallback_count"] = state.get("summarization_fallback_count", 0) + 1
         print(f"     [Warning] Conversation summarization failed - using fallback")
+    if failure.get("scaffolding_artifact", {}).get("is_fallback"):
+        updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1
+        print(f"     [Warning] Scaffolding artifact generation failed - using fallback")
+    if failure.get("reconstruction", {}).get("is_fallback") and sft_case == SFTCase.C.value:
+        updates["final_solution_fallback_count"] = state.get("final_solution_fallback_count", 0) + 1
+        print(f"     [Warning] Final solution generation failed - using fallback")
+
+    # Update HOT/LOT scaffolding counts
+    hot_count = result.get("hot_count", 0) or 0
+    lot_count = result.get("lot_count", 0) or 0
+    if hot_count > 0:
+        updates["hot_scaffolding_count"] = state.get("hot_scaffolding_count", 0) + hot_count
+    if lot_count > 0:
+        updates["lot_scaffolding_count"] = state.get("lot_scaffolding_count", 0) + lot_count
 
     return updates
 
@@ -129,13 +164,13 @@ def _process_single_shot(
     task_analysis: str,
     student_model,
     answer_extractor,
-    terminal_goal: str = "",
+    instructional_goal: str = "",
 ) -> QuestionResult:
     """Process question with single-shot scaffolding."""
     response = student_model.generate_initial_response_with_scaffolding(
         problem_text=question["problem_text"],
         task_analysis=task_analysis,
-        terminal_goal=terminal_goal,
+        instructional_goal=instructional_goal,
     )
 
     predicted = answer_extractor.extract(response)
@@ -163,45 +198,52 @@ def _process_iterative_scaffolding(
     answer_extractor,
     max_iterations: int = 5,
     performance_objectives: List[Dict] = None,
-    terminal_goal: str = "",
+    instructional_goal: str = "",
 ) -> QuestionResult:
     """
-    Process question with iterative scaffolding using ReAct-style PO evaluation.
+    Process question with Scaffolding Artifact-based iterative scaffolding.
 
-    Flow:
+    NEW Flow (Replaces Socratic Questioning):
     1. Student generates initial response with Terminal Goal emphasis
-    2. Teacher evaluates with Performance Objectives + generates Socratic questions
-    3. If correct answer AND all POs satisfied → success (Case A)
-    4. If answer correct but PO not satisfied → continue scaffolding
-    5. If not satisfied, student responds to Socratic questions
-    6. Repeat until (correct AND all POs satisfied) or max iterations
-    7. If failed after max iterations → reconstruction (Case B)
-       - Failure can be: answer incorrect OR answer correct but PO not satisfied
+    2. Teacher evaluates with Performance Objectives
+    3. If PO not satisfied → Teacher generates Scaffolding Artifact (HOT/LOT)
+    4. Student responds using Scaffolding DB (must cite sources)
+    5. Repeat until all POs satisfied or max iterations
+    6. Case A: 1st iteration success
+    7. Case B: 2-5th iteration success (reconstruct)
+    8. Case C: Failed after max iterations → Teacher generates final solution
     """
     conversation_history = []
     iterations = []
+    scaffolding_db = []  # NEW: Cumulative Scaffolding Artifacts
     is_correct = False
     all_satisfied = False
     predicted = None
     response = None
     last_correct_iteration = None
     last_correct_response = None
-    failures = {}  # failure metadata 수집용
+    failures = {}  # failure metadata collection
+    hot_count = 0  # HOT scaffolding count
+    lot_count = 0  # LOT scaffolding count
+
+    last_response = None
+    last_scaffolding_artifact = None
 
     for iteration in range(1, max_iterations + 1):
-        # Iteration 1: Student generates initial response with scaffolding
+        # Step 1: Student generates response
         if iteration == 1:
+            # Initial response with scaffolding system prompt
             response = student_model.generate_initial_response_with_scaffolding(
                 problem_text=question["problem_text"],
                 task_analysis=task_analysis,
-                terminal_goal=terminal_goal,
+                instructional_goal=instructional_goal,
             )
         else:
-            # Iterations 2+: Student responds to Socratic questions from previous evaluation
-            response = student_model.respond_to_socratic_questions(
+            # Step 4 (NEW): Student responds using Scaffolding Artifact DB
+            response = student_model.respond_with_scaffolding_artifact(
                 problem_text=question["problem_text"],
-                teacher_evaluation=last_evaluation,
                 previous_response=last_response,
+                scaffolding_artifact=last_scaffolding_artifact,
                 task_analysis=task_analysis,
             )
 
@@ -215,7 +257,7 @@ def _process_iterative_scaffolding(
         predicted = answer_extractor.extract(response)
         is_correct = answer_extractor.compare(predicted, question["output"])
 
-        # Teacher evaluates with Performance Objectives
+        # Step 2: Teacher evaluates with Performance Objectives
         if performance_objectives:
             evaluation = teacher_model.evaluate_with_performance_objectives(
                 student_response=response,
@@ -223,20 +265,140 @@ def _process_iterative_scaffolding(
                 problem_text=question["problem_text"],
                 ground_truth=question["output"],
             )
-            all_satisfied = evaluation.get("overall_assessment", {}).get("all_satisfied", False)
+            overall = evaluation.get("overall_assessment", {})
+            if isinstance(overall, dict):
+                all_satisfied = overall.get("all_satisfied", False)
+            else:
+                print(f"  Warning: overall_assessment is not dict: {type(overall)}")
+                all_satisfied = False
 
-            # Evaluation failure 메타데이터 수집
+            # Collect evaluation failure metadata
             if evaluation and evaluation.get("_failure_metadata"):
                 eval_failure = evaluation["_failure_metadata"].get("evaluation")
                 if eval_failure:
                     failures["evaluation"] = eval_failure
+
+                    # NEW: Skip on evaluation fallback
+                    if eval_failure.get("is_fallback"):
+                        print(f"    [SKIP] Evaluation fallback detected. Skipping question {question['id']}")
+                        return QuestionResult(
+                            id=question["id"],
+                            instruction=question.get("instruction", ""),
+                            input=question["input"],
+                            output=question["output"],
+                            _problem_text=question["problem_text"],
+                            initial_response=response,
+                            predicted_answer=predicted,
+                            scaffolding_correct=False,
+                            sft_case=None,
+                            is_skipped=True,
+                            failure_reason="evaluation_fallback",
+                            failure_stage="evaluation",
+                            failure_details=eval_failure,
+                            iterative_scaffolding={
+                                "success": False,
+                                "iterations_needed": iteration,
+                                "conversation_history": conversation_history,
+                            },
+                            failure=failures,
+                        )
         else:
             evaluation = None
             all_satisfied = is_correct
 
+        # Track last correct response
+        if is_correct:
+            last_correct_iteration = iteration
+            last_correct_response = response
+
+        # Success condition: all POs satisfied
+        if all_satisfied:
+            print(f"    -> Success on iteration {iteration}! (PO satisfied: True)")
+
+            # Add teacher entry without scaffolding artifact (success)
+            conversation_history.append({
+                "role": "teacher",
+                "evaluation": evaluation,
+                "iteration": iteration,
+            })
+
+            iterations.append({
+                "iteration_number": iteration,
+                "student_response": response,
+                "predicted_answer": predicted,
+                "is_correct": is_correct,
+                "teacher_evaluation": evaluation,
+                "all_po_satisfied": all_satisfied,
+                "timestamp": datetime.now().isoformat(),
+            })
+            break
+
+        # PO not satisfied - continue scaffolding
+        print(f"    -> PO not satisfied on iteration {iteration}. Generating scaffolding artifact...")
+
+        # Step 3 (NEW): Generate Scaffolding Artifact (HOT/LOT)
+        scaffolding_artifact = teacher_model.generate_scaffolding_artifact(
+            problem_text=question["problem_text"],
+            student_response=response,
+            po_evaluation=evaluation,
+            iteration_number=iteration,
+            task_analysis=task_analysis,
+            max_iterations=max_iterations,
+        )
+
+        # Count HOT/LOT scaffolding
+        for artifact in scaffolding_artifact.get("scaffolding_artifacts", []):
+            skill_type = artifact.get("skill_type", "")
+            if skill_type == "HOT":
+                hot_count += 1
+            elif skill_type == "LOT":
+                lot_count += 1
+
+        # Collect scaffolding artifact failure metadata
+        if scaffolding_artifact.get("_failure_metadata"):
+            artifact_failure = scaffolding_artifact["_failure_metadata"].get("scaffolding_artifact")
+            if artifact_failure and artifact_failure.get("is_fallback"):
+                failures["scaffolding_artifact"] = artifact_failure
+
+                # NEW: Skip on scaffolding artifact fallback
+                print(f"    [SKIP] Scaffolding artifact fallback detected. Skipping question {question['id']}")
+                return QuestionResult(
+                    id=question["id"],
+                    instruction=question.get("instruction", ""),
+                    input=question["input"],
+                    output=question["output"],
+                    _problem_text=question["problem_text"],
+                    initial_response=response,
+                    predicted_answer=predicted,
+                    scaffolding_correct=False,
+                    sft_case=None,
+                    is_skipped=True,
+                    failure_reason="scaffolding_artifact_fallback",
+                    failure_stage="scaffolding_artifact",
+                    failure_details=artifact_failure,
+                    iterative_scaffolding={
+                        "success": False,
+                        "iterations_needed": iteration,
+                        "conversation_history": conversation_history,
+                        "iterations": iterations,
+                    },
+                    scaffolding_db=scaffolding_db if scaffolding_db else None,
+                    hot_count=hot_count if hot_count > 0 else None,
+                    lot_count=lot_count if lot_count > 0 else None,
+                    failure=failures,
+                )
+
+        # Accumulate scaffolding DB
+        scaffolding_db.append({
+            "iteration": iteration,
+            "artifacts": scaffolding_artifact.get("scaffolding_artifacts", []),
+            "summary": scaffolding_artifact.get("scaffolding_summary", ""),
+        })
+
         conversation_history.append({
             "role": "teacher",
             "evaluation": evaluation,
+            "scaffolding_artifact": scaffolding_artifact,
             "iteration": iteration,
         })
 
@@ -246,38 +408,26 @@ def _process_iterative_scaffolding(
             "predicted_answer": predicted,
             "is_correct": is_correct,
             "teacher_evaluation": evaluation,
+            "scaffolding_artifact": scaffolding_artifact,
             "all_po_satisfied": all_satisfied,
             "timestamp": datetime.now().isoformat(),
         })
 
-        # Track last correct response for potential reconstruction
-        if is_correct:
-            last_correct_iteration = iteration
-            last_correct_response = response
-
-        # Success condition: all POs satisfied (answer correctness is not considered)
-        if all_satisfied:
-            print(f"    -> Success on iteration {iteration}! (PO satisfied: True)")
-            break
-        else:
-            # PO not satisfied - continue scaffolding
-            print(f"    -> PO not satisfied on iteration {iteration}. Continuing scaffolding...")
-
         # Store for next iteration
         last_response = response
-        last_evaluation = evaluation
+        last_scaffolding_artifact = scaffolding_artifact
 
-    # Build result - success requires all POs satisfied (answer correctness is not considered)
+    # Build result
     if all_satisfied:
         iterations_needed = len(iterations)
 
         reconstruction = None
         if iterations_needed == 1:
-            # Case A: 1회차 성공 - 학생 응답 그대로 사용
+            # Case A: 1st iteration success - use student response as-is
             sft_output = response
             sft_case = SFTCase.A.value
         else:
-            # Case B: 2~5회차 성공 - teacher가 scaffolding 과정 재구성
+            # Case B: 2-5th iteration success - reconstruct scaffolding process
             reconstruction = teacher_model.reconstruct_successful_scaffolding(
                 problem_text=question["problem_text"],
                 ground_truth=question["output"],
@@ -289,19 +439,21 @@ def _process_iterative_scaffolding(
             sft_output = reconstruction.get("reconstructed_response", response)
             sft_case = SFTCase.B.value
 
-        # Case B reconstruction failure 메타데이터 추출 및 병합
+        # Merge Case B reconstruction failure metadata
         if reconstruction:
             failure_metadata = reconstruction.get("_failure_metadata")
             if failure_metadata:
-                # Dict of dicts 병합
                 failures.update(failure_metadata)
+
+        # Extract DB references from student response (if available)
+        db_references = student_model.extract_db_references(response) if iterations_needed > 1 else []
 
         return QuestionResult(
             id=question["id"],
             instruction=question.get("instruction", ""),
             input=question["input"],
             output=question["output"],
-            _problem_text=question["problem_text"],  # 내부 처리용
+            _problem_text=question["problem_text"],
             initial_response=response,
             predicted_answer=predicted,
             scaffolding_correct=True,
@@ -313,26 +465,35 @@ def _process_iterative_scaffolding(
                 "conversation_history": conversation_history,
                 "iterations": iterations,
             },
-            failure=failures if failures else None,  # 모든 failure를 Dict of dicts로 저장
+            scaffolding_db=scaffolding_db if scaffolding_db else None,
+            db_references=db_references if db_references else None,
+            hot_count=hot_count if hot_count > 0 else None,
+            lot_count=lot_count if lot_count > 0 else None,
+            failure=failures if failures else None,
         )
     else:
-        # Failed after max iterations - need reconstruction (PO not satisfied)
+        # Case C: Failed after max iterations - Teacher generates final solution
         failure_reason = "po_not_satisfied"
-        print(f"    -> Failed after {max_iterations} iterations. (Reason: {failure_reason}) Reconstructing...")
+        print(f"    -> Failed after {max_iterations} iterations. (Reason: {failure_reason}) Generating final solution...")
 
-        reconstruction = teacher_model.summarize_and_reconstruct(
+        # Extract student weaknesses from conversation history
+        student_weaknesses = teacher_model.extract_student_weaknesses(conversation_history)
+
+        # NEW: Use generate_final_solution instead of summarize_and_reconstruct
+        final_solution = teacher_model.generate_final_solution(
             problem_text=question["problem_text"],
             ground_truth=question["output"],
             task_analysis=task_analysis,
-            conversation_history=conversation_history,
+            scaffolding_history=scaffolding_db,
+            student_weaknesses=student_weaknesses,
+            max_iterations=max_iterations,
         )
 
-        reconstructed_response = reconstruction.get("reconstructed_response", "")
+        reconstructed_response = final_solution.get("solution_explanation", "")
 
-        # Case C reconstruction failure 메타데이터 추출 및 병합
-        failure_metadata = reconstruction.get("_failure_metadata")
+        # Collect final solution failure metadata
+        failure_metadata = final_solution.get("_failure_metadata")
         if failure_metadata:
-            # Dict of dicts 병합
             failures.update(failure_metadata)
 
         return QuestionResult(
@@ -340,7 +501,7 @@ def _process_iterative_scaffolding(
             instruction=question.get("instruction", ""),
             input=question["input"],
             output=question["output"],
-            _problem_text=question["problem_text"],  # 내부 처리용
+            _problem_text=question["problem_text"],
             initial_response=reconstructed_response,
             predicted_answer=predicted,
             scaffolding_correct=False,
@@ -355,12 +516,15 @@ def _process_iterative_scaffolding(
                 "last_correct_iteration": last_correct_iteration,
                 "last_correct_response": last_correct_response,
             },
+            scaffolding_db=scaffolding_db if scaffolding_db else None,
             reconstruction={
-                "summary": reconstruction.get("summary", ""),
-                "student_weaknesses": reconstruction.get("student_weaknesses", []),
-                "learning_points": reconstruction.get("learning_points", []),
+                "addressed_weaknesses": final_solution.get("addressed_weaknesses", []),
+                "key_learning_points": final_solution.get("key_learning_points", []),
+                "final_answer": final_solution.get("final_answer", ""),
             },
-            failure=failures if failures else None,  # 모든 failure를 Dict of dicts로 저장
+            hot_count=hot_count if hot_count > 0 else None,
+            lot_count=lot_count if lot_count > 0 else None,
+            failure=failures if failures else None,
         )
 
 
@@ -433,6 +597,10 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
 
     # Scaffolding results: Case A, Case B, and Case C
     for result in state.get("scaffolding_results", []):
+        # NEW: Skip fallback cases (is_skipped=True)
+        if result.get("is_skipped", False):
+            continue
+
         if result.get("sft_case") in (SFTCase.A.value, SFTCase.B.value, SFTCase.C.value):
             entry = _create_sft_entry(result)
             if entry:

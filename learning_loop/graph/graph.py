@@ -181,7 +181,7 @@ class IDMASGraphRunner:
         self,
         domain: str,
         train_dataset: str,
-        terminal_goal: str,
+        instructional_goal: str,
         student_model_name: str,
         teacher_model_name: str,
         model_short: str,
@@ -200,7 +200,7 @@ class IDMASGraphRunner:
         Args:
             domain: Domain name (e.g., "math")
             train_dataset: Training dataset name (e.g., "gsm8k")
-            terminal_goal: Learning objective
+            instructional_goal: Learning objective
             student_model_name: Student model name
             teacher_model_name: Teacher model name
             model_short: Short model name for file naming
@@ -232,7 +232,7 @@ class IDMASGraphRunner:
         initial_state = create_initial_state(
             domain=domain,
             train_dataset=train_dataset,
-            terminal_goal=terminal_goal,
+            instructional_goal=instructional_goal,
             student_model_name=student_model_name,
             teacher_model_name=teacher_model_name,
             model_short=model_short,

@@ -1,24 +1,24 @@
 """
-Design Phase Step 0: Terminal Goal Generation
+Design Phase Step 0: Instructional Goal Generation
 
-샘플 데이터를 분석하여 Terminal Goal을 동적으로 생성.
+샘플 데이터를 분석하여 Instructional Goal을 동적으로 생성.
 Teacher Model을 사용하여 각 데이터셋에 맞는 학습 목표 도출.
 """
 import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from models.teacher_wrapper import TeacherModelWrapper
-from prompts.terminal_goal_prompts import (
-    get_terminal_goal_prompt,
-    TERMINAL_GOAL_SYSTEM_MESSAGE
+from prompts.instructional_goal_prompts import (
+    get_instructional_goal_prompt,
+    INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE
 )
 
 
-class TerminalGoalGenerator:
+class InstructionalGoalGenerator:
     """
-    Design Phase Step 0: Terminal Goal 생성 에이전트
+    Design Phase Step 0: Instructional Goal 생성 에이전트
 
-    샘플 데이터를 분석하여 데이터셋에 적합한 Terminal Goal을 생성.
+    샘플 데이터를 분석하여 데이터셋에 적합한 Instructional Goal을 생성.
     Teacher Model (teacher_config로 설정된 모델)을 사용.
     """
 
@@ -39,7 +39,7 @@ class TerminalGoalGenerator:
         max_retries: int = 3
     ) -> Dict[str, Any]:
         """
-        Terminal Goal 생성 (최대 3번 재시도)
+        Instructional Goal 생성 (최대 3번 재시도)
 
         Args:
             train_samples: 샘플 데이터 (10-30개)
@@ -50,7 +50,7 @@ class TerminalGoalGenerator:
 
         Returns:
             {
-                "terminal_goal": "The model should be able to...",
+                "instructional_goal": "The model should be able to...",
                 "cognitive_level": "Apply",
                 "primary_verb": "generate",
                 "rationale": "...",
@@ -71,37 +71,37 @@ class TerminalGoalGenerator:
         for attempt in range(1, max_retries + 1):
             try:
                 # 프롬프트 구성
-                prompt = get_terminal_goal_prompt(
+                prompt = get_instructional_goal_prompt(
                     domain=domain,
                     dataset=dataset,
                     samples=train_samples,
                     custom_template=prompt_template
                 )
 
-                # LLM으로 Terminal Goal 생성 (JSON 형식)
+                # LLM으로 Instructional Goal 생성 (JSON 형식)
                 try:
                     result_json = self.llm.generate_json(
                         prompt=prompt,
-                        system_message=TERMINAL_GOAL_SYSTEM_MESSAGE
+                        system_message=INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE
                     )
                 except Exception as e:
                     # JSON 파싱 실패 시 텍스트로 재시도
                     raw_text = self.llm.generate(
                         prompt=prompt,
-                        system_message=TERMINAL_GOAL_SYSTEM_MESSAGE
+                        system_message=INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE
                     )
                     result_json = self._parse_fallback(raw_text)
 
                 # 결과 검증
-                terminal_goal = result_json.get("terminal_goal", "")
-                if not terminal_goal:
-                    raise ValueError("Empty terminal_goal in response")
+                instructional_goal = result_json.get("instructional_goal", "")
+                if not instructional_goal:
+                    raise ValueError("Empty instructional_goal in response")
 
                 # 메타데이터 추가
                 model_name = self.teacher_config.get("model", "unknown") if self.teacher_config else "default"
 
                 return {
-                    "terminal_goal": terminal_goal,
+                    "instructional_goal": instructional_goal,
                     "cognitive_level": result_json.get("cognitive_level", "Apply"),
                     "primary_verb": result_json.get("primary_verb", ""),
                     "rationale": result_json.get("rationale", ""),
@@ -116,7 +116,7 @@ class TerminalGoalGenerator:
 
             except Exception as e:
                 last_error = e
-                print(f"  [Attempt {attempt}/{max_retries}] Terminal Goal generation failed: {e}")
+                print(f"  [Attempt {attempt}/{max_retries}] Instructional Goal generation failed: {e}")
 
                 if attempt < max_retries:
                     print(f"  Retrying...")
@@ -125,13 +125,13 @@ class TerminalGoalGenerator:
 
         # 모든 재시도 실패 → RuntimeError 발생
         raise RuntimeError(
-            f"Terminal Goal generation failed after {max_retries} attempts. "
+            f"Instructional Goal generation failed after {max_retries} attempts. "
             f"Last error: {last_error}"
         )
 
     def _parse_fallback(self, raw_text: str) -> Dict[str, Any]:
         """
-        텍스트 응답에서 Terminal Goal 추출 (fallback)
+        텍스트 응답에서 Instructional Goal 추출 (fallback)
 
         Args:
             raw_text: LLM의 텍스트 응답
@@ -140,7 +140,7 @@ class TerminalGoalGenerator:
             파싱된 결과 딕셔너리
         """
         result = {
-            "terminal_goal": "",
+            "instructional_goal": "",
             "cognitive_level": "Apply",
             "primary_verb": "",
             "rationale": ""
@@ -151,13 +151,13 @@ class TerminalGoalGenerator:
         for line in lines:
             line_lower = line.lower().strip()
 
-            # Terminal Goal 패턴 찾기
-            if "terminal_goal" in line_lower or "the model should" in line_lower:
-                # "terminal_goal": "..." 또는 Terminal Goal: ... 패턴
+            # Instructional Goal 패턴 찾기
+            if "instructional_goal" in line_lower or "the model should" in line_lower or "the model will" in line_lower:
+                # "instructional_goal": "..." 또는 Instructional Goal: ... 패턴
                 if ":" in line:
                     value = line.split(":", 1)[1].strip().strip('"').strip(',')
                     if value:
-                        result["terminal_goal"] = value
+                        result["instructional_goal"] = value
 
             # Cognitive Level 패턴
             elif "cognitive_level" in line_lower:
@@ -166,13 +166,13 @@ class TerminalGoalGenerator:
                     if value:
                         result["cognitive_level"] = value
 
-        # Terminal Goal이 여전히 없으면 전체 텍스트에서 "The model should..." 패턴 찾기
-        if not result["terminal_goal"]:
+        # Instructional Goal이 여전히 없으면 전체 텍스트에서 "The model will/should..." 패턴 찾기
+        if not result["instructional_goal"]:
             import re
-            pattern = r'["\']?(The model should be able to[^"\']+)["\']?'
+            pattern = r'["\']?(The model (?:should be able to|will)[^"\']+)["\']?'
             match = re.search(pattern, raw_text, re.IGNORECASE)
             if match:
-                result["terminal_goal"] = match.group(1).strip()
+                result["instructional_goal"] = match.group(1).strip()
 
         return result
 
@@ -194,12 +194,12 @@ if __name__ == "__main__":
             samples = json.load(f)
 
         print("=" * 60)
-        print("Terminal Goal Generator Test")
+        print("Instructional Goal Generator Test")
         print("=" * 60)
         print(f"Loaded {len(samples)} samples")
 
         # Generator 초기화 (기본 설정 사용)
-        generator = TerminalGoalGenerator()
+        generator = InstructionalGoalGenerator()
 
         result = generator.generate(
             train_samples=samples,
@@ -207,8 +207,8 @@ if __name__ == "__main__":
             dataset="gsm8k"
         )
 
-        print("\n=== Generated Terminal Goal ===")
-        print(f"Goal: {result['terminal_goal']}")
+        print("\n=== Generated Instructional Goal ===")
+        print(f"Goal: {result['instructional_goal']}")
         print(f"Cognitive Level: {result['cognitive_level']}")
         print(f"Primary Verb: {result['primary_verb']}")
         print(f"Rationale: {result['rationale']}")

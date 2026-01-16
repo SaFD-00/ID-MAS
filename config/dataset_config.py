@@ -38,12 +38,12 @@ DATASET_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
     "bbh": {
         "hf_name": "lukaemon/bbh",
-        "hf_config": "required",  # Subtask required
+        "hf_config": None,  # Unified file, subtask info in metadata
         "train_split": None,
         "test_split": "test",
-        "answer_type": "mixed",  # Varies by subtask
-        "domain": "math_logic",
-        "description": "Big Bench Hard - 23 challenging reasoning tasks",
+        "answer_type": "text",  # Mixed but use text as default
+        "domain": "logical",
+        "description": "Big Bench Hard - Logical reasoning subtasks (unified)",
     },
     # SciBench configuration (currently not used - knowledge domain removed)
     "scibench": {
@@ -94,89 +94,6 @@ DATASET_CONFIGS: Dict[str, Dict[str, Any]] = {
         "domain": "logical",
         "description": "ANLI Round 3 - Adversarial Natural Language Inference",
     },
-    # BBH subtasks - logical reasoning related
-    "bbh_boolean_expressions": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "boolean_expressions",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "boolean",
-        "domain": "logical",
-        "description": "BBH - Boolean expression evaluation",
-    },
-    "bbh_formal_fallacies": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "formal_fallacies",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "text",
-        "domain": "logical",
-        "description": "BBH - Formal logic fallacy detection",
-    },
-    "bbh_logical_deduction_three_objects": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "logical_deduction_three_objects",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "mcq",
-        "domain": "logical",
-        "description": "BBH - Logical deduction with 3 objects",
-    },
-    "bbh_logical_deduction_five_objects": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "logical_deduction_five_objects",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "mcq",
-        "domain": "logical",
-        "description": "BBH - Logical deduction with 5 objects",
-    },
-    "bbh_logical_deduction_seven_objects": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "logical_deduction_seven_objects",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "mcq",
-        "domain": "logical",
-        "description": "BBH - Logical deduction with 7 objects",
-    },
-    "bbh_tracking_shuffled_objects_three_objects": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "tracking_shuffled_objects_three_objects",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "mcq",
-        "domain": "logical",
-        "description": "BBH - Object tracking with 3 objects",
-    },
-    "bbh_tracking_shuffled_objects_five_objects": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "tracking_shuffled_objects_five_objects",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "mcq",
-        "domain": "logical",
-        "description": "BBH - Object tracking with 5 objects",
-    },
-    "bbh_tracking_shuffled_objects_seven_objects": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "tracking_shuffled_objects_seven_objects",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "mcq",
-        "domain": "logical",
-        "description": "BBH - Object tracking with 7 objects",
-    },
-    "bbh_web_of_lies": {
-        "hf_name": "lukaemon/bbh",
-        "hf_config": "web_of_lies",
-        "train_split": None,
-        "test_split": "test",
-        "answer_type": "boolean",
-        "domain": "logical",
-        "description": "BBH - Truth/lie reasoning",
-    },
-
     # Commonsense domain
     "arc_c": {
         "hf_name": "allenai/ai2_arc",

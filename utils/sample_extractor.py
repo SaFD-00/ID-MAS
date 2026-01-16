@@ -1,7 +1,7 @@
 """
-Sample Data Extractor for Terminal Goal Generation
+Sample Data Extractor for Instructional Goal Generation
 
-각 데이터셋에서 대표 샘플을 추출하여 Terminal Goal 생성에 사용.
+각 데이터셋에서 대표 샘플을 추출하여 Instructional Goal 생성에 사용.
 Design Phase 실행 전 미리 실행하여 샘플 파일 생성.
 
 Usage:
@@ -11,8 +11,16 @@ Usage:
     # 특정 데이터셋만 추출
     python -m utils.sample_extractor --domain math --dataset math --num-samples 20
 
-    # 다양성 기반 샘플링 전략 지정
+    # 메타데이터 기반 계층적 샘플링 (stratified)
+    python -m utils.sample_extractor --domain math --dataset math --strategy stratified
+
+    # 길이 기반 다양성 샘플링 (diverse)
     python -m utils.sample_extractor --domain math --dataset gsm8k --strategy diverse
+
+Sampling Strategy:
+    - stratified: 메타데이터(type > level) 기반 계층적 샘플링, 없으면 diverse로 fallback
+    - diverse: 길이 기반 다양성 샘플링 (short/medium/long 균등)
+    - random: 랜덤 샘플링
 """
 import json
 import random
@@ -30,13 +38,12 @@ DATA_CONFIG = {
         "gsm8k": {
             "train_file": "gsm8k_train.json",
             "samples_file": "gsm8k_samples.json",
-            "num_samples": 15,
+            "num_samples": 20,
         },
         "math": {
             "train_file": "math_train.json",
             "samples_file": "math_samples.json",
             "num_samples": 20,
-            # MATH는 type/level 기반 stratified sampling
             "use_stratified": True,
         },
     },
@@ -44,14 +51,14 @@ DATA_CONFIG = {
         "reclor": {
             "train_file": "reclor_train.json",
             "samples_file": "reclor_samples.json",
-            "num_samples": 15,
+            "num_samples": 20,
         },
     },
     "commonsense": {
         "arc_c": {
             "train_file": "arc_c_train.json",
             "samples_file": "arc_c_samples.json",
-            "num_samples": 15,
+            "num_samples": 20,
         },
     },
 }
@@ -147,46 +154,153 @@ def extract_diverse_samples(
     return diverse_samples
 
 
-def extract_math_stratified_samples(
+def extract_stratified_samples(
     data: List[Dict],
-    num_samples: int = 20
+    num_samples: int,
+    primary_key: str = "type",
+    secondary_key: Optional[str] = "level",
+    text_key: str = "input"
 ) -> List[Dict]:
     """
-    MATH 데이터셋 Stratified Sampling
+    메타데이터 기반 계층적 샘플링 (type > level > length)
 
-    type과 difficulty를 기반으로 균등 분배.
-    output에서 난이도와 유형 정보를 추론.
+    로컬 데이터의 metadata 필드를 활용하여 다양성 있는 샘플 추출.
+    메타데이터가 없거나 의미 없으면 기존 diverse 샘플링으로 fallback.
 
     Args:
-        data: MATH 훈련 데이터
+        data: 로컬 데이터 리스트 (metadata 필드 포함)
         num_samples: 추출할 샘플 수
+        primary_key: 1차 계층 키 (예: "type")
+        secondary_key: 2차 계층 키 (예: "level"), None이면 1차만 사용
+        text_key: 길이 측정용 필드 키
 
     Returns:
-        stratified 샘플 리스트
+        다양성 있는 샘플 리스트
     """
-    # output 필드에서 문제 특성 분석
-    # MATH 데이터는 LaTeX 풀이가 포함됨
+    if not data:
+        return []
 
-    # 길이 기반으로 난이도 추론 (긴 풀이 = 어려운 문제)
-    by_length = categorize_by_length(data, "output")
+    # 메타데이터 존재 여부 확인
+    def get_metadata_value(item: Dict, key: str) -> Optional[str]:
+        metadata = item.get("metadata", {})
+        if isinstance(metadata, dict):
+            return metadata.get(key)
+        return None
 
-    # 각 난이도 그룹에서 균등 추출
+    # 1차 키 값들 수집
+    primary_values = set()
+    for item in data:
+        val = get_metadata_value(item, primary_key)
+        if val:
+            primary_values.add(val)
+
+    # 메타데이터가 없거나 의미 없으면 fallback
+    if not primary_values or len(primary_values) < 2:
+        print(f"  No meaningful '{primary_key}' metadata found, falling back to diverse sampling")
+        return extract_diverse_samples(data, num_samples, text_key)
+
+    print(f"  Found {len(primary_values)} unique {primary_key} values: {sorted(primary_values)}")
+
+    # 1차 키로 그룹화
+    by_primary: Dict[str, List[Dict]] = defaultdict(list)
+    for item in data:
+        val = get_metadata_value(item, primary_key)
+        if val:
+            by_primary[val].append(item)
+
+    # 각 1차 그룹에서 추출할 샘플 수 계산
+    primary_list = sorted(primary_values)
+    samples_per_primary = num_samples // len(primary_list)
+    remainder = num_samples % len(primary_list)
+
     samples = []
-    samples_per_group = num_samples // 3
 
-    for group in ["short", "medium", "long"]:
-        items = by_length[group]
-        if items:
-            count = min(samples_per_group, len(items))
-            samples.extend(random.sample(items, count))
+    for i, primary_val in enumerate(primary_list):
+        count = samples_per_primary + (1 if i < remainder else 0)
+        primary_group = by_primary.get(primary_val, [])
 
-    # 부족한 샘플 수 보충
-    remaining = num_samples - len(samples)
-    if remaining > 0:
-        all_items = [item for group in by_length.values() for item in group]
-        available = [item for item in all_items if item not in samples]
-        if available:
-            samples.extend(random.sample(available, min(remaining, len(available))))
+        if not primary_group:
+            continue
+
+        # 2차 키가 있으면 2차 계층 샘플링
+        if secondary_key:
+            # 2차 키로 서브그룹화
+            by_secondary: Dict[str, List[Dict]] = defaultdict(list)
+            for item in primary_group:
+                sec_val = get_metadata_value(item, secondary_key)
+                if sec_val:
+                    by_secondary[sec_val].append(item)
+
+            if by_secondary and len(by_secondary) >= 2:
+                # 각 2차 그룹에서 1개씩 먼저 추출
+                secondary_samples = []
+                for sec_val, sec_items in by_secondary.items():
+                    if sec_items:
+                        secondary_samples.append(random.choice(sec_items))
+
+                # count만큼 선택
+                if len(secondary_samples) >= count:
+                    selected = random.sample(secondary_samples, count)
+                else:
+                    # 부족하면 추가 샘플링
+                    selected = secondary_samples.copy()
+                    remaining = [item for item in primary_group if item not in selected]
+                    if remaining:
+                        additional = random.sample(remaining, min(count - len(selected), len(remaining)))
+                        selected.extend(additional)
+
+                samples.extend(selected)
+            else:
+                # 2차 키가 없거나 의미 없으면 1차 그룹에서 직접 샘플링 (길이 다양성)
+                selected = _sample_with_length_diversity(primary_group, count, text_key)
+                samples.extend(selected)
+        else:
+            # 2차 키 없으면 1차 그룹에서 길이 다양성 기반 샘플링
+            selected = _sample_with_length_diversity(primary_group, count, text_key)
+            samples.extend(selected)
+
+    return samples
+
+
+def _sample_with_length_diversity(
+    items: List[Dict],
+    count: int,
+    text_key: str = "input"
+) -> List[Dict]:
+    """
+    길이 다양성을 고려한 샘플링
+
+    Args:
+        items: 샘플링 대상 아이템들
+        count: 추출할 샘플 수
+        text_key: 길이 측정용 필드
+
+    Returns:
+        길이 다양성이 확보된 샘플
+    """
+    if len(items) <= count:
+        return items
+
+    # 길이로 분류
+    by_length = categorize_by_length(items, text_key)
+
+    # 각 그룹에서 균등 추출
+    samples_per_group = count // 3
+    remainder = count % 3
+
+    samples = []
+    for i, (group, group_items) in enumerate(by_length.items()):
+        group_count = samples_per_group + (1 if i < remainder else 0)
+        if group_items:
+            selected = random.sample(group_items, min(group_count, len(group_items)))
+            samples.extend(selected)
+
+    # 부족하면 남은 것에서 추가
+    if len(samples) < count:
+        remaining = [item for item in items if item not in samples]
+        if remaining:
+            additional = random.sample(remaining, min(count - len(samples), len(remaining)))
+            samples.extend(additional)
 
     return samples
 
@@ -199,6 +313,9 @@ def extract_samples(
 ) -> List[Dict]:
     """
     데이터셋에서 샘플 추출
+
+    메타데이터가 있는 데이터셋은 계층적 샘플링 사용.
+    메타데이터가 없거나 의미 없으면 기존 diverse/random 샘플링 사용.
 
     Args:
         domain: 도메인 이름 (math, logical, commonsense)
@@ -230,12 +347,22 @@ def extract_samples(
     final_num = num_samples or config["num_samples"]
 
     # 전략에 따른 샘플링
-    if config.get("use_stratified") and strategy != "random":
-        samples = extract_math_stratified_samples(data, final_num)
-    elif strategy == "diverse":
-        samples = extract_diverse_samples(data, final_num)
-    else:
+    if strategy == "random":
         samples = extract_random_samples(data, final_num)
+    elif config.get("use_stratified") or strategy == "stratified":
+        # 메타데이터 기반 계층적 샘플링 (로컬 데이터에서 직접)
+        # type > level > length 순으로 다양성 확보
+        # 메타데이터가 없으면 내부에서 diverse로 fallback
+        samples = extract_stratified_samples(
+            data,
+            final_num,
+            primary_key="type",
+            secondary_key="level",
+            text_key="input"
+        )
+    else:
+        # diverse: 길이 기반 다양성 샘플링
+        samples = extract_diverse_samples(data, final_num)
 
     return samples
 
@@ -307,7 +434,7 @@ def extract_all_samples(strategy: str = "diverse") -> Dict[str, Dict[str, Path]]
 def main():
     """CLI 진입점"""
     parser = argparse.ArgumentParser(
-        description="Extract representative samples from datasets for Terminal Goal generation"
+        description="Extract representative samples from datasets for Instructional Goal generation"
     )
 
     parser.add_argument(
@@ -347,7 +474,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("Sample Data Extractor for Terminal Goal Generation")
+    print("Sample Data Extractor for Instructional Goal Generation")
     print("=" * 60)
 
     if args.all or (args.domain is None and args.dataset is None):

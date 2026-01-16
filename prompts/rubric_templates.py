@@ -232,7 +232,7 @@ Third, define four performance levels for each criterion.
 Performance levels must represent qualitative differences in reasoning behavior, not point scores or vague quality judgments.
 Levels must distinguish whether a specific reasoning step or judgment process was explicitly performed, partially performed, implicitly assumed, or missing.
 Avoid vague adjectives such as "clear," "appropriate," or "sufficient" unless they are explicitly tied to observable reasoning actions.
-Each level description must enable a teacher model to diagnose satisfied and unsatisfied reasoning criteria and to generate actionable feedback.
+Each level description must enable a teacher to diagnose satisfied and unsatisfied reasoning criteria and to generate actionable feedback.
 
 [Output]
 Your output must be written only in valid JSON and must follow exactly the structure below.

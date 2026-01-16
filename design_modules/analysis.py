@@ -19,7 +19,7 @@ class InstructionalAnalysis:
 
     def analyze(self, learning_objective: str, max_retries: int = 3) -> Dict[str, Any]:
         """
-        학습 목표를 분석하여 Terminal Goal, Subskills, Subtasks 생성 (최대 3번 재시도)
+        학습 목표를 분석하여 Instructional Goal, Subskills, Subtasks 생성 (최대 3번 재시도)
 
         Args:
             learning_objective: 학습 목표
@@ -81,30 +81,20 @@ class InstructionalAnalysis:
         lines = result_text.strip().split('\n')
 
         parsed = {
-            "terminal_goal": "",
-            "subskills": [],
-            "prerequisite_knowledge": []
+            "instructional_goal": "",
+            "subskills": []
         }
-
-        current_section = None
 
         for line in lines:
             line = line.strip()
 
-            if "Terminal Goal:" in line:
-                parsed["terminal_goal"] = line.replace("Terminal Goal:", "").strip()
-                current_section = "subskills"
+            if "Instructional Goal:" in line:
+                parsed["instructional_goal"] = line.replace("Instructional Goal:", "").strip()
 
-            elif "### Prerequisite Knowledge" in line:
-                current_section = "prerequisite"
-
-            elif current_section == "subskills" and line and not line.startswith("#"):
+            elif line and not line.startswith("#"):
                 # Subskill/Subtask 파싱
                 if line.startswith("├──") or line.startswith("└──") or line.startswith("│"):
                     parsed["subskills"].append(line)
-
-            elif current_section == "prerequisite" and line and "/" in line:
-                parsed["prerequisite_knowledge"].append(line)
 
         return parsed
 

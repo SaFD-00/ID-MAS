@@ -159,6 +159,7 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 
 ### 학습
 
+#### Math 도메인
 ```bash
 CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen2.5-3B-Instruct \
@@ -183,7 +184,11 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset
 CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen2.5-72B-Instruct \
     --teacher-model Qwen/Qwen2.5-72B-Instruct
+```
 
+#### Logical 도메인
+
+```bash
 CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen2.5-3B-Instruct \
     --teacher-model Qwen/Qwen2.5-3B-Instruct
@@ -195,16 +200,20 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-data
 CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen2.5-72B-Instruct \
     --teacher-model Qwen/Qwen2.5-72B-Instruct
+```
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+#### Commonsense 도메인
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen2.5-3B-Instruct \
     --teacher-model Qwen/Qwen2.5-3B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen2.5-7B-Instruct \
     --teacher-model Qwen/Qwen2.5-7B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen2.5-72B-Instruct \
     --teacher-model Qwen/Qwen2.5-72B-Instruct
 ```

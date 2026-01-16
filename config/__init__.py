@@ -39,7 +39,7 @@ from config.domains import (
     get_available_domains,
     get_eval_datasets_for_domain,
     get_training_datasets_for_domain,
-    get_terminal_goal,
+    get_instructional_goal,
     get_domain_data_dirs,
 )
 
@@ -76,7 +76,7 @@ __all__ = [
     # Domains
     'DATASET_TO_DOMAIN', 'TRAINING_DATASETS', 'DOMAIN_CONFIG',
     'DATA_DIR', 'get_available_domains', 'get_eval_datasets_for_domain',
-    'get_training_datasets_for_domain', 'get_terminal_goal',
+    'get_training_datasets_for_domain', 'get_instructional_goal',
 
     # Paths
     'get_design_output_dir', 'get_model_data_dirs',
