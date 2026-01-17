@@ -1,0 +1,32 @@
+# Qwen2.5 3B Instruct Configuration
+model:
+  name: "Qwen/Qwen2.5-3B-Instruct"
+  template: "qwen"
+  system_message: "You are a helpful assistant."
+  tensor_parallel: 1
+  max_model_len: 4096
+  dtype: "bfloat16"
+
+generation:
+  temperature: 1.2
+  top_p: 0.9
+  max_tokens: 2048
+  num_samples: 20
+  stop_tokens:
+    - "<|im_end|>"
+    - "<|endoftext|>"
+
+training:
+  strategy: "full"
+  learning_rate: 1e-6
+  num_epochs: 3
+  per_device_batch_size: 4
+  gradient_accumulation_steps: 4
+  warmup_ratio: 0.03
+  lr_scheduler: "cosine"
+  gradient_checkpointing: false
+  bf16: true
+
+resources:
+  gpu_memory: "~16GB"
+  recommended_gpus: 1
