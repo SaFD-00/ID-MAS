@@ -2,8 +2,16 @@
 학생 모델 (Student Model, Ms)
 
 Iterative Scaffolding Pipeline Support:
-- generate_initial_response_with_scaffolding: Task Analysis와 함께 응답 생성
-- respond_to_socratic_questions: Socratic 질문에 응답하여 개선된 풀이 생성
+- Step 1 (Initial Response): generate_initial_response_with_scaffolding
+- Step 4 (Re-response): respond_with_scaffolding_artifact
+
+Pipeline Steps:
+- Step 1: Initial Response (Student) - this module
+- Step 2: PO Evaluation (Teacher)
+- Step 3: Scaffolding Artifact (Teacher)
+- Step 4: Re-response (Student) - this module
+- Step 5: Reconstruction (Teacher)
+- Step 6: SFT Generation
 """
 from models.student_wrapper import StudentModelWrapper
 from prompts.learning_prompts import (

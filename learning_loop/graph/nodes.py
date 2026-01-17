@@ -5,6 +5,14 @@ This module implements the node functions used in the LangGraph pipeline:
 - Scaffolding: process_question_scaffolding (iterative with teacher guidance)
 - Utility: save_results, check_completion
 
+Pipeline Steps:
+- Step 1: Initial Response (Student)
+- Step 2: PO Evaluation (Teacher)
+- Step 3: Scaffolding Artifact (Teacher)
+- Step 4: Re-response (Student)
+- Step 5: Reconstruction (Teacher)
+- Step 6: SFT Generation
+
 Based on the research proposal's Iterative Scaffolding architecture.
 """
 from __future__ import annotations
@@ -18,6 +26,7 @@ from learning_loop.graph.state import (
     IDMASState,
     QuestionResult,
     SFTCase,
+    PipelineStep,
     get_statistics,
 )
 
@@ -84,15 +93,24 @@ def process_question_scaffolding(
             "skipped_count": state.get("skipped_count", 0) + 1,
             "updated_at": datetime.now().isoformat(),
         }
-        failure_reason = result.get("failure_reason", "unknown")
-        failure_stage = result.get("failure_stage", "unknown")
-        print(f"  -> SKIPPED: Fallback detected at {failure_stage} ({failure_reason})")
+        skip_reason = result.get("skip_reason", "unknown")
+        skip_stage = result.get("skip_stage", "unknown")
+        print(f"  -> SKIPPED: Fallback detected at {skip_stage} ({skip_reason})")
 
-        # Still track fallback counts for statistics
-        failure = result.get("failure", {})
-        if failure.get("evaluation", {}).get("is_fallback"):
+        # Track step-based skip counts + legacy counts
+        step_skips = result.get("step_skips", {})
+        skip_data = result.get("skip", {})
+
+        # Step 2 (Evaluation) skips
+        if step_skips.get(PipelineStep.STEP2, {}).get("is_fallback") or \
+           skip_data.get("evaluation", {}).get("is_fallback"):
+            updates["step2_skip_count"] = state.get("step2_skip_count", 0) + 1
             updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1
-        if failure.get("scaffolding_artifact", {}).get("is_fallback"):
+
+        # Step 3 (Scaffolding) skips
+        if step_skips.get(PipelineStep.STEP3, {}).get("is_fallback") or \
+           skip_data.get("scaffolding_artifact", {}).get("is_fallback"):
+            updates["step3_skip_count"] = state.get("step3_skip_count", 0) + 1
             updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1
 
         return updates
@@ -115,38 +133,62 @@ def process_question_scaffolding(
         iterations = result.get("iterative_scaffolding", {}).get("iterations_needed", 0)
         print(f"  -> Case B: Iterative Scaffolding succeeded! (PO satisfied at iteration {iterations})")
 
-        # Check if Case B reconstruction used fallback
-        failure = result.get("failure", {})
-        if failure.get("reconstruction", {}).get("is_fallback"):
-            updates["case_b_fallback_count"] = state.get("case_b_fallback_count", 0) + 1
-            print(f"     [Warning] Case B reconstruction failed - using fallback response")
+        # Check if Case B reconstruction used fallback (Step 5)
+        step_skips = result.get("step_skips", {})
+        skip_data = result.get("skip", {})
+        step5_fallback = step_skips.get(PipelineStep.STEP5, {}).get("is_fallback") or \
+                         skip_data.get("reconstruction", {}).get("is_fallback")
+        if step5_fallback:
+            updates["step5_skip_count"] = state.get("step5_skip_count", 0) + 1
+            updates["step5_case_b_skip_count"] = state.get("step5_case_b_skip_count", 0) + 1
+            updates["case_b_fallback_count"] = state.get("case_b_fallback_count", 0) + 1  # Legacy
+            print(f"     [Warning] Step 5 (Case B reconstruction) skipped - using fallback response")
     elif sft_case == SFTCase.C.value:
         updates["case_c_count"] = state.get("case_c_count", 0) + 1
         print(f"  -> Case C: Reconstruction after 5 failed attempts")
 
-        # Check if Case C reconstruction used fallback
-        failure = result.get("failure", {})
-        if failure.get("reconstruction", {}).get("is_fallback"):
-            updates["case_c_fallback_count"] = state.get("case_c_fallback_count", 0) + 1
-            print(f"     [Warning] Case C reconstruction failed - using fallback response")
+        # Check if Case C reconstruction used fallback (Step 5)
+        step_skips = result.get("step_skips", {})
+        skip_data = result.get("skip", {})
+        step5_fallback = step_skips.get(PipelineStep.STEP5, {}).get("is_fallback") or \
+                         skip_data.get("reconstruction", {}).get("is_fallback") or \
+                         skip_data.get("final_solution", {}).get("is_fallback")
+        if step5_fallback:
+            updates["step5_skip_count"] = state.get("step5_skip_count", 0) + 1
+            updates["step5_case_c_skip_count"] = state.get("step5_case_c_skip_count", 0) + 1
+            updates["case_c_fallback_count"] = state.get("case_c_fallback_count", 0) + 1  # Legacy
+            updates["final_solution_fallback_count"] = state.get("final_solution_fallback_count", 0) + 1  # Legacy
+            print(f"     [Warning] Step 5 (Case C final solution) skipped - using fallback response")
 
-    # Check for other failures (all cases)
-    failure = result.get("failure", {})
-    if failure.get("evaluation", {}).get("is_fallback"):
-        updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1
-        print(f"     [Warning] PO evaluation failed - using fallback")
-    if failure.get("hint_generation"):  # list이므로 존재 여부만 확인
+    # Check for other skips (all cases) - step-based + legacy
+    step_skips = result.get("step_skips", {})
+    skip_data = result.get("skip", {})
+
+    # Step 2 (Evaluation) skips
+    if step_skips.get(PipelineStep.STEP2, {}).get("is_fallback") or \
+       skip_data.get("evaluation", {}).get("is_fallback"):
+        updates["step2_skip_count"] = state.get("step2_skip_count", 0) + 1
+        updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1  # Legacy
+        print(f"     [Warning] Step 2 (PO evaluation) skipped - using fallback")
+
+    # Legacy: hint generation (deprecated)
+    if skip_data.get("hint_generation"):
         updates["hint_fallback_count"] = state.get("hint_fallback_count", 0) + 1
-        print(f"     [Warning] Hint generation failed - using fallback")
-    if failure.get("summarization", {}).get("is_fallback"):
-        updates["summarization_fallback_count"] = state.get("summarization_fallback_count", 0) + 1
-        print(f"     [Warning] Conversation summarization failed - using fallback")
-    if failure.get("scaffolding_artifact", {}).get("is_fallback"):
-        updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1
-        print(f"     [Warning] Scaffolding artifact generation failed - using fallback")
-    if failure.get("reconstruction", {}).get("is_fallback") and sft_case == SFTCase.C.value:
-        updates["final_solution_fallback_count"] = state.get("final_solution_fallback_count", 0) + 1
-        print(f"     [Warning] Final solution generation failed - using fallback")
+        print(f"     [Warning] Hint generation skipped - using fallback (deprecated)")
+
+    # Step 5 summarization skips
+    if step_skips.get("step5_summarization", {}).get("is_fallback") or \
+       skip_data.get("summarization", {}).get("is_fallback"):
+        updates["step5_summarization_skip_count"] = state.get("step5_summarization_skip_count", 0) + 1
+        updates["summarization_fallback_count"] = state.get("summarization_fallback_count", 0) + 1  # Legacy
+        print(f"     [Warning] Step 5 (conversation summarization) skipped - using fallback")
+
+    # Step 3 (Scaffolding) skips
+    if step_skips.get(PipelineStep.STEP3, {}).get("is_fallback") or \
+       skip_data.get("scaffolding_artifact", {}).get("is_fallback"):
+        updates["step3_skip_count"] = state.get("step3_skip_count", 0) + 1
+        updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1  # Legacy
+        print(f"     [Warning] Step 3 (scaffolding artifact) skipped - using fallback")
 
     # Update HOT/LOT scaffolding counts
     hot_count = result.get("hot_count", 0) or 0
@@ -222,7 +264,8 @@ def _process_iterative_scaffolding(
     response = None
     last_correct_iteration = None
     last_correct_response = None
-    failures = {}  # failure metadata collection
+    skips = {}  # Legacy skip metadata collection
+    step_skips = {}  # NEW: Step-based skip metadata collection
     hot_count = 0  # HOT scaffolding count
     lot_count = 0  # LOT scaffolding count
 
@@ -272,15 +315,20 @@ def _process_iterative_scaffolding(
                 print(f"  Warning: overall_assessment is not dict: {type(overall)}")
                 all_satisfied = False
 
-            # Collect evaluation failure metadata
+            # Collect evaluation skip metadata (Step 2)
             if evaluation and evaluation.get("_failure_metadata"):
-                eval_failure = evaluation["_failure_metadata"].get("evaluation")
-                if eval_failure:
-                    failures["evaluation"] = eval_failure
+                # New step-based format
+                step2_skip = evaluation["_failure_metadata"].get(PipelineStep.STEP2)
+                if step2_skip:
+                    step_skips[PipelineStep.STEP2] = step2_skip
+                # Legacy format
+                eval_skip = evaluation["_failure_metadata"].get("evaluation")
+                if eval_skip:
+                    skips["evaluation"] = eval_skip
 
                     # NEW: Skip on evaluation fallback
-                    if eval_failure.get("is_fallback"):
-                        print(f"    [SKIP] Evaluation fallback detected. Skipping question {question['id']}")
+                    if eval_skip.get("is_fallback"):
+                        print(f"    [SKIP] Step 2 (evaluation) fallback detected. Skipping question {question['id']}")
                         return QuestionResult(
                             id=question["id"],
                             instruction=question.get("instruction", ""),
@@ -292,15 +340,16 @@ def _process_iterative_scaffolding(
                             scaffolding_correct=False,
                             sft_case=None,
                             is_skipped=True,
-                            failure_reason="evaluation_fallback",
-                            failure_stage="evaluation",
-                            failure_details=eval_failure,
+                            skip_reason="step2_evaluation_fallback",
+                            skip_stage="step2_evaluation",
+                            skip_details=eval_skip,
                             iterative_scaffolding={
                                 "success": False,
                                 "iterations_needed": iteration,
                                 "conversation_history": conversation_history,
                             },
-                            failure=failures,
+                            step_skips=step_skips if step_skips else None,
+                            skip=skips,
                         )
         else:
             evaluation = None
@@ -354,14 +403,19 @@ def _process_iterative_scaffolding(
             elif skill_type == "LOT":
                 lot_count += 1
 
-        # Collect scaffolding artifact failure metadata
+        # Collect scaffolding artifact skip metadata (Step 3)
         if scaffolding_artifact.get("_failure_metadata"):
-            artifact_failure = scaffolding_artifact["_failure_metadata"].get("scaffolding_artifact")
-            if artifact_failure and artifact_failure.get("is_fallback"):
-                failures["scaffolding_artifact"] = artifact_failure
+            # New step-based format
+            step3_skip = scaffolding_artifact["_failure_metadata"].get(PipelineStep.STEP3)
+            if step3_skip:
+                step_skips[PipelineStep.STEP3] = step3_skip
+            # Legacy format
+            artifact_skip = scaffolding_artifact["_failure_metadata"].get("scaffolding_artifact")
+            if artifact_skip and artifact_skip.get("is_fallback"):
+                skips["scaffolding_artifact"] = artifact_skip
 
                 # NEW: Skip on scaffolding artifact fallback
-                print(f"    [SKIP] Scaffolding artifact fallback detected. Skipping question {question['id']}")
+                print(f"    [SKIP] Step 3 (scaffolding artifact) fallback detected. Skipping question {question['id']}")
                 return QuestionResult(
                     id=question["id"],
                     instruction=question.get("instruction", ""),
@@ -373,9 +427,9 @@ def _process_iterative_scaffolding(
                     scaffolding_correct=False,
                     sft_case=None,
                     is_skipped=True,
-                    failure_reason="scaffolding_artifact_fallback",
-                    failure_stage="scaffolding_artifact",
-                    failure_details=artifact_failure,
+                    skip_reason="step3_scaffolding_fallback",
+                    skip_stage="step3_scaffolding",
+                    skip_details=artifact_skip,
                     iterative_scaffolding={
                         "success": False,
                         "iterations_needed": iteration,
@@ -385,7 +439,8 @@ def _process_iterative_scaffolding(
                     scaffolding_db=scaffolding_db if scaffolding_db else None,
                     hot_count=hot_count if hot_count > 0 else None,
                     lot_count=lot_count if lot_count > 0 else None,
-                    failure=failures,
+                    step_skips=step_skips if step_skips else None,
+                    skip=skips,
                 )
 
         # Accumulate scaffolding DB
@@ -436,14 +491,52 @@ def _process_iterative_scaffolding(
                 final_response=response,
                 iterations_needed=iterations_needed,
             )
+
+            # Check for Case B reconstruction fallback (Step 5)
+            skip_metadata = reconstruction.get("_failure_metadata")
+            if skip_metadata:
+                # New step-based format
+                step5_skip = skip_metadata.get(PipelineStep.STEP5)
+                if step5_skip:
+                    step_skips[PipelineStep.STEP5] = step5_skip
+                step5_sum = skip_metadata.get("step5_summarization")
+                if step5_sum:
+                    step_skips["step5_summarization"] = step5_sum
+                # Legacy format
+                skips.update(skip_metadata)
+
+                # NEW: Skip on Case B reconstruction fallback
+                if step5_skip and step5_skip.get("is_fallback"):
+                    print(f"    [SKIP] Step 5 (Case B reconstruction) fallback detected. Skipping question {question['id']}")
+                    return QuestionResult(
+                        id=question["id"],
+                        instruction=question.get("instruction", ""),
+                        input=question["input"],
+                        output=question["output"],
+                        _problem_text=question["problem_text"],
+                        initial_response=response,
+                        predicted_answer=predicted,
+                        scaffolding_correct=False,
+                        sft_case=None,
+                        is_skipped=True,
+                        skip_reason="step5_reconstruction_fallback",
+                        skip_stage="step5_reconstruction",
+                        skip_details=step5_skip,
+                        iterative_scaffolding={
+                            "success": True,
+                            "iterations_needed": iterations_needed,
+                            "conversation_history": conversation_history,
+                            "iterations": iterations,
+                        },
+                        scaffolding_db=scaffolding_db if scaffolding_db else None,
+                        hot_count=hot_count if hot_count > 0 else None,
+                        lot_count=lot_count if lot_count > 0 else None,
+                        step_skips=step_skips if step_skips else None,
+                        skip=skips,
+                    )
+
             sft_output = reconstruction.get("reconstructed_response", response)
             sft_case = SFTCase.B.value
-
-        # Merge Case B reconstruction failure metadata
-        if reconstruction:
-            failure_metadata = reconstruction.get("_failure_metadata")
-            if failure_metadata:
-                failures.update(failure_metadata)
 
         # Extract DB references from student response (if available)
         db_references = student_model.extract_db_references(response) if iterations_needed > 1 else []
@@ -469,12 +562,13 @@ def _process_iterative_scaffolding(
             db_references=db_references if db_references else None,
             hot_count=hot_count if hot_count > 0 else None,
             lot_count=lot_count if lot_count > 0 else None,
-            failure=failures if failures else None,
+            step_skips=step_skips if step_skips else None,
+            skip=skips if skips else None,
         )
     else:
         # Case C: Failed after max iterations - Teacher generates final solution
-        failure_reason = "po_not_satisfied"
-        print(f"    -> Failed after {max_iterations} iterations. (Reason: {failure_reason}) Generating final solution...")
+        case_c_reason = "po_not_satisfied"
+        print(f"    -> Failed after {max_iterations} iterations. (Reason: {case_c_reason}) Generating final solution...")
 
         # Extract student weaknesses from conversation history
         student_weaknesses = teacher_model.extract_student_weaknesses(conversation_history)
@@ -491,10 +585,48 @@ def _process_iterative_scaffolding(
 
         reconstructed_response = final_solution.get("solution_explanation", "")
 
-        # Collect final solution failure metadata
-        failure_metadata = final_solution.get("_failure_metadata")
-        if failure_metadata:
-            failures.update(failure_metadata)
+        # Collect final solution skip metadata (Step 5, Case C)
+        skip_metadata = final_solution.get("_failure_metadata")
+        if skip_metadata:
+            # New step-based format
+            step5_skip = skip_metadata.get(PipelineStep.STEP5)
+            if step5_skip:
+                step_skips[PipelineStep.STEP5] = step5_skip
+            # Legacy format
+            skips.update(skip_metadata)
+
+            # NEW: Skip on Case C reconstruction fallback
+            if step5_skip and step5_skip.get("is_fallback"):
+                print(f"    [SKIP] Step 5 (Case C final solution) fallback detected. Skipping question {question['id']}")
+                return QuestionResult(
+                    id=question["id"],
+                    instruction=question.get("instruction", ""),
+                    input=question["input"],
+                    output=question["output"],
+                    _problem_text=question["problem_text"],
+                    initial_response=response,
+                    predicted_answer=predicted,
+                    scaffolding_correct=False,
+                    sft_case=None,
+                    is_skipped=True,
+                    skip_reason="step5_reconstruction_fallback",
+                    skip_stage="step5_reconstruction",
+                    skip_details=step5_skip,
+                    iterative_scaffolding={
+                        "success": False,
+                        "iterations_needed": max_iterations,
+                        "conversation_history": conversation_history,
+                        "iterations": iterations,
+                        "case_c_reason": case_c_reason,
+                        "last_correct_iteration": last_correct_iteration,
+                        "last_correct_response": last_correct_response,
+                    },
+                    scaffolding_db=scaffolding_db if scaffolding_db else None,
+                    hot_count=hot_count if hot_count > 0 else None,
+                    lot_count=lot_count if lot_count > 0 else None,
+                    step_skips=step_skips if step_skips else None,
+                    skip=skips,
+                )
 
         return QuestionResult(
             id=question["id"],
@@ -512,7 +644,7 @@ def _process_iterative_scaffolding(
                 "iterations_needed": max_iterations,
                 "conversation_history": conversation_history,
                 "iterations": iterations,
-                "failure_reason": failure_reason,
+                "case_c_reason": case_c_reason,
                 "last_correct_iteration": last_correct_iteration,
                 "last_correct_response": last_correct_response,
             },
@@ -524,7 +656,8 @@ def _process_iterative_scaffolding(
             },
             hot_count=hot_count if hot_count > 0 else None,
             lot_count=lot_count if lot_count > 0 else None,
-            failure=failures if failures else None,
+            step_skips=step_skips if step_skips else None,
+            skip=skips if skips else None,
         )
 
 

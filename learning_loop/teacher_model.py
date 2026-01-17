@@ -2,10 +2,20 @@
 교사 모델 (Teacher Model, Mt)
 
 Iterative Scaffolding Pipeline Support:
-- Scaffolding: evaluate_with_performance_objectives, generate_initial_hint, generate_progressive_hint
-- Case B: summarize_and_reconstruct (5회 실패 후 대화 분석 및 재구성)
+- Step 2 (Evaluation): evaluate_with_performance_objectives
+- Step 3 (Scaffolding): generate_scaffolding_artifact
+- Step 5 (Reconstruction): reconstruct_successful_scaffolding, generate_final_solution
+
+Pipeline Steps:
+- Step 1: Initial Response (Student)
+- Step 2: PO Evaluation (Teacher) - this module
+- Step 3: Scaffolding Artifact (Teacher) - this module
+- Step 4: Re-response (Student)
+- Step 5: Reconstruction (Teacher) - this module
+- Step 6: SFT Generation
 """
 from models.teacher_wrapper import TeacherModelWrapper
+from learning_loop.graph.state import PipelineStep
 from prompts.learning_prompts import (
     INITIAL_HINT_PROMPT,
     PROGRESSIVE_HINT_PROMPT,
@@ -99,8 +109,14 @@ class TeacherModel:
                         "primary_weakness": "Unable to evaluate",
                         "recommended_focus": "Review the problem"
                     }
-                # 성공 시 failure metadata 추가
+                # 성공 시 failure metadata 추가 (step2 = PO Evaluation)
                 result['_failure_metadata'] = {
+                    PipelineStep.STEP2: {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "stage": "performance_objectives_evaluation"
+                    },
+                    # Legacy key for backward compatibility
                     "evaluation": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
@@ -115,7 +131,7 @@ class TeacherModel:
                 else:
                     print(f"  Warning: All {max_retries} PO evaluation attempts failed. Last error: {e}")
 
-        # 모든 재시도 실패 시 fallback 반환
+        # 모든 재시도 실패 시 fallback 반환 (step2 = PO Evaluation)
         return {
             "performance_evaluation": [],
             "overall_assessment": {
@@ -125,6 +141,14 @@ class TeacherModel:
                 "recommended_focus": "Try again"
             },
             "_failure_metadata": {
+                PipelineStep.STEP2: {
+                    "is_fallback": True,
+                    "failure_reason": "json_parse_error",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "stage": "performance_objectives_evaluation"
+                },
+                # Legacy key for backward compatibility
                 "evaluation": {
                     "is_fallback": True,
                     "failure_reason": "json_parse_error",
@@ -297,8 +321,15 @@ class TeacherModel:
                     result['key_learning_points'] = ["Successfully solved through iterative refinement"]
                 if 'improvement_summary' not in result:
                     result['improvement_summary'] = f"Improved through {iterations_needed} iterations of scaffolding"
-                # 성공 시 메타데이터를 Dict of dicts로 저장
+                # 성공 시 메타데이터를 Dict of dicts로 저장 (step5 = Reconstruction)
                 result['_failure_metadata'] = {
+                    PipelineStep.STEP5: {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "case": "B",
+                        "stage": "case_b_reconstruction"
+                    },
+                    # Legacy key for backward compatibility
                     "reconstruction": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
@@ -307,7 +338,8 @@ class TeacherModel:
                 }
                 # Summarization failure가 있으면 추가
                 if summarization_failure:
-                    result['_failure_metadata']['summarization'] = summarization_failure
+                    result['_failure_metadata']['step5_summarization'] = summarization_failure
+                    result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
                 return result
             except Exception as e:
                 last_error = e
@@ -316,13 +348,21 @@ class TeacherModel:
                 else:
                     print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
 
-        # 모든 재시도 실패 시 fallback 반환
+        # 모든 재시도 실패 시 fallback 반환 (step5 = Reconstruction, Case B)
         fallback_result = {
             "reconstructed_response": final_response,
             "key_learning_points": ["Successfully solved through iterative scaffolding"],
             "improvement_summary": f"Student succeeded after {iterations_needed} iterations with teacher guidance",
-            # Fallback 메타데이터를 Dict of dicts로 저장
             "_failure_metadata": {
+                PipelineStep.STEP5: {
+                    "is_fallback": True,
+                    "failure_reason": "case_b_reconstruction_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "case": "B",
+                    "stage": "case_b_reconstruction"
+                },
+                # Legacy key for backward compatibility
                 "reconstruction": {
                     "is_fallback": True,
                     "failure_reason": "case_b_reconstruction_failed",
@@ -334,7 +374,8 @@ class TeacherModel:
         }
         # Summarization failure가 있으면 추가
         if summarization_failure:
-            fallback_result['_failure_metadata']['summarization'] = summarization_failure
+            fallback_result['_failure_metadata']['step5_summarization'] = summarization_failure
+            fallback_result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
         return fallback_result
 
     def summarize_and_reconstruct(
@@ -398,8 +439,15 @@ class TeacherModel:
                     result['reconstructed_response'] = f"Let me solve this correctly.\n\nAnswer: {ground_truth}"
                 if 'learning_points' not in result:
                     result['learning_points'] = ["Review the fundamental concepts"]
-                # 성공 시 메타데이터를 Dict of dicts로 저장
+                # 성공 시 메타데이터를 Dict of dicts로 저장 (step5 = Reconstruction, Case C)
                 result['_failure_metadata'] = {
+                    PipelineStep.STEP5: {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "case": "C",
+                        "stage": "case_c_reconstruction"
+                    },
+                    # Legacy key for backward compatibility
                     "reconstruction": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
@@ -408,7 +456,8 @@ class TeacherModel:
                 }
                 # Summarization failure가 있으면 추가
                 if summarization_failure:
-                    result['_failure_metadata']['summarization'] = summarization_failure
+                    result['_failure_metadata']['step5_summarization'] = summarization_failure
+                    result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
                 return result
             except Exception as e:
                 last_error = e
@@ -417,7 +466,7 @@ class TeacherModel:
                 else:
                     print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
 
-        # 모든 재시도 실패 시 fallback 반환
+        # 모든 재시도 실패 시 fallback 반환 (step5 = Reconstruction, Case C)
         fallback_result = {
             "summary": "Student needed multiple attempts but could not solve the problem.",
             "student_weaknesses": ["Fundamental understanding of the problem"],
@@ -429,8 +478,16 @@ Following the correct approach:
 
 Answer: {ground_truth}""",
             "learning_points": ["Review the problem-solving approach", "Practice similar problems"],
-            # Fallback 메타데이터를 Dict of dicts로 저장
             "_failure_metadata": {
+                PipelineStep.STEP5: {
+                    "is_fallback": True,
+                    "failure_reason": "reconstruction_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "case": "C",
+                    "stage": "case_c_reconstruction"
+                },
+                # Legacy key for backward compatibility
                 "reconstruction": {
                     "is_fallback": True,
                     "failure_reason": "reconstruction_failed",
@@ -442,7 +499,8 @@ Answer: {ground_truth}""",
         }
         # Summarization failure가 있으면 추가
         if summarization_failure:
-            fallback_result['_failure_metadata']['summarization'] = summarization_failure
+            fallback_result['_failure_metadata']['step5_summarization'] = summarization_failure
+            fallback_result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
         return fallback_result
 
     def _format_conversation_history(self, history: List[Dict]) -> str:
@@ -604,8 +662,14 @@ Answer: {ground_truth}""",
                 if 'scaffolding_summary' not in result:
                     result['scaffolding_summary'] = "Review your previous response and try again with more careful reasoning."
 
-                # Add success metadata
+                # Add success metadata (step3 = Scaffolding)
                 result['_failure_metadata'] = {
+                    PipelineStep.STEP3: {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "stage": "scaffolding_artifact_generation"
+                    },
+                    # Legacy key for backward compatibility
                     "scaffolding_artifact": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
@@ -643,6 +707,14 @@ Answer: {ground_truth}""",
             "scaffolding_artifacts": fallback_artifacts,
             "scaffolding_summary": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
             "_failure_metadata": {
+                PipelineStep.STEP3: {
+                    "is_fallback": True,
+                    "failure_reason": "scaffolding_artifact_generation_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "stage": "scaffolding_artifact_generation"
+                },
+                # Legacy key for backward compatibility
                 "scaffolding_artifact": {
                     "is_fallback": True,
                     "failure_reason": "scaffolding_artifact_generation_failed",
@@ -717,8 +789,15 @@ Answer: {ground_truth}""",
                 if 'final_answer' not in result:
                     result['final_answer'] = ground_truth
 
-                # Add success metadata
+                # Add success metadata (step5 = Reconstruction, Case C)
                 result['_failure_metadata'] = {
+                    PipelineStep.STEP5: {
+                        "is_fallback": False,
+                        "attempts_needed": attempt,
+                        "case": "C",
+                        "stage": "case_c_final_solution"
+                    },
+                    # Legacy key for backward compatibility
                     "final_solution": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
@@ -734,7 +813,7 @@ Answer: {ground_truth}""",
                 else:
                     print(f"  Warning: All {max_retries} final solution attempts failed. Last error: {e}")
 
-        # Fallback: create basic solution
+        # Fallback: create basic solution (step5 = Reconstruction, Case C)
         return {
             "solution_explanation": f"""[Understanding the Problem]
 Let me solve this problem step by step.
@@ -752,6 +831,15 @@ Answer: {ground_truth}""",
             ],
             "final_answer": ground_truth,
             "_failure_metadata": {
+                PipelineStep.STEP5: {
+                    "is_fallback": True,
+                    "failure_reason": "final_solution_generation_failed",
+                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "max_retries_exceeded": max_retries,
+                    "case": "C",
+                    "stage": "case_c_final_solution"
+                },
+                # Legacy key for backward compatibility
                 "final_solution": {
                     "is_fallback": True,
                     "failure_reason": "final_solution_generation_failed",

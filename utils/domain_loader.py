@@ -213,7 +213,8 @@ class DomainLoader(BaseDatasetLoader):
     def load_enhanced_training_data(
         self,
         dataset: str,
-        model_suffix: str,
+        teacher_suffix: str,
+        student_suffix: str,
         limit: Optional[int] = None,
         shuffle: bool = False
     ) -> List[QuestionData]:
@@ -221,7 +222,7 @@ class DomainLoader(BaseDatasetLoader):
         Load enhanced training data with Instructional Goal and Task Analysis.
 
         Enhanced data files have the naming pattern:
-            {dataset}_train_ID-MAS_{model_suffix}.json
+            {dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json
 
         These files contain instruction fields that include:
         - Original instruction
@@ -230,8 +231,10 @@ class DomainLoader(BaseDatasetLoader):
 
         Args:
             dataset: Training dataset name (e.g., "gsm8k", "math", "reclor", "arc_c")
-            model_suffix: Model suffix used when generating enhanced data
+            teacher_suffix: Teacher model suffix used when generating enhanced data
                 (e.g., "Qwen2.5-72B-Instruct", "gpt-5-2025-08-07")
+            student_suffix: Student model suffix for training
+                (e.g., "Qwen2.5-7B-Instruct", "Qwen2.5-3B-Instruct")
             limit: Maximum number of questions to load
             shuffle: Whether to shuffle the data (default: False)
 
@@ -246,7 +249,8 @@ class DomainLoader(BaseDatasetLoader):
             loader = DomainLoader("math")
             data = loader.load_enhanced_training_data(
                 dataset="gsm8k",
-                model_suffix="Qwen2.5-72B-Instruct",
+                teacher_suffix="Qwen2.5-72B-Instruct",
+                student_suffix="Qwen2.5-7B-Instruct",
                 limit=100
             )
         """
@@ -260,7 +264,7 @@ class DomainLoader(BaseDatasetLoader):
             )
 
         # Enhanced data filename pattern
-        filename = f"{dataset}_train_ID-MAS_{model_suffix}.json"
+        filename = f"{dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
         file_path = self.data_dir / "train" / "data" / filename
 
         if not file_path.exists():
@@ -292,27 +296,31 @@ class DomainLoader(BaseDatasetLoader):
             dataset: Optional filter by dataset name
 
         Returns:
-            List of dicts with 'dataset', 'model_suffix', 'path' keys
+            List of dicts with 'dataset', 'teacher_suffix', 'student_suffix', 'path' keys
         """
         data_dir = self.data_dir / "train" / "data"
         if not data_dir.exists():
             return []
 
         results = []
-        pattern = "*_train_ID-MAS_*.json"
+        pattern = "*_train_ID-MAS_*_*.json"
 
         for file_path in data_dir.glob(pattern):
-            # Parse filename: {dataset}_train_ID-MAS_{model_suffix}.json
+            # Parse filename: {dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json
             name = file_path.stem  # Remove .json
             parts = name.split("_train_ID-MAS_")
             if len(parts) == 2:
-                ds_name, model_suffix = parts
-                if dataset is None or ds_name.lower() == dataset.lower():
-                    results.append({
-                        "dataset": ds_name,
-                        "model_suffix": model_suffix,
-                        "path": str(file_path)
-                    })
+                ds_name = parts[0]
+                suffix_parts = parts[1].split("_", 1)  # Split teacher_student
+                if len(suffix_parts) == 2:
+                    teacher_suffix, student_suffix = suffix_parts
+                    if dataset is None or ds_name.lower() == dataset.lower():
+                        results.append({
+                            "dataset": ds_name,
+                            "teacher_suffix": teacher_suffix,
+                            "student_suffix": student_suffix,
+                            "path": str(file_path)
+                        })
 
         return results
 

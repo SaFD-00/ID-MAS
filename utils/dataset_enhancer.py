@@ -34,18 +34,20 @@ Follow the structured approach below to ensure a complete and well-reasoned solu
 class DataEnhancer:
     """데이터 Enhancement를 위한 클래스"""
 
-    def __init__(self, teacher_config: dict = None, model_suffix: str = None):
+    def __init__(self, teacher_config: dict = None, model_suffix: str = None, student_suffix: str = None):
         """
         DataEnhancer 초기화
 
         Args:
             teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
-            model_suffix: 출력 파일명에 사용할 모델 suffix (None이면 자동 생성)
+            model_suffix: 출력 파일명에 사용할 teacher 모델 suffix (None이면 자동 생성)
+            student_suffix: 출력 파일명에 사용할 student 모델 suffix
         """
         self.teacher_config = teacher_config
         self.goal_generator = InstructionalGoalGenerator(teacher_config)
         self.analysis_generator = InstructionalAnalysis(teacher_config)
         self.model_suffix = model_suffix
+        self.student_suffix = student_suffix
 
     def enhance_dataset(
         self,
@@ -106,11 +108,6 @@ class DataEnhancer:
         self._save_json(enhanced_data, output_path)
         print(f"  Saved: {output_path}")
 
-        # 6. 메타데이터 저장 (학습목표/과제분석 별도 보관)
-        self._save_metadata(
-            domain, dataset, instructional_goal, task_analysis, goal_result
-        )
-
         return output_path
 
     def _enhance_instructions(
@@ -155,47 +152,17 @@ class DataEnhancer:
     def _get_output_path(self, domain: str, dataset: str) -> Path:
         """출력 파일 경로"""
         if self.model_suffix:
-            suffix = self.model_suffix
+            teacher_suffix = self.model_suffix
         elif self.teacher_config:
             model_name = self.teacher_config.get("model", "unknown")
-            suffix = get_model_short_name(model_name)
+            teacher_suffix = get_model_short_name(model_name)
         else:
-            suffix = "default"
+            teacher_suffix = "default"
 
-        return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train_ID-MAS_{suffix}.json"
-
-    def _save_metadata(
-        self,
-        domain: str,
-        dataset: str,
-        instructional_goal: str,
-        task_analysis: str,
-        goal_result: Dict
-    ):
-        """메타데이터 별도 저장 (디버깅/재사용용)"""
-        if self.model_suffix:
-            suffix = self.model_suffix
-        elif self.teacher_config:
-            model_name = self.teacher_config.get("model", "unknown")
-            suffix = get_model_short_name(model_name)
+        if self.student_suffix:
+            return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train_ID-MAS_{teacher_suffix}_{self.student_suffix}.json"
         else:
-            suffix = "default"
-
-        design_dir = PROJECT_ROOT / "data" / domain / "train" / suffix / "instructional-design"
-        design_dir.mkdir(parents=True, exist_ok=True)
-        metadata_path = design_dir / f"{dataset}_train_id-mas_{suffix}_metadata.json"
-
-        metadata = {
-            "domain": domain,
-            "dataset": dataset,
-            "instructional_goal": instructional_goal,
-            "task_analysis": task_analysis,
-            "goal_result": goal_result,
-            "model_suffix": suffix
-        }
-
-        self._save_json(metadata, metadata_path)
-        print(f"  Metadata saved: {metadata_path.name}")
+            return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train_ID-MAS_{teacher_suffix}.json"
 
     def _load_json(self, path: Path) -> List[Dict]:
         """JSON 파일 로드"""

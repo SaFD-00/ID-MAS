@@ -349,8 +349,9 @@ class IDMASPipeline:
             enhanced_data.append(new_item)
 
         # 4. 저장
-        model_suffix = get_model_short_name(self.teacher_model_name)
-        output_path = self.raw_data_dir / f"{self.train_dataset}_train_ID-MAS_{model_suffix}.json"
+        teacher_suffix = get_model_short_name(self.teacher_model_name)
+        student_suffix = get_model_short_name(self.student_model_name)
+        output_path = self.raw_data_dir / f"{self.train_dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
 
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(enhanced_data, f, ensure_ascii=False, indent=2)
@@ -358,22 +359,6 @@ class IDMASPipeline:
         print(f"\n[Step 5] Saved enhanced data")
         print(f"  Path: {output_path}")
         print(f"  Records: {len(enhanced_data)}")
-
-        # 5. 메타데이터 저장
-        design_dir = DATA_DIR / self.domain / "train" / model_suffix / "instructional-design"
-        design_dir.mkdir(parents=True, exist_ok=True)
-        metadata_path = design_dir / f"{self.train_dataset}_train_id-mas_{model_suffix}_metadata.json"
-        metadata = {
-            "domain": self.domain,
-            "dataset": self.train_dataset,
-            "instructional_goal": instructional_goal,
-            "task_analysis": task_analysis,
-            "teacher_model": self.teacher_model_name,
-            "model_suffix": model_suffix,
-            "timestamp": datetime.now().isoformat()
-        }
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=2)
 
         print(f"\n Enhanced data generation completed")
 
@@ -383,8 +368,7 @@ class IDMASPipeline:
         self,
         design_result: Dict,
         num_questions: Optional[int] = None,
-        resume: bool = False,
-        model_suffix: Optional[str] = None
+        resume: bool = False
     ) -> Dict:
         """
         LangGraph 기반 Iterative Scaffolding Pipeline 실행
@@ -393,20 +377,21 @@ class IDMASPipeline:
             design_result: 설계 결과
             num_questions: 학습할 질문 개수 (None이면 전체)
             resume: 기존 로그에서 이어서 학습할지 여부
-            model_suffix: Enhanced data 파일의 모델 suffix (None이면 teacher_model_name에서 계산)
 
         Returns:
             학습 결과 딕셔너리
         """
         # Enhanced data 로드 (항상 enhanced data 사용)
-        if model_suffix is None:
-            model_suffix = get_model_short_name(self.teacher_model_name)
+        teacher_suffix = get_model_short_name(self.teacher_model_name)
+        student_suffix = get_model_short_name(self.student_model_name)
 
         print(f"\n[Enhanced Data] Loading enhanced training data...")
-        print(f"  Model suffix: {model_suffix}")
+        print(f"  Teacher suffix: {teacher_suffix}")
+        print(f"  Student suffix: {student_suffix}")
         questions = self.loader.load_enhanced_training_data(
             dataset=self.train_dataset,
-            model_suffix=model_suffix,
+            teacher_suffix=teacher_suffix,
+            student_suffix=student_suffix,
             limit=num_questions,
             shuffle=False
         )
@@ -777,8 +762,9 @@ def run_train_mode(args):
         )
 
     # 2. Enhanced Data 확인 및 생성 (항상 enhanced data 사용)
-    model_suffix = get_model_short_name(pipeline.teacher_model_name)
-    enhanced_path = pipeline.raw_data_dir / f"{pipeline.train_dataset}_train_ID-MAS_{model_suffix}.json"
+    teacher_suffix = get_model_short_name(pipeline.teacher_model_name)
+    student_suffix = get_model_short_name(pipeline.student_model_name)
+    enhanced_path = pipeline.raw_data_dir / f"{pipeline.train_dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
 
     if enhanced_path.exists() and args.resume:
         print(f"\n[Enhanced Data] Using existing enhanced data: {enhanced_path.name}")
@@ -789,8 +775,7 @@ def run_train_mode(args):
     # 3. Iterative Scaffolding 학습 단계
     learning_result = pipeline.run_learning_phase(
         design_result=design_result,
-        resume=args.resume,
-        model_suffix=model_suffix
+        resume=args.resume
     )
 
     print("\n" + "=" * 60)

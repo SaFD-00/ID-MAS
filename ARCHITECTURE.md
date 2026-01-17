@@ -130,6 +130,17 @@ BaseModelWrapper (추상 클래스)
 
 ## Iterative Scaffolding Pipeline
 
+### Pipeline Step 정의
+
+| Step | 명칭 | 모듈 | 역할 |
+|------|------|------|------|
+| **Step 1** | Initial Response | `StudentModel` | Task Analysis 기반 초기 응답 생성 |
+| **Step 2** | PO Evaluation | `TeacherModel` | Performance Objectives 기반 응답 평가 |
+| **Step 3** | Scaffolding Artifact | `TeacherModel` | HOT/LOT Scaffolding 생성 |
+| **Step 4** | Student Re-response | `StudentModel` | Scaffolding 참조 개선 응답 |
+| **Step 5** | Reconstruction | `TeacherModel` | Case B/C 최종 응답 재구성 |
+| **Step 6** | SFT Generation | `nodes.py` | SFT 학습 데이터 생성 |
+
 ### 전체 흐름
 
 ```
@@ -140,37 +151,56 @@ BaseModelWrapper (추상 클래스)
 └─────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              Iterative Scaffolding (최대 5회)                │
+│              Iterative Scaffolding Pipeline                  │
 ├─────────────────────────────────────────────────────────────┤
-│  Question → Initial Response → PO Evaluation                 │
-│                                    ↓                         │
-│                            ┌──────┴──────┐                   │
-│                            │ PO 충족?    │                   │
-│                            └──────┬──────┘                   │
-│                     Yes ──────────┼────────── No             │
-│                      ↓            │            ↓             │
-│                   Case A/B        │     Scaffolding          │
-│                      ↓            │     Artifact 생성        │
-│                   Success         │            ↓             │
-│                                   │     Student 재응답       │
-│                                   │            ↓             │
-│                                   └──── (반복, 최대 5회)     │
-│                                                ↓             │
-│                                           Case C             │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                      SFT Data Generation                     │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Iteration 1                                          │   │
+│  │   [Step 1] Student Initial Response                  │   │
+│  │       ↓                                              │   │
+│  │   [Step 2] Teacher PO Evaluation ──→ 성공 ──→ Case A │   │
+│  │       ↓ (실패)                                       │   │
+│  │   [Step 3] Scaffolding Artifact                      │   │
+│  │       ↓                                              │   │
+│  │   [Step 4] Student Re-response                       │   │
+│  └───────────────────────┬──────────────────────────────┘   │
+│                          ↓                                   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Iteration 2-5 (반복)                                 │   │
+│  │   [Step 2] Teacher PO Evaluation ──→ 성공 ──→ Case B │   │
+│  │       ↓ (실패)                                       │   │
+│  │   [Step 3] Scaffolding Artifact                      │   │
+│  │       ↓                                              │   │
+│  │   [Step 4] Student Re-response                       │   │
+│  └───────────────────────┬──────────────────────────────┘   │
+│                          ↓ (5회 반복 후 실패)               │
+│                       Case C                                 │
+│                          ↓                                   │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Finalization                                         │   │
+│  │   [Step 5] Reconstruction (Case B/C만)               │   │
+│  │       ↓                                              │   │
+│  │   [Step 6] SFT Data Generation                       │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Step별 Fallback 처리
+
+| Step | 실패 원인 | Fallback 동작 |
+|------|-----------|---------------|
+| **Step 2** | API 에러, 파싱 실패 | 최대 3회 재시도 → 보수적 평가 (all_satisfied=False) |
+| **Step 3** | API 에러, 생성 실패 | 최대 3회 재시도 → 기본 Scaffolding 생성 |
+| **Step 5** | 재구성 실패 | 최대 3회 재시도 → ground_truth 기반 응답 생성 |
+
 ### Case 분류
 
-| Case | 조건 | SFT 응답 |
-|------|------|----------|
-| **A** | 1회차 PO 충족 | 학생 응답 그대로 사용 |
-| **B** | 2~5회차 PO 충족 | Teacher가 대화 기반 재구성 |
-| **C** | 5회 후 PO 미충족 | Teacher가 정답 기반 재구성 |
+| Case | 조건 | SFT 응답 | Step 5 필요 |
+|------|------|----------|-------------|
+| **A** | 1회차 PO 충족 | 학생 응답 그대로 사용 | No |
+| **B** | 2~5회차 PO 충족 | Teacher가 대화 기반 재구성 | Yes |
+| **C** | 5회 후 PO 미충족 | Teacher가 정답 기반 재구성 | Yes |
 
 **성공 조건:** 모든 Performance Objectives가 충족되면 (`all_satisfied=True`) 성공으로 처리됩니다.
 
@@ -180,6 +210,27 @@ BaseModelWrapper (추상 클래스)
 |------|------|------|
 | **HOT** (High-Order Thinking) | 분석/평가/창조 | strategy_suggestion, partial_example, socratic_question |
 | **LOT** (Low-Order Thinking) | 기억/이해/적용 | missed_concept, brief_explanation, key_attention_points |
+
+### Skip Metadata 구조
+
+Step별 skip 정보는 `step_skips` 딕셔너리에 저장됩니다:
+
+```python
+step_skips = {
+    "step2": {  # PO Evaluation skip
+        "is_fallback": True,
+        "attempts_needed": 3,
+        "stage": "performance_objectives_evaluation",
+        "error_type": "json_parse_error"
+    },
+    "step3": {  # Scaffolding 생성 skip
+        "is_fallback": True,
+        "attempts_needed": 2,
+        "stage": "scaffolding_artifact",
+        "error_type": "api_error"
+    }
+}
+```
 
 ## 데이터 흐름
 

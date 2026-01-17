@@ -217,7 +217,7 @@ class IDMASGraphRunner:
             Final state with results
         """
         print("\n" + "=" * 60)
-        print("ID-MAS ITERATIVE SCAFFOLDING PIPELINE (LangGraph)")
+        print("ID-MAS ITERATIVE SCAFFOLDING PIPELINE")
         print("=" * 60)
         print(f"Domain: {domain}")
         print(f"Dataset: {train_dataset}")
@@ -330,23 +330,24 @@ class IDMASGraphRunner:
         print(f"  Success Total (A+B): {case_stats.get('success_total', 0)}")
         print(f"  Success Rate: {case_stats.get('success_rate', 0) * 100:.1f}%")
 
-        failures = stats.get('failures', {})
-        print(f"\n[Failures]")
+        skip_stats = stats.get('skip', {})
+        print(f"\n[Skip]")
 
-        reconstruction = failures.get('reconstruction', {})
+        step5 = skip_stats.get('step5_reconstruction', {})
         print(f"  Reconstruction:")
-        print(f"    Case B: {reconstruction.get('case_b', 0)}")
-        print(f"    Case C: {reconstruction.get('case_c', 0)}")
-        print(f"    Subtotal: {reconstruction.get('total', 0)}")
+        print(f"    Case B: {step5.get('case_b', 0)}")
+        print(f"    Case C: {step5.get('case_c', 0)}")
+        print(f"    Subtotal: {step5.get('case_b', 0) + step5.get('case_c', 0)}")
 
         print(f"  Other:")
-        print(f"    Evaluation: {failures.get('evaluation', 0)}")
-        print(f"    Hint Generation: {failures.get('hint', 0)}")
-        print(f"    Summarization: {failures.get('summarization', 0)}")
+        print(f"    Evaluation: {skip_stats.get('step2_evaluation', {}).get('count', 0)}")
+        print(f"    Scaffolding: {skip_stats.get('step3_scaffolding', {}).get('count', 0)}")
+        print(f"    Summarization: {step5.get('summarization', 0)}")
 
+        analysis = skip_stats.get('analysis', {})
         print(f"  ────────────────────────────")
-        print(f"  Total Failures: {failures.get('total_failures', 0)}")
-        print(f"  Failure Rate: {failures.get('failure_rate', 0) * 100:.1f}%")
+        print(f"  Total Skipped: {analysis.get('count', 0)}")
+        print(f"  Skip Rate: {analysis.get('rate', 0) * 100:.1f}%")
 
         print(f"\nSFT Data Generated: {len(final_state.get('sft_data', []))}")
 
