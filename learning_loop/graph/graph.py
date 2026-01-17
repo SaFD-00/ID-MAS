@@ -1,12 +1,22 @@
-"""
-LangGraph StateGraph for ID-MAS Iterative Scaffolding Pipeline.
+"""LangGraph StateGraph 구축 모듈.
 
-This module builds the complete LangGraph workflow:
-- StateGraph construction with conditional routing
-- IDMASGraphRunner for executing the pipeline
-- Checkpoint support with SqliteSaver or MemorySaver
+ID-MAS Iterative Scaffolding Pipeline의 완전한 LangGraph 워크플로우를 구축합니다.
 
-Based on the research proposal's Iterative Scaffolding architecture.
+주요 기능:
+    - 조건부 라우팅을 포함한 StateGraph 구성
+    - 파이프라인 실행을 위한 IDMASGraphRunner
+    - MemorySaver를 통한 체크포인트 지원
+
+주요 클래스:
+    IDMASGraphRunner: 파이프라인 실행기
+
+주요 함수:
+    create_idmas_graph: StateGraph 생성
+
+사용 예시:
+    >>> from learning_loop.graph.graph import IDMASGraphRunner
+    >>> runner = IDMASGraphRunner(student, teacher, extractor)
+    >>> result = runner.run(domain="math", train_dataset="gsm8k", ...)
 """
 from __future__ import annotations
 
@@ -40,25 +50,24 @@ def create_idmas_graph(
     teacher_model,
     answer_extractor,
 ) -> StateGraph:
-    """
-    Create the ID-MAS Iterative Scaffolding Pipeline as a LangGraph StateGraph.
+    """ID-MAS Iterative Scaffolding Pipeline을 LangGraph StateGraph로 생성합니다.
 
-    The graph implements the following flow:
-    1. scaffolding -> process current question with iterative scaffolding
-       - If correct (answer + PO satisfied): Case A
-       - If failed after max iterations: Case B (reconstructed)
-    2. advance -> check if more questions
-       - If more questions: go back to scaffolding
-       - If no more questions: go to finalize
-    3. finalize -> generate SFT data and complete
+    그래프 흐름:
+        1. scaffolding → 현재 문제를 반복적 스캐폴딩으로 처리
+           - 정답 + PO 충족: Case A
+           - 최대 반복 후 실패: Case B/C (재구성)
+        2. advance → 더 많은 문제가 있는지 확인
+           - 더 있으면: scaffolding으로 돌아감
+           - 없으면: finalize로 이동
+        3. finalize → SFT 데이터 생성 및 완료
 
     Args:
-        student_model: StudentModel instance
-        teacher_model: TeacherModel instance
-        answer_extractor: AnswerExtractor instance
+        student_model: StudentModel 인스턴스
+        teacher_model: TeacherModel 인스턴스
+        answer_extractor: AnswerExtractor 인스턴스
 
     Returns:
-        Compiled StateGraph
+        컴파일된 StateGraph
     """
 
     # ==================== Node Functions (wrapped) ====================
@@ -121,26 +130,32 @@ def create_idmas_graph(
 
 
 class IDMASGraphRunner:
-    """
-    Runner class for the ID-MAS Iterative Scaffolding Pipeline.
+    """ID-MAS Iterative Scaffolding Pipeline 실행기 클래스.
 
-    Handles:
-    - Graph compilation with checkpointing
-    - Pipeline execution
-    - Result saving
+    주요 기능:
+        - 체크포인팅을 포함한 그래프 컴파일
+        - 파이프라인 실행
+        - 결과 저장
+
+    Attributes:
+        student_model: StudentModel 인스턴스
+        teacher_model: TeacherModel 인스턴스
+        answer_extractor: AnswerExtractor 인스턴스
+        workflow: StateGraph 워크플로우
+        graph: 컴파일된 그래프
+        checkpointer: 체크포인터 (MemorySaver)
 
     Example:
-        runner = IDMASGraphRunner(
-            student_model=student,
-            teacher_model=teacher,
-            answer_extractor=extractor,
-        )
-        result = runner.run(
-            domain="math",
-            train_dataset="gsm8k",
-            questions=questions,
-            design_result=design_result,
-        )
+        >>> runner = IDMASGraphRunner(
+        ...     student_model=student,
+        ...     teacher_model=teacher,
+        ...     answer_extractor=extractor,
+        ... )
+        >>> result = runner.run(
+        ...     domain="math",
+        ...     train_dataset="gsm8k",
+        ...     questions=questions,
+        ... )
     """
 
     def __init__(
@@ -150,14 +165,13 @@ class IDMASGraphRunner:
         answer_extractor,
         checkpoint_dir: Optional[Path] = None,
     ):
-        """
-        Initialize the runner.
+        """IDMASGraphRunner를 초기화합니다.
 
         Args:
-            student_model: StudentModel instance
-            teacher_model: TeacherModel instance
-            answer_extractor: AnswerExtractor instance
-            checkpoint_dir: Directory for checkpoints (uses memory if None)
+            student_model: StudentModel 인스턴스
+            teacher_model: TeacherModel 인스턴스
+            answer_extractor: AnswerExtractor 인스턴스
+            checkpoint_dir: 체크포인트 디렉토리. None이면 메모리 사용.
         """
         self.student_model = student_model
         self.teacher_model = teacher_model
@@ -194,27 +208,26 @@ class IDMASGraphRunner:
         thread_id: str = "default",
         resume: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Run the complete pipeline.
+        """전체 파이프라인을 실행합니다.
 
         Args:
-            domain: Domain name (e.g., "math")
-            train_dataset: Training dataset name (e.g., "gsm8k")
-            instructional_goal: Learning objective
-            student_model_name: Student model name
-            teacher_model_name: Teacher model name
-            model_short: Short model name for file naming
-            questions: List of questions to process
-            design_result: Pre-loaded design result
-            output_dir: Output directory for saving results
-            checkpoint_interval: Save checkpoint every N questions
-            use_iterative_scaffolding: Use iterative scaffolding
-            max_iterations: Max iterations for iterative scaffolding
-            thread_id: Thread ID for checkpointing
-            resume: Whether to resume from existing logs file
+            domain: 도메인 이름 (예: "math")
+            train_dataset: 훈련 데이터셋 이름 (예: "gsm8k")
+            instructional_goal: 학습 목표
+            student_model_name: 학생 모델 이름
+            teacher_model_name: 교사 모델 이름
+            model_short: 파일 이름용 짧은 모델명
+            questions: 처리할 문제 리스트
+            design_result: 사전 로드된 교수설계 결과. 기본값: None
+            output_dir: 결과 저장 디렉토리. 기본값: None
+            checkpoint_interval: 체크포인트 저장 간격. 기본값: 10
+            use_iterative_scaffolding: Iterative Scaffolding 사용 여부. 기본값: True
+            max_iterations: 최대 반복 횟수. 기본값: 5
+            thread_id: 체크포인팅용 스레드 ID. 기본값: "default"
+            resume: 기존 로그에서 재개 여부. 기본값: True
 
         Returns:
-            Final state with results
+            결과가 포함된 최종 상태 딕셔너리
         """
         print("\n" + "=" * 60)
         print("ID-MAS ITERATIVE SCAFFOLDING PIPELINE")
@@ -375,15 +388,17 @@ class IDMASGraphRunner:
         thread_id: str,
         output_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
-        """
-        Resume pipeline from checkpoint.
+        """체크포인트에서 파이프라인을 재개합니다.
 
         Args:
-            thread_id: Thread ID to resume from
-            output_dir: Output directory for saving results
+            thread_id: 재개할 스레드 ID
+            output_dir: 결과 저장 디렉토리. 기본값: None
 
         Returns:
-            Final state with results
+            결과가 포함된 최종 상태 딕셔너리
+
+        Raises:
+            ValueError: 해당 thread_id에 체크포인트가 없는 경우
         """
         config = {"configurable": {"thread_id": thread_id}}
 
@@ -434,5 +449,12 @@ class IDMASGraphRunner:
         return final_state
 
     def get_statistics(self, state: IDMASState) -> Dict[str, Any]:
-        """Get pipeline statistics from state."""
+        """상태에서 파이프라인 통계를 추출합니다.
+
+        Args:
+            state: 파이프라인 상태
+
+        Returns:
+            통계 딕셔너리
+        """
         return get_statistics(state)

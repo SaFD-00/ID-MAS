@@ -1,12 +1,23 @@
-"""
-LangGraph State Schema for ID-MAS Iterative Scaffolding Pipeline.
+"""LangGraph 상태 스키마 모듈.
 
-This module defines the state structure used throughout the pipeline:
-- IDMASState: Main state schema for the graph
-- QuestionResult: Result for each processed question
-- DesignResult: Instructional design output
+ID-MAS Iterative Scaffolding Pipeline의 상태 구조를 정의합니다.
 
-Based on the research proposal's Iterative Scaffolding architecture.
+주요 클래스:
+    IDMASState: 그래프 메인 상태 스키마
+    QuestionResult: 개별 문제 처리 결과
+    DesignResult: 교수설계 출력 결과
+    SFTCase: SFT 데이터 케이스 분류 (A/B/C)
+    PipelineStep: 파이프라인 단계 상수
+
+주요 함수:
+    create_initial_state: 초기 상태 생성
+    get_statistics: 파이프라인 통계 조회
+    load_checkpoint_from_logs: 로그에서 체크포인트 로드
+    restore_state_from_checkpoint: 체크포인트에서 상태 복원
+
+사용 예시:
+    >>> from learning_loop.graph.state import IDMASState, create_initial_state
+    >>> state = create_initial_state(domain="math", train_dataset="gsm8k", ...)
 """
 from __future__ import annotations
 
@@ -19,23 +30,34 @@ import operator
 
 
 class SFTCase(str, Enum):
-    """SFT data case classification based on scaffolding result."""
-    A = "A"  # PO satisfied on first attempt (한번에 성공)
-    B = "B"  # PO satisfied via iterative scaffolding (2-5회차 성공)
-    C = "C"  # PO not satisfied after max iterations (재구성 필요)
+    """스캐폴딩 결과에 따른 SFT 데이터 케이스 분류.
+
+    Attributes:
+        A: 1회차 성공 (PO 첫 시도에 충족)
+        B: 2~5회차 성공 (Iterative Scaffolding 후 충족)
+        C: 최대 시도 후 실패 (재구성 필요)
+    """
+    A = "A"
+    B = "B"
+    C = "C"
 
 
 class PipelineStep:
-    """
-    ID-MAS Iterative Scaffolding Pipeline Step 상수.
+    """ID-MAS Iterative Scaffolding Pipeline 단계 상수.
 
-    Pipeline Flow:
-    - Step 1: Initial Response (초기 응답 생성) - 1회만 실행
-    - Step 2: PO Evaluation (Performance Objectives 평가) - 반복
-    - Step 3: Scaffolding (스캐폴딩 아티팩트 생성) - PO 미충족 시
-    - Step 4: Re-response (학생 재응답) - iteration 2~5
-    - Step 5: Reconstruction (재구성) - Case A/B/C
-    - Step 6: SFT Generation (SFT 데이터 생성)
+    파이프라인 흐름:
+        Step 1: Initial Response (초기 응답 생성) - 1회만 실행
+        Step 2: PO Evaluation (Performance Objectives 평가) - 반복
+        Step 3: Scaffolding (스캐폴딩 아티팩트 생성) - PO 미충족 시
+        Step 4: Re-response (학생 재응답) - iteration 2~5
+        Step 5: Reconstruction (재구성) - Case A/B/C
+        Step 6: SFT Generation (SFT 데이터 생성)
+
+    Attributes:
+        STEP1~STEP6: 단계 식별자
+        STEP1_NAME~STEP6_NAME: 로깅용 단계 이름
+        STEP1_KEY~STEP6_KEY: 결과 딕셔너리용 전체 키
+        ALL_STEPS: 모든 단계 리스트
     """
     # Step identifiers
     STEP1 = "step1"  # Initial Response
@@ -69,12 +91,26 @@ class PipelineStep:
 
     @classmethod
     def get_skip_key(cls, step: str) -> str:
-        """Get skip key for a step (e.g., 'step2' -> 'step2_skip')."""
+        """단계의 skip 키를 반환합니다.
+
+        Args:
+            step: 단계 식별자 (예: "step2")
+
+        Returns:
+            skip 키 (예: "step2_skip")
+        """
         return f"{step}{cls.SKIP_SUFFIX}"
 
     @classmethod
     def get_step_name(cls, step: str) -> str:
-        """Get human-readable name for a step."""
+        """단계의 읽기 쉬운 이름을 반환합니다.
+
+        Args:
+            step: 단계 식별자
+
+        Returns:
+            단계 이름 (예: "evaluation")
+        """
         names = {
             cls.STEP1: cls.STEP1_NAME,
             cls.STEP2: cls.STEP2_NAME,
@@ -87,17 +123,29 @@ class PipelineStep:
 
 
 class QuestionResultRequired(TypedDict):
-    """Required fields for QuestionResult."""
-    id: str                # question_id → id (필수)
-    instruction: str       # 순서 변경: 두 번째 (필수)
-    input: str             # question → input (필수)
-    output: str            # ground_truth → output (필수)
-    _problem_text: str     # 내부 처리용 (로그 저장 시 제거, 필수)
+    """QuestionResult 필수 필드 정의.
+
+    Attributes:
+        id: 문제 고유 ID
+        instruction: 지시문
+        input: 문제 텍스트
+        output: 정답 (ground truth)
+        _problem_text: 내부 처리용 문제 텍스트 (로그 저장 시 제거)
+    """
+    id: str
+    instruction: str
+    input: str
+    output: str
+    _problem_text: str
 
 
 class QuestionResult(QuestionResultRequired, total=False):
-    """Result for a single question processed through the pipeline."""
-    # Scaffolding results
+    """파이프라인을 통해 처리된 단일 문제의 결과.
+
+    QuestionResultRequired의 필수 필드를 상속받고
+    선택적 필드들을 추가로 정의합니다.
+    """
+    # 스캐폴딩 결과
     initial_response: str
     predicted_answer: Optional[str]
     scaffolding_correct: bool  # renamed from phase1_correct
@@ -110,29 +158,36 @@ class QuestionResult(QuestionResultRequired, total=False):
     iterative_scaffolding: Optional[Dict[str, Any]]
     reconstruction: Optional[Dict[str, Any]]
 
-    # Step-based skip tracking (NEW)
-    # Each step's skip is tracked in step_skips dict
-    # Format: {"step2": {...}, "step3": {...}, "step5": {...}}
-    step_skips: Optional[Dict[str, Dict[str, Any]]]
-
-    # Legacy skip field (for backward compatibility)
-    skip: Optional[Dict[str, Dict[str, Any]]]  # 기존 형식 유지
-
     # NEW: Scaffolding Artifact fields
     scaffolding_db: Optional[List[Dict[str, Any]]]  # 누적된 Scaffolding Artifacts
     db_references: Optional[List[str]]  # Student가 참조한 DB 정보 목록
     hot_count: Optional[int]  # HOT (High-Order Thinking) scaffolding count
     lot_count: Optional[int]  # LOT (Low-Order Thinking) scaffolding count
 
-    # NEW: Skip tracking (fallback 발생 시)
+    # Skip tracking (fallback 발생 시)
     is_skipped: bool  # fallback 발생으로 skip된 경우 True
     skip_reason: Optional[str]  # skip 사유 (e.g., "evaluation_fallback")
     skip_stage: Optional[str]  # skip 발생 단계
-    skip_details: Optional[Dict[str, Any]]  # 상세 skip 메타데이터
+    # skip_details: 통합 skip 메타데이터
+    # 키 형식: "step{N}_{stage}" (예: "step2_performance_objectives_evaluation")
+    # 값 형식: {"is_fallback": bool, "attempts_needed": int, "last_error": [...], ...}
+    skip_details: Optional[Dict[str, Dict[str, Any]]]
 
 
 class DesignResult(TypedDict, total=False):
-    """Instructional design output."""
+    """교수설계 출력 결과.
+
+    Attributes:
+        domain: 도메인 (math, logical, commonsense)
+        train_dataset: 훈련 데이터셋 이름
+        identifier: 고유 식별자
+        instructional_goal: 학습 목표
+        learning_objective: 학습 목표 상세
+        instructional_analysis: 교수 분석 결과
+        performance_objectives: 수행목표 리스트
+        rubrics: 루브릭 정보
+        timestamp: 생성 시간
+    """
     domain: str
     train_dataset: str
     identifier: str
@@ -145,22 +200,42 @@ class DesignResult(TypedDict, total=False):
 
 
 def add_to_list(existing: List, new: Any) -> List:
-    """Reducer function to append items to a list."""
+    """리스트에 항목을 추가하는 reducer 함수.
+
+    LangGraph의 Annotated 타입과 함께 사용되어
+    상태 업데이트 시 리스트를 누적합니다.
+
+    Args:
+        existing: 기존 리스트
+        new: 추가할 항목 (단일 항목 또는 리스트)
+
+    Returns:
+        병합된 리스트
+    """
     if isinstance(new, list):
         return existing + new
     return existing + [new]
 
 
 class IDMASState(TypedDict, total=False):
-    """
-    Main state schema for the ID-MAS LangGraph pipeline.
+    """ID-MAS LangGraph 파이프라인 메인 상태 스키마.
 
-    This state is passed through all nodes and maintains the full
-    context of the learning pipeline execution.
+    모든 노드를 통과하며 학습 파이프라인 실행의 전체 컨텍스트를 유지합니다.
 
-    The state follows the Iterative Scaffolding architecture:
-    1. Instructional Design Phase (optional, can load existing)
-    2. Scaffolding - Iterative response generation with teacher guidance
+    상태 구조는 Iterative Scaffolding 아키텍처를 따릅니다:
+        1. Instructional Design Phase (선택적, 기존 결과 로드 가능)
+        2. Scaffolding - 교사 가이드를 통한 반복적 응답 생성
+
+    섹션별 필드:
+        - Configuration: 설정 정보
+        - Design Phase: 교수설계 결과
+        - Questions: 처리할 문제 목록
+        - Scaffolding Results: 스캐폴딩 결과 및 통계
+        - Skip Statistics: 단계별 skip 통계
+        - SFT Data: 생성된 SFT 데이터
+        - Pipeline Control: 파이프라인 제어
+        - Timestamps: 시간 정보
+        - Checkpoint: 체크포인트 정보
     """
 
     # ==================== Configuration ====================
@@ -263,24 +338,23 @@ def create_initial_state(
     max_iterations: int = 5,
     design_result: Optional[DesignResult] = None,
 ) -> IDMASState:
-    """
-    Create initial state for the pipeline.
+    """파이프라인 초기 상태를 생성합니다.
 
     Args:
-        domain: Domain name (e.g., "math")
-        train_dataset: Training dataset name (e.g., "gsm8k")
-        instructional_goal: Learning objective
-        student_model_name: Student model name
-        teacher_model_name: Teacher model name
-        model_short: Short model name for file naming
-        questions: List of questions to process
-        checkpoint_interval: Save checkpoint every N questions
-        use_iterative_scaffolding: Use iterative scaffolding
-        max_iterations: Max iterations for iterative scaffolding
-        design_result: Pre-loaded design result (optional)
+        domain: 도메인 이름 (예: "math")
+        train_dataset: 훈련 데이터셋 이름 (예: "gsm8k")
+        instructional_goal: 학습 목표
+        student_model_name: 학생 모델 이름
+        teacher_model_name: 교사 모델 이름
+        model_short: 파일 이름용 짧은 모델명
+        questions: 처리할 문제 리스트
+        checkpoint_interval: 체크포인트 저장 간격 (문제 수). 기본값: 10
+        use_iterative_scaffolding: Iterative Scaffolding 사용 여부. 기본값: True
+        max_iterations: 최대 반복 횟수. 기본값: 5
+        design_result: 사전 로드된 교수설계 결과. 기본값: None
 
     Returns:
-        Initial IDMASState
+        초기화된 IDMASState
     """
     return IDMASState(
         # Configuration
@@ -358,14 +432,18 @@ def create_initial_state(
 
 
 def get_statistics(state: IDMASState) -> Dict[str, Any]:
-    """
-    Get pipeline statistics from state.
+    """파이프라인 상태에서 통계를 추출합니다.
 
     Args:
-        state: Current pipeline state
+        state: 현재 파이프라인 상태
 
     Returns:
-        Statistics dictionary with step-based skip tracking
+        통계 딕셔너리:
+            - total_questions: 전체 문제 수
+            - scaffolding_processed: 처리된 문제 수
+            - case_statistics: 케이스별 통계 (A/B/C)
+            - scaffolding_artifacts: HOT/LOT 스캐폴딩 통계
+            - skip: 단계별 skip 통계
     """
     case_a = state.get("case_a_count", 0)
     case_b = state.get("case_b_count", 0)
@@ -442,16 +520,15 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
 def load_checkpoint_from_logs(
     logs_path: Path,
 ) -> Tuple[Dict[str, Any], Set[str]]:
-    """
-    Load checkpoint state from existing logs file.
+    """기존 로그 파일에서 체크포인트 상태를 로드합니다.
 
     Args:
-        logs_path: Path to the logs JSON file
+        logs_path: 로그 JSON 파일 경로
 
     Returns:
-        Tuple of (checkpoint_data, processed_question_ids)
-        - checkpoint_data: Dictionary with scaffolding results and statistics
-        - processed_question_ids: Set of question IDs already processed
+        튜플 (checkpoint_data, processed_question_ids):
+            - checkpoint_data: 스캐폴딩 결과 및 통계 딕셔너리
+            - processed_question_ids: 이미 처리된 문제 ID 집합
     """
     if not logs_path.exists():
         return {}, set()
@@ -602,16 +679,18 @@ def restore_state_from_checkpoint(
     checkpoint_data: Dict[str, Any],
     processed_ids: Set[str],
 ) -> IDMASState:
-    """
-    Restore state from checkpoint data.
+    """체크포인트 데이터에서 상태를 복원합니다.
+
+    이미 처리된 문제를 제외하고 나머지 문제만 포함하여
+    상태를 복원합니다.
 
     Args:
-        initial_state: Fresh initial state
-        checkpoint_data: Checkpoint data from logs
-        processed_ids: Set of already processed question IDs
+        initial_state: 초기 상태
+        checkpoint_data: 로그에서 로드한 체크포인트 데이터
+        processed_ids: 이미 처리된 문제 ID 집합
 
     Returns:
-        Restored IDMASState
+        복원된 IDMASState
     """
     if not checkpoint_data or not processed_ids:
         return initial_state

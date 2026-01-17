@@ -32,16 +32,26 @@ Follow the structured approach below to ensure a complete and well-reasoned solu
 
 
 class DataEnhancer:
-    """데이터 Enhancement를 위한 클래스"""
+    """데이터 Enhancement를 위한 클래스.
+
+    학습 데이터에 Instructional Goal과 Task Analysis를 추가하여
+    SFT 학습의 효과를 향상시킵니다.
+
+    Attributes:
+        teacher_config: Teacher 모델 설정
+        goal_generator: Instructional Goal 생성기
+        analysis_generator: Task Analysis 생성기
+        model_suffix: Teacher 모델 접미사
+        student_suffix: Student 모델 접미사
+    """
 
     def __init__(self, teacher_config: dict = None, model_suffix: str = None, student_suffix: str = None):
-        """
-        DataEnhancer 초기화
+        """DataEnhancer를 초기화합니다.
 
         Args:
-            teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
-            model_suffix: 출력 파일명에 사용할 teacher 모델 suffix (None이면 자동 생성)
-            student_suffix: 출력 파일명에 사용할 student 모델 suffix
+            teacher_config: Teacher 모델 설정 (None이면 기본 설정 사용)
+            model_suffix: 출력 파일명에 사용할 Teacher 모델 접미사 (None이면 자동 생성)
+            student_suffix: 출력 파일명에 사용할 Student 모델 접미사
         """
         self.teacher_config = teacher_config
         self.goal_generator = InstructionalGoalGenerator(teacher_config)
@@ -55,16 +65,18 @@ class DataEnhancer:
         dataset: str,
         sample_count: int = 25
     ) -> Path:
-        """
-        데이터셋 enhancement 수행
+        """데이터셋 enhancement를 수행합니다.
 
         Args:
             domain: 도메인 이름 (math, logical, commonsense)
             dataset: 데이터셋 이름 (gsm8k, math, reclor, arc_c)
-            sample_count: 학습목표 생성에 사용할 샘플 수 (기본 25)
+            sample_count: 학습목표 생성에 사용할 샘플 수 (기본: 25)
 
         Returns:
             생성된 파일 경로
+
+        Raises:
+            FileNotFoundError: 소스 파일이 존재하지 않는 경우
         """
         print(f"\n{'=' * 60}")
         print(f"Processing: {domain}/{dataset}")
@@ -116,11 +128,18 @@ class DataEnhancer:
         instructional_goal: str,
         task_analysis: str
     ) -> List[Dict]:
-        """
-        데이터에 학습목표와 과제분석이 포함된 enhanced instruction 적용
+        """데이터에 학습목표와 과제분석이 포함된 enhanced instruction을 적용합니다.
 
         instruction 필드에 enhanced instruction을 직접 적용하여
         SFT 학습 시 향상된 프롬프트가 사용되도록 합니다.
+
+        Args:
+            data: 원본 데이터 리스트
+            instructional_goal: 학습 목표
+            task_analysis: 과제 분석
+
+        Returns:
+            향상된 instruction이 적용된 데이터 리스트
         """
         enhanced = []
         for item in data:
@@ -146,11 +165,11 @@ class DataEnhancer:
         return enhanced
 
     def _get_source_path(self, domain: str, dataset: str) -> Path:
-        """소스 데이터 파일 경로"""
+        """소스 데이터 파일 경로를 반환합니다."""
         return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train.json"
 
     def _get_output_path(self, domain: str, dataset: str) -> Path:
-        """출력 파일 경로"""
+        """출력 파일 경로를 반환합니다."""
         if self.model_suffix:
             teacher_suffix = self.model_suffix
         elif self.teacher_config:
@@ -165,19 +184,19 @@ class DataEnhancer:
             return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train_ID-MAS_{teacher_suffix}.json"
 
     def _load_json(self, path: Path) -> List[Dict]:
-        """JSON 파일 로드"""
+        """JSON 파일을 로드합니다."""
         with open(path, 'r', encoding='utf-8') as f:
             return json.load(f)
 
     def _save_json(self, data: Any, path: Path):
-        """JSON 파일 저장"""
+        """JSON 파일을 저장합니다."""
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def get_all_datasets() -> List[tuple]:
-    """전체 처리 대상 데이터셋 목록 반환"""
+    """전체 처리 대상 데이터셋 목록을 반환합니다."""
     datasets = []
     for domain, dataset_list in TRAINING_DATASETS.items():
         for dataset in dataset_list:

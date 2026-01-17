@@ -213,24 +213,41 @@ BaseModelWrapper (추상 클래스)
 
 ### Skip Metadata 구조
 
-Step별 skip 정보는 `step_skips` 딕셔너리에 저장됩니다:
+Step별 skip 정보는 `skip_details` 딕셔너리에 통합 저장됩니다:
 
 ```python
-step_skips = {
-    "step2": {  # PO Evaluation skip
-        "is_fallback": True,
-        "attempts_needed": 3,
-        "stage": "performance_objectives_evaluation",
-        "error_type": "json_parse_error"
+skip_details = {
+    "step2_performance_objectives_evaluation": {  # 키 형식: step{N}_{stage}
+        "is_fallback": False,
+        "attempts_needed": 1
     },
-    "step3": {  # Scaffolding 생성 skip
+    "step3_scaffolding_artifact_generation": {
         "is_fallback": True,
-        "attempts_needed": 2,
-        "stage": "scaffolding_artifact",
-        "error_type": "api_error"
+        "failure_reason": "scaffolding_artifact_generation_failed",
+        "last_error": [  # 배열: 모든 에러 수집
+            "Error 1: JSON parse failed",
+            "Error 2: Timeout",
+            "Error 3: Invalid response"
+        ],
+        "max_retries_exceeded": 3
+    },
+    "step5_case_b_reconstruction": {
+        "is_fallback": True,
+        "failure_reason": "reconstruction_failed",
+        "last_error": ["Error message"],
+        "max_retries_exceeded": 3
     }
 }
 ```
+
+**키 형식 규칙:**
+| Step | 키 이름 |
+|------|---------|
+| Step 2 | `step2_performance_objectives_evaluation` |
+| Step 3 | `step3_scaffolding_artifact_generation` |
+| Step 5 (Case B) | `step5_case_b_reconstruction` |
+| Step 5 (Case C) | `step5_case_c_final_solution` |
+| Step 5 (요약) | `step5_summarization` |
 
 ## 데이터 흐름
 

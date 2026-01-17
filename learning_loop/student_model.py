@@ -1,17 +1,27 @@
-"""
-학생 모델 (Student Model, Ms)
+"""학생 모델 (Student Model, Ms) 모듈.
 
-Iterative Scaffolding Pipeline Support:
-- Step 1 (Initial Response): generate_initial_response_with_scaffolding
-- Step 4 (Re-response): respond_with_scaffolding_artifact
+Iterative Scaffolding Pipeline에서 학생 역할을 담당합니다.
+문제에 대한 응답을 생성하고 스캐폴딩을 참조하여 개선합니다.
 
-Pipeline Steps:
-- Step 1: Initial Response (Student) - this module
-- Step 2: PO Evaluation (Teacher)
-- Step 3: Scaffolding Artifact (Teacher)
-- Step 4: Re-response (Student) - this module
-- Step 5: Reconstruction (Teacher)
-- Step 6: SFT Generation
+파이프라인 담당 단계:
+    - Step 1 (Initial Response): 초기 응답 생성
+    - Step 4 (Re-response): 스캐폴딩 참조 후 재응답
+
+전체 파이프라인 흐름:
+    Step 1: 초기 응답 (Student) - 이 모듈
+    Step 2: PO 평가 (Teacher)
+    Step 3: 스캐폴딩 (Teacher)
+    Step 4: 재응답 (Student) - 이 모듈
+    Step 5: 재구성 (Teacher)
+    Step 6: SFT 데이터 생성
+
+주요 클래스:
+    StudentModel: 학생 모델 에이전트
+
+사용 예시:
+    >>> from learning_loop.student_model import StudentModel
+    >>> student = StudentModel(model_name="Qwen/Qwen2.5-3B-Instruct")
+    >>> response = student.generate_initial_response_with_scaffolding(...)
 """
 from models.student_wrapper import StudentModelWrapper
 from prompts.learning_prompts import (
@@ -27,7 +37,20 @@ import json
 
 
 class StudentModel:
-    """학생 모델 - 문제 응답 생성"""
+    """학생 모델 에이전트 클래스.
+
+    Iterative Scaffolding Pipeline에서 문제에 대한 응답을 생성합니다.
+    스캐폴딩 아티팩트를 참조하여 개선된 응답을 생성할 수 있습니다.
+
+    주요 기능:
+        - 초기 응답 생성 (Task Analysis 기반)
+        - 스캐폴딩 아티팩트 참조 응답 생성
+        - DB 참조 정보 추출
+
+    Attributes:
+        model: Student 모델 래퍼
+        model_name: 사용 중인 모델 이름
+    """
 
     def __init__(
         self,
@@ -36,9 +59,10 @@ class StudentModel:
         use_sft_idmas_model: bool = False,
         sft_domain: str = None
     ):
-        """
+        """StudentModel을 초기화합니다.
+
         Args:
-            model_name: 사용할 모델 이름 (None이면 기본 모델)
+            model_name: 사용할 모델 이름. None이면 기본 모델 사용.
             use_sft_model: True면 SFT fine-tuned 모델 사용
             use_sft_idmas_model: True면 SFT_ID-MAS fine-tuned 모델 사용
             sft_domain: SFT/SFT_ID-MAS 모델의 도메인 (예: "math")
@@ -56,15 +80,16 @@ class StudentModel:
         problem_text: str,
         system_message: Optional[str] = None
     ) -> str:
-        """
-        기본 초기 응답 생성 (평가용)
+        """기본 초기 응답을 생성합니다.
+
+        스캐폴딩 없이 단순 응답을 생성합니다. 평가용으로 사용됩니다.
 
         Args:
-            problem_text: 문제 설명
-            system_message: 시스템 메시지 (선택)
+            problem_text: 문제 텍스트
+            system_message: 시스템 메시지. None이면 기본 메시지 사용.
 
         Returns:
-            생성된 응답
+            생성된 응답 텍스트
         """
         if system_message is None:
             system_message = "You are a student learning to solve problems. Answer the following question step by step."
@@ -82,19 +107,18 @@ class StudentModel:
         task_analysis: str,
         instructional_goal: str = ""
     ) -> str:
-        """
-        Scaffolding과 함께 초기 응답 생성
+        """스캐폴딩과 함께 초기 응답을 생성합니다.
 
-        과제분석 결과를 System Prompt에 포함하여 문제 풀이 지원
-        Terminal Goal 달성을 목표로 응답 생성
+        과제분석 결과를 System Prompt에 포함하여 문제 풀이를 지원합니다.
+        Terminal Goal 달성을 목표로 응답을 생성합니다.
 
         Args:
-            problem_text: 문제 설명
-            task_analysis: 과제분석 결과 (Instructional Analysis)
-            instructional_goal: 학습 목표 (Terminal Goal)
+            problem_text: 문제 텍스트
+            task_analysis: 과제 분석 결과 (Instructional Analysis)
+            instructional_goal: 학습 목표 (Terminal Goal). 기본값: ""
 
         Returns:
-            생성된 응답
+            생성된 응답 텍스트
         """
         system_message = SCAFFOLDING_SYSTEM_PROMPT.format(
             instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
@@ -115,17 +139,16 @@ class StudentModel:
         previous_response: str,
         task_analysis: str
     ) -> str:
-        """
-        Iterative Scaffolding: 교사의 Socratic 질문에 응답하여 개선된 풀이 생성
+        """교사의 Socratic 질문에 응답하여 개선된 풀이를 생성합니다.
 
         Args:
             problem_text: 문제 텍스트
             teacher_evaluation: 교사의 PO 평가 및 Socratic 질문
             previous_response: 이전 응답
-            task_analysis: 과제분석 결과
+            task_analysis: 과제 분석 결과
 
         Returns:
-            개선된 응답
+            개선된 응답 텍스트
         """
         # Format teacher evaluation for the prompt
         teacher_eval_str = json.dumps(teacher_evaluation, ensure_ascii=False, indent=2)
@@ -155,17 +178,16 @@ class StudentModel:
         conversation_history: Optional[List[Dict]] = None,
         task_analysis: Optional[str] = None
     ) -> str:
-        """
-        Iterative Scaffolding: 교사 힌트를 참고하여 응답 생성
+        """교사 힌트를 참고하여 응답을 생성합니다.
 
         Args:
             problem_text: 문제 텍스트
-            teacher_hint: 교사가 제공한 현재 힌트
-            conversation_history: 이전 대화 기록 (선택)
-            task_analysis: 과제 분석 결과 (선택)
+            teacher_hint: 교사가 제공한 힌트
+            conversation_history: 이전 대화 기록. 기본값: None
+            task_analysis: 과제 분석 결과. 기본값: None
 
         Returns:
-            생성된 응답
+            생성된 응답 텍스트
         """
         # Build system message
         if task_analysis:
@@ -195,14 +217,13 @@ class StudentModel:
         return response
 
     def _format_previous_attempts(self, history: List[Dict]) -> str:
-        """
-        이전 시도를 포맷하여 컨텍스트로 사용
+        """이전 시도를 컨텍스트용 문자열로 변환합니다.
 
         Args:
             history: 대화 기록
 
         Returns:
-            포맷된 문자열
+            포맷된 이전 시도 문자열
         """
         if not history:
             return ""
@@ -230,12 +251,11 @@ class StudentModel:
         scaffolding_artifact: Dict[str, Any],
         task_analysis: str
     ) -> str:
-        """
-        Scaffolding Artifact를 참조하여 개선된 응답 생성
+        """Scaffolding Artifact를 참조하여 개선된 응답을 생성합니다.
 
         Teacher가 생성한 Scaffolding DB(artifact)를 참조하여
-        개선된 풀이를 생성합니다. 학생은 DB에서 어떤 정보를
-        참조했는지 명시적으로 언급해야 합니다.
+        개선된 풀이를 생성합니다. 학생은 DB에서 참조한 정보를
+        명시적으로 언급해야 합니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -244,7 +264,7 @@ class StudentModel:
             task_analysis: 과제 분석 결과
 
         Returns:
-            DB 참조 정보를 명시한 개선된 응답
+            DB 참조 정보를 명시한 개선된 응답 텍스트
         """
         # Format scaffolding artifacts for the prompt
         artifacts_str = self._format_scaffolding_artifacts(
@@ -268,14 +288,13 @@ class StudentModel:
         return response
 
     def _format_scaffolding_artifacts(self, artifacts: List[Dict]) -> str:
-        """
-        Scaffolding artifacts를 읽기 쉬운 형식으로 포맷
+        """Scaffolding artifacts를 읽기 쉬운 형식으로 변환합니다.
 
         Args:
             artifacts: Scaffolding artifact 리스트
 
         Returns:
-            포맷된 문자열
+            포맷된 스캐폴딩 문자열
         """
         if not artifacts:
             return "(No detailed artifacts available)"
@@ -315,11 +334,13 @@ class StudentModel:
         return "\n".join(formatted)
 
     def extract_db_references(self, response: str) -> List[str]:
-        """
-        학생 응답에서 DB 참조 정보 추출
+        """학생 응답에서 DB 참조 정보를 추출합니다.
+
+        "Information Retrieved from Scaffolding DB:" 섹션에서
+        참조된 정보 목록을 추출합니다.
 
         Args:
-            response: 학생의 응답
+            response: 학생의 응답 텍스트
 
         Returns:
             참조된 DB 정보 목록

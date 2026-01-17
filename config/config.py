@@ -1,5 +1,17 @@
-"""
-설정 파일
+"""ID-MAS 통합 설정 모듈 (레거시 호환성).
+
+이 모듈은 하위 호환성을 위해 유지되며, 주요 설정은 각 서브모듈로 분리되었습니다:
+- api.py: API 자격증명
+- models.py: Teacher/Student 모델 설정
+- domains.py: 도메인 및 데이터셋 설정
+- paths.py: 디렉토리 경로 헬퍼
+- sft.py: SFT 모델명 매핑
+
+새 코드에서는 config/__init__.py 또는 개별 서브모듈을 사용하세요.
+
+Note:
+    이 파일의 일부 함수와 상수는 서브모듈에서 정의된 것과 중복됩니다.
+    점진적으로 서브모듈로 마이그레이션 예정입니다.
 """
 import os
 from pathlib import Path
@@ -8,7 +20,7 @@ from dotenv import load_dotenv
 # 프로젝트 루트 디렉토리
 PROJECT_ROOT = Path(__file__).parent.parent
 
-# .env 파일 로드 (기존 환경 변수를 덮어쓰기)
+# .env 파일 로드 (기존 환경 변수를 덮어씀)
 load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 # API 키
@@ -16,14 +28,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 # =============================================================================
-# Teacher Model Configuration
+# 교사 모델 설정
 # =============================================================================
 
-# 지원하는 Teacher 모델 목록
+# 지원하는 교사 모델 목록
 AVAILABLE_TEACHER_MODELS = [
     # OpenAI
     "gpt-5-2025-08-07",
-    # LLaMA-Factory API (OpenAI-compatible)
+    # 로컬 HuggingFace 모델
     "meta-llama/Llama-3.1-8B-Instruct",
     "meta-llama/Llama-3.1-70B-Instruct",
     "meta-llama/Llama-3.2-3B-Instruct",
@@ -35,46 +47,42 @@ AVAILABLE_TEACHER_MODELS = [
     "Qwen/Qwen3-4B-Instruct-2507",
 ]
 
-# 기본 Teacher 모델
+# 기본 교사 모델
 DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
 
 
 def create_teacher_config(model_name: str = None, use_api: bool = None) -> dict:
-    """
-    Teacher model config 생성
+    """교사 모델 설정 딕셔너리를 생성합니다.
 
     Args:
-        model_name: Teacher 모델 이름 (None이면 기본 모델 사용)
-        use_api: API 모드 강제 지정 (None이면 모델명으로 자동 판단)
-            - True: LLaMA-Factory API 사용
-            - False: 로컬 HuggingFace 모델 로드
-            - None: gpt-*, o1-*, o3-*는 OpenAI API, 그 외는 로컬 로드
+        model_name: 교사 모델명. None이면 기본 모델 사용
+        use_api: API 모드 강제 지정 (레거시, 현재 미사용)
 
     Returns:
-        Teacher model 설정 딕셔너리
+        모델 설정 딕셔너리
     """
     if model_name is None:
         model_name = DEFAULT_TEACHER_MODEL
 
-    # API 모델 판단 (OpenAI 모델)
+    # OpenAI API 모델 판단
     is_openai_model = (
         model_name.startswith("gpt-") or
         model_name.startswith("o1") or
         model_name.startswith("o3")
     )
 
-    # OpenAI 모델
+    # OpenAI API 모델 설정
     if is_openai_model:
         return {
             "model": model_name,
-            "base_url": None,  # OpenAI 기본 endpoint
+            "base_url": None,
             "api_key": OPENAI_API_KEY,
             "reasoning": {"effort": "medium"},
             "text": {"verbosity": "medium"},
             "max_tokens": 8192
         }
 
-    # 로컬 HuggingFace 모델 (기본값)
+    # 로컬 HuggingFace 모델 설정
     return {
         "model": model_name,
         "device": "cuda",
@@ -84,7 +92,7 @@ def create_teacher_config(model_name: str = None, use_api: bool = None) -> dict:
     }
 
 
-# 기본 Teacher 모델 설정 (하위 호환성 - DESIGN_MODEL_CONFIG)
+# 기본 교사 모델 설정 (하위 호환성)
 DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)
 
 # 지원하는 학생 모델 목록
@@ -111,22 +119,24 @@ STUDENT_MODEL_BASE_CONFIG = {
     "do_sample": True
 }
 
-# 데이터 경로 (함수에서 사용하기 전에 정의)
+# 데이터 경로
 DATA_DIR = PROJECT_ROOT / "data"
 
-# 기본 디렉토리 생성 (나머지는 도메인별/모델별로 생성됨)
+# 기본 디렉토리 생성
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_student_model_config(model_name: str = None) -> dict:
-    """
-    학생 모델 설정 생성
+    """학생 모델 설정 딕셔너리를 생성합니다.
 
     Args:
-        model_name: 모델 이름 (None이면 기본 모델 사용)
+        model_name: 학생 모델명. None이면 기본 모델 사용
 
     Returns:
         모델 설정 딕셔너리
+
+    Raises:
+        ValueError: 지원하지 않는 모델명인 경우
     """
     if model_name is None:
         model_name = DEFAULT_STUDENT_MODEL
@@ -144,30 +154,27 @@ def get_student_model_config(model_name: str = None) -> dict:
 
 
 def get_model_short_name(model_name: str = None) -> str:
-    """
-    모델의 짧은 이름 반환 (폴더명용)
+    """모델명의 짧은 버전을 반환합니다.
 
     Args:
-        model_name: 전체 모델 이름 (예: "Qwen/Qwen3-4B-Instruct-2507")
+        model_name: 전체 모델명. None이면 기본 모델 사용
 
     Returns:
-        짧은 모델 이름 (예: "Qwen3-4B-Instruct-2507")
+        짧은 모델명 (슬래시 이후 부분)
     """
     if model_name is None:
         model_name = DEFAULT_STUDENT_MODEL
 
-    # "Qwen/Qwen3-4B-Instruct-2507" → "Qwen3-4B-Instruct-2507"
     if "/" in model_name:
         return model_name.split("/")[-1]
     return model_name
 
 
 # =============================================================================
-# SFT Model Configuration (HuggingFace Hub)
+# SFT 모델 설정 (HuggingFace Hub)
 # =============================================================================
 
-# Model name mapping for SFT fine-tuned models on HuggingFace Hub
-# Maps base model names to short names used in SaFD-00/{model}-{domain} repos
+# 기본 모델명 → HF Hub 레포지토리용 짧은 이름 매핑
 MODEL_NAME_TO_SHORT = {
     "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
     "meta-llama/Llama-3.1-70B-Instruct": "llama3.1-70b",
@@ -182,78 +189,67 @@ MODEL_NAME_TO_SHORT = {
 
 
 def get_sft_model_name(base_model_name: str, domain: str) -> str:
-    """
-    Get SFT fine-tuned model name from HuggingFace Hub.
+    """SFT 모델의 HuggingFace Hub 이름을 생성합니다.
 
     Args:
-        base_model_name: Base model name (e.g., "Qwen/Qwen2.5-3B-Instruct")
-        domain: Domain name (e.g., "math")
+        base_model_name: 기본 모델명
+        domain: 도메인명
 
     Returns:
-        SFT model HF Hub name (e.g., "SaFD-00/qwen2.5-3b-math")
+        SFT 모델 HF Hub 이름
 
     Raises:
-        ValueError: If model is not supported for SFT or domain is invalid
-
-    Example:
-        >>> get_sft_model_name("Qwen/Qwen2.5-3B-Instruct", "math")
-        'SaFD-00/qwen2.5-3b-math'
+        ValueError: 지원하지 않는 모델이거나 알 수 없는 도메인인 경우
     """
     if base_model_name not in MODEL_NAME_TO_SHORT:
         raise ValueError(
-            f"Model '{base_model_name}' not supported for SFT evaluation.\n"
-            f"Supported models: {list(MODEL_NAME_TO_SHORT.keys())}"
+            f"모델 '{base_model_name}'은(는) SFT 평가를 지원하지 않습니다.\n"
+            f"지원 모델: {list(MODEL_NAME_TO_SHORT.keys())}"
         )
 
     available_domains = list(DOMAIN_CONFIG.keys())
     if domain not in available_domains:
-        raise ValueError(f"Domain must be one of {available_domains}, got: {domain}")
+        raise ValueError(f"도메인은 {available_domains} 중 하나여야 합니다. 입력: {domain}")
 
     short_name = MODEL_NAME_TO_SHORT[base_model_name]
     return f"SaFD-00/{short_name}-{domain}"
 
 
 def get_sft_idmas_model_name(base_model_name: str, domain: str) -> str:
-    """
-    Get SFT_ID-MAS fine-tuned model name from HuggingFace Hub.
+    """SFT_ID-MAS 모델의 HuggingFace Hub 이름을 생성합니다.
 
     Args:
-        base_model_name: Base model name (e.g., "Qwen/Qwen2.5-3B-Instruct")
-        domain: Domain name (e.g., "math")
+        base_model_name: 기본 모델명
+        domain: 도메인명
 
     Returns:
-        SFT_ID-MAS model HF Hub name (e.g., "SaFD-00/qwen2.5-3b-math_id-mas")
+        SFT_ID-MAS 모델 HF Hub 이름
 
     Raises:
-        ValueError: If model is not supported or domain is invalid
-
-    Example:
-        >>> get_sft_idmas_model_name("Qwen/Qwen2.5-3B-Instruct", "math")
-        'SaFD-00/qwen2.5-3b-math_id-mas'
+        ValueError: 지원하지 않는 모델이거나 알 수 없는 도메인인 경우
     """
     if base_model_name not in MODEL_NAME_TO_SHORT:
         raise ValueError(
-            f"Model '{base_model_name}' not supported for SFT_ID-MAS evaluation.\n"
-            f"Supported models: {list(MODEL_NAME_TO_SHORT.keys())}"
+            f"모델 '{base_model_name}'은(는) SFT_ID-MAS 평가를 지원하지 않습니다.\n"
+            f"지원 모델: {list(MODEL_NAME_TO_SHORT.keys())}"
         )
 
     available_domains = list(DOMAIN_CONFIG.keys())
     if domain not in available_domains:
-        raise ValueError(f"Domain must be one of {available_domains}, got: {domain}")
+        raise ValueError(f"도메인은 {available_domains} 중 하나여야 합니다. 입력: {domain}")
 
     short_name = MODEL_NAME_TO_SHORT[base_model_name]
     return f"SaFD-00/{short_name}-{domain}_id-mas"
 
 
 def get_model_data_dirs(model_name: str = None) -> dict:
-    """
-    모델별 데이터 디렉토리 경로 반환 (기존 방식 - 하위 호환성)
+    """모델별 데이터 디렉토리 경로를 반환합니다 (레거시).
 
     Args:
-        model_name: 모델 이름 (None이면 기본 모델 사용)
+        model_name: 모델명. None이면 기본 모델 사용
 
     Returns:
-        경로 딕셔너리 (learning_logs_dir, eval_results_dir, knowledge_base_dir)
+        경로 딕셔너리
     """
     short_name = get_model_short_name(model_name)
     model_dir = DATA_DIR / short_name
@@ -265,7 +261,6 @@ def get_model_data_dirs(model_name: str = None) -> dict:
         "knowledge_base_dir": model_dir / "knowledge_base"
     }
 
-    # 디렉토리 생성
     for dir_path in dirs.values():
         dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -273,14 +268,11 @@ def get_model_data_dirs(model_name: str = None) -> dict:
 
 
 def get_dataset_model_dirs(dataset: str, model_name: str = None) -> dict:
-    """
-    데이터셋별, 모델별 데이터 디렉토리 경로 반환 (기존 방식 - deprecated)
-
-    Structure: data/{dataset}/{model}/
+    """데이터셋별, 모델별 디렉토리 경로를 반환합니다 (레거시, deprecated).
 
     Args:
-        dataset: 데이터셋 이름 (예: "gsm8k", "mmlu", "arc")
-        model_name: 모델 이름 (None이면 기본 모델 사용)
+        dataset: 데이터셋명
+        model_name: 모델명. None이면 기본 모델 사용
 
     Returns:
         경로 딕셔너리
@@ -295,7 +287,6 @@ def get_dataset_model_dirs(dataset: str, model_name: str = None) -> dict:
         "knowledge_base_dir": dataset_dir / "knowledge_base"
     }
 
-    # 디렉토리 생성
     for dir_path in dirs.values():
         dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -303,32 +294,35 @@ def get_dataset_model_dirs(dataset: str, model_name: str = None) -> dict:
 
 
 # =============================================================================
-# Domain-based Configuration (New)
+# 도메인 기반 설정 (config/domains.py로 이동됨)
 # =============================================================================
 
-# Instructional Goals for each training dataset
+# 학습 데이터셋별 Instructional Goal (레거시, 현재는 설계 JSON에서 로드)
 INSTRUCTIONAL_GOALS = {
     "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
     "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution."
 }
 
-# =============================================================================
-# Domain Configuration (Moved to config/domains.py)
-# =============================================================================
-# Domain-related configurations are now centralized in config/domains.py:
-# - DATASET_TO_DOMAIN
-# - TRAINING_DATASETS
-# - DOMAIN_CONFIG
-# - get_domain_data_dirs()
-# - get_available_domains()
-# - get_eval_datasets_for_domain()
-# - get_training_datasets_for_domain()
+# 도메인 설정 (config/domains.py에서 import)
+from config.domains import DOMAIN_CONFIG
 
 
 def get_instructional_goal(dataset: str) -> str:
-    """Get Instructional Goal for a training dataset."""
+    """학습 데이터셋의 Instructional Goal을 반환합니다 (레거시).
+
+    새 코드에서는 config.domains.get_instructional_goal()을 사용하세요.
+
+    Args:
+        dataset: 데이터셋명
+
+    Returns:
+        Instructional Goal 문자열
+
+    Raises:
+        ValueError: 알 수 없는 데이터셋인 경우
+    """
     if dataset not in INSTRUCTIONAL_GOALS:
-        raise ValueError(f"Unknown dataset: {dataset}. Available: {list(INSTRUCTIONAL_GOALS.keys())}")
+        raise ValueError(f"알 수 없는 데이터셋: {dataset}. 가능한 데이터셋: {list(INSTRUCTIONAL_GOALS.keys())}")
     return INSTRUCTIONAL_GOALS[dataset]
 
 

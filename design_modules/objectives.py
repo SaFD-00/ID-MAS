@@ -1,5 +1,21 @@
-"""
-4단계: 수행목표 진술 (Performance Objectives)
+"""교수설계 Step 2: 수행목표 진술(Performance Objectives) 모듈.
+
+이 모듈은 교수 분석 결과로부터 수행목표(PO)를 생성합니다.
+Dick & Carey 모델의 수행목표 진술 단계를 구현합니다.
+
+주요 클래스:
+    PerformanceObjectives: 수행목표 진술 에이전트
+
+수행목표 구성 요소 (ABCD 모델):
+    - Target: 목표 대상 (Terminal Goal, Subskill 등)
+    - Behavior: 관찰 가능한 행동
+    - Condition: 행동 수행 조건
+    - Criterion: 성공 기준
+
+사용 예시:
+    >>> from design_modules.objectives import PerformanceObjectives
+    >>> obj_gen = PerformanceObjectives(teacher_config)
+    >>> result = obj_gen.generate_objectives(analysis_result)
 """
 from models.teacher_wrapper import TeacherModelWrapper
 from prompts.design_prompts import PERFORMANCE_OBJECTIVES_PROMPT
@@ -8,12 +24,20 @@ import json
 
 
 class PerformanceObjectives:
-    """수행목표 진술 모듈"""
+    """수행목표 진술 에이전트 클래스.
+
+    교수 분석 결과를 기반으로 ABCD 모델의 수행목표를 생성합니다.
+    Teacher 모델을 사용하여 JSON 형식으로 수행목표를 도출합니다.
+
+    Attributes:
+        llm: Teacher 모델 래퍼
+    """
 
     def __init__(self, teacher_config: dict = None):
-        """
+        """PerformanceObjectives를 초기화합니다.
+
         Args:
-            teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
+            teacher_config: Teacher 모델 설정. None이면 기본 설정 사용.
         """
         self.llm = TeacherModelWrapper(teacher_config)
 
@@ -22,18 +46,22 @@ class PerformanceObjectives:
         instructional_analysis: str,
         max_retries: int = 3
     ) -> Dict[str, Any]:
-        """
-        교수 분석 결과로부터 수행목표 생성 (최대 3번 재시도)
+        """교수 분석 결과로부터 수행목표를 생성합니다.
+
+        ABCD 모델 기반의 수행목표를 JSON 형식으로 생성합니다.
+        실패 시 최대 max_retries 횟수만큼 재시도합니다.
 
         Args:
             instructional_analysis: 교수 분석 결과 텍스트
-            max_retries: 최대 재시도 횟수 (기본 3)
+            max_retries: 최대 재시도 횟수 (기본: 3)
 
         Returns:
-            수행목표 딕셔너리 (JSON)
+            수행목표 딕셔너리:
+                - performance_objectives (list): 수행목표 리스트
+                    각 항목: {target, Behavior, Condition, Criterion}
 
         Raises:
-            RuntimeError: max_retries 초과 시
+            RuntimeError: max_retries 횟수 초과 시
         """
         last_error = None
 
@@ -70,14 +98,15 @@ class PerformanceObjectives:
         )
 
     def validate_objectives(self, objectives: Dict[str, Any]) -> bool:
-        """
-        생성된 수행목표의 유효성 검증
+        """생성된 수행목표의 유효성을 검증합니다.
+
+        수행목표가 ABCD 모델의 필수 필드를 모두 포함하는지 확인합니다.
 
         Args:
-            objectives: 수행목표 딕셔너리
+            objectives: 검증할 수행목표 딕셔너리
 
         Returns:
-            유효성 여부
+            모든 필수 필드가 존재하면 True, 아니면 False
         """
         if "performance_objectives" not in objectives:
             return False

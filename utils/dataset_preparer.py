@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
-"""
-Dataset Preparation Script
-Downloads and processes datasets from HuggingFace for math and knowledge domains.
+"""데이터셋 전처리 스크립트 모듈.
 
-Output format:
-[
-  {
-    "instruction": "system prompt (same for train and test)",
-    "input": "question text",
-    "output": "{reasoning}\n\n\\boxed{answer}" or "\\boxed{answer}",
-    "metadata": { ... }  // dataset-specific metadata (may be empty)
-  },
-  ...
-]
+이 모듈은 HuggingFace에서 데이터셋을 다운로드하고 수학 및 지식 도메인용으로 처리합니다.
 
-System Prompts:
-- Prompts are dataset-specific and reused for both train and test splits.
+출력 형식:
+    [
+      {
+        "instruction": "시스템 프롬프트 (train과 test에서 동일)",
+        "input": "질문 텍스트",
+        "output": "{추론}\\n\\n\\\\boxed{답변}" 또는 "\\\\boxed{답변}",
+        "metadata": { ... }  // 데이터셋별 메타데이터 (비어있을 수 있음)
+      },
+      ...
+    ]
+
+시스템 프롬프트:
+    - 프롬프트는 데이터셋별로 지정되며 train과 test 분할에서 재사용됩니다.
+
+지원 데이터셋:
+    - Math: GSM8K, MATH, SVAMP, ASDiv, MAWPS
+    - Logical: ReClor, ANLI R2/R3, BBH
+    - Commonsense: ARC-Challenge, StrategyQA, OpenBookQA
+
+사용 예시:
+    >>> python utils/dataset_preparer.py
 """
 
 import json
@@ -201,7 +209,7 @@ BBH_LOGICAL_SUBTASKS = [
 # =============================================================================
 
 def set_random_seed(seed: int = RANDOM_SEED) -> None:
-    """Set random seed for reproducible dataset processing."""
+    """재현 가능한 데이터셋 처리를 위해 랜덤 시드를 설정합니다."""
     random.seed(seed)
     try:
         import numpy as np
@@ -216,16 +224,15 @@ def set_random_seed(seed: int = RANDOM_SEED) -> None:
         pass
 
 def format_output(answer: str, reasoning: Optional[str] = None, include_reasoning: bool = False) -> str:
-    """
-    Format output with "The answer is \\boxed{answer}" format.
+    """출력을 "The answer is \\boxed{answer}" 형식으로 포맷팅합니다.
 
     Args:
-        answer: Final answer
-        reasoning: Step-by-step reasoning (optional)
-        include_reasoning: If True, include reasoning before answer
+        answer: 최종 답변
+        reasoning: 단계별 추론 (선택사항)
+        include_reasoning: True이면 답변 앞에 추론 포함
 
     Returns:
-        Formatted output string with "The answer is \\boxed{answer}" format
+        "The answer is \\boxed{answer}" 형식의 포맷팅된 출력 문자열
     """
     # Format answer in \boxed{} - escape backslash for proper string formatting
     boxed_answer = f"\\boxed{{{answer}}}"
@@ -237,15 +244,14 @@ def format_output(answer: str, reasoning: Optional[str] = None, include_reasonin
 
 
 def format_mcq_input(question: str, choices: List[str]) -> str:
-    """
-    Format multiple choice question with choices.
+    """객관식 질문을 선택지와 함께 포맷팅합니다.
 
     Args:
-        question: Question text
-        choices: List of answer choices
+        question: 질문 텍스트
+        choices: 답변 선택지 리스트
 
     Returns:
-        Formatted input string
+        포맷팅된 입력 문자열
     """
     formatted = question + "\n\n"
     for i, choice in enumerate(choices):
@@ -254,7 +260,7 @@ def format_mcq_input(question: str, choices: List[str]) -> str:
 
 
 def save_json(data: List[Dict], output_path: Path):
-    """Save data to JSON file."""
+    """데이터를 JSON 파일로 저장합니다."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -262,14 +268,13 @@ def save_json(data: List[Dict], output_path: Path):
 
 
 def extract_boxed_answer(solution: str) -> str:
-    """
-    Extract answer from LaTeX \\boxed{} command in MATH dataset.
+    """MATH 데이터셋에서 LaTeX \\boxed{} 명령에서 답변을 추출합니다.
 
     Args:
-        solution: Solution text with boxed answer
+        solution: boxed 답변이 포함된 풀이 텍스트
 
     Returns:
-        Extracted answer or empty string
+        추출된 답변 또는 빈 문자열
     """
     # Try to find \boxed{...} pattern
     pattern = r'\\boxed\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}'

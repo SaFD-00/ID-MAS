@@ -1,24 +1,28 @@
-"""
-ID-MAS 메인 실행 파일 (LangGraph 기반 Iterative Scaffolding Pipeline)
-Domain-based Multi-Dataset Support for LLM Learning and Evaluation
+"""ID-MAS 메인 실행 모듈.
 
-학습(train)과 평가(eval)를 분리하여 실행:
-- Train Mode: 설계 → Iterative Scaffolding 학습 → SFT 데이터 생성
-- Eval Mode: Baseline, SFT, SFT_ID-MAS 평가
+이 모듈은 ID-MAS(Instructional Design Multi-Agent System) 파이프라인의
+메인 진입점으로, 학습(train)과 평가(eval) 모드를 제공합니다.
 
-Iterative Scaffolding Pipeline (LangGraph):
-- Teacher-guided iterative response generation (max 5 iterations)
-- Performance Objectives based evaluation with Socratic questions
-- Case A (PO satisfied) / Case B (reconstructed) SFT data generation
+LangGraph 기반 Iterative Scaffolding Pipeline을 사용하여:
+- 교사 모델의 가이드 하에 학생 모델의 반복적 응답 개선 (최대 5회)
+- Performance Objectives 기반 평가와 소크라테스식 질문 생성
+- Case A(PO 충족)/Case B(재구성) SFT 데이터 생성
 
-LangGraph Features:
-- StateGraph based workflow management
-- Conditional routing for question processing
-- Built-in checkpointing support
+주요 클래스:
+    IDMASPipeline: 학습 모드 파이프라인 (설계 → 학습 → SFT 데이터 생성)
+    IDMASEvaluator: 평가 모드 실행기 (Baseline, SFT, SFT_ID-MAS)
 
-Instructional Goals:
-- GSM8K: Generate coherent, step-by-step mathematical reasoning for grade-school math
-- MATH: Solve advanced mathematical problems with multi-step reasoning
+주요 함수:
+    run_train_mode: 학습 모드 실행
+    run_eval_mode: 평가 모드 실행
+    main: CLI 인터페이스 진입점
+
+사용 예시:
+    # 학습 모드
+    python main.py --mode train --domain math --train-dataset gsm8k
+
+    # 평가 모드
+    python main.py --mode eval --method baseline --domain math --eval-dataset gsm8k
 """
 import sys
 import json
@@ -29,7 +33,7 @@ from datetime import datetime
 from typing import Dict, Optional, List
 
 
-# 프로젝트 루트를 path에 추가
+# 프로젝트 루트를 Python 경로에 추가
 sys.path.insert(0, str(Path(__file__).parent))
 
 from design_modules.analysis import InstructionalAnalysis
@@ -57,17 +61,30 @@ from utils.dataset_enhancer import DataEnhancer, ENHANCED_INSTRUCTION_TEMPLATE
 
 
 class IDMASPipeline:
-    """
-    ID-MAS Iterative Scaffolding Pipeline with LangGraph (Research Proposal Based)
+    """ID-MAS 학습 파이프라인 클래스.
 
-    Each training dataset (GSM8K, MATH) has its own Instructional Goal
-    and is trained separately using LangGraph StateGraph.
+    LangGraph StateGraph 기반의 Iterative Scaffolding 파이프라인을 구현합니다.
+    각 학습 데이터셋(GSM8K, MATH 등)은 고유한 Instructional Goal을 가지며
+    별도로 학습됩니다.
 
-    Features:
-    - LangGraph based workflow management
-    - Iterative scaffolding with teacher guidance
-    - Built-in checkpointing support
-    - Per-question progress tracking
+    Attributes:
+        domain: 도메인명 (예: "math", "logical", "commonsense")
+        train_dataset: 학습 데이터셋명 (예: "gsm8k", "math")
+        student_model_name: 학생 모델 이름
+        teacher_config: 교사 모델 설정 딕셔너리
+        instructional_goal: 데이터셋별 학습 목표
+        loader: 도메인 데이터 로더
+        answer_extractor: 답변 추출기
+        graph_runner: LangGraph 파이프라인 실행기
+
+    Example:
+        >>> pipeline = IDMASPipeline(
+        ...     domain="math",
+        ...     train_dataset="gsm8k",
+        ...     student_model_name="Qwen/Qwen2.5-3B-Instruct"
+        ... )
+        >>> design_result = pipeline.run_design_phase()
+        >>> learning_result = pipeline.run_learning_phase(design_result)
     """
 
     def __init__(
@@ -79,14 +96,15 @@ class IDMASPipeline:
         resume: bool = False,
         checkpoint_interval: int = 10
     ):
-        """
+        """IDMASPipeline 인스턴스를 초기화합니다.
+
         Args:
-            domain: Domain name (e.g., "math")
-            train_dataset: Training dataset name (e.g., "gsm8k", "math")
-            student_model_name: Student model name (None for default)
-            teacher_config: Teacher model configuration (None for default OpenAI model)
-            resume: Whether to resume from checkpoint
-            checkpoint_interval: Save checkpoint every N questions (default: 10)
+            domain: 도메인명 (예: "math", "logical", "commonsense")
+            train_dataset: 학습 데이터셋명 (예: "gsm8k", "math")
+            student_model_name: 학생 모델명. None이면 기본 모델 사용
+            teacher_config: 교사 모델 설정. None이면 기본 OpenAI 모델 사용
+            resume: 체크포인트에서 이어서 학습할지 여부
+            checkpoint_interval: 체크포인트 저장 간격 (문제 수 기준)
         """
         self.domain = domain.lower()
         self.train_dataset = train_dataset.lower()
@@ -95,31 +113,31 @@ class IDMASPipeline:
         self.checkpoint_interval = checkpoint_interval
         self.resume = resume
 
-        # Identifier for design files (domain_dataset)
+        # 설계 파일용 식별자 (domain_dataset 형식)
         self.identifier = f"{self.domain}_{self.train_dataset}"
 
-        # Model short name for file naming (e.g., "Qwen3-4B-Instruct-2507")
+        # 파일명용 모델 약칭 (예: "Qwen3-4B-Instruct-2507")
         self.model_short = get_model_short_name(self.student_model_name)
 
-        # Teacher model name for state (정의를 먼저 해야 get_instructional_goal에서 사용 가능)
+        # 교사 모델명 (Instructional Goal 로딩에 필요하므로 먼저 정의)
         self.teacher_model_name = teacher_config.get('model', DEFAULT_TEACHER_MODEL) if teacher_config else DEFAULT_TEACHER_MODEL
 
-        # Get Instructional Goal from design JSON (None if not generated yet)
+        # 설계 JSON에서 Instructional Goal 로드 (미생성 시 None)
         self.instructional_goal = get_instructional_goal(self.train_dataset, teacher_model=self.teacher_model_name)
 
-        # Domain loader
+        # 도메인 데이터 로더 초기화
         self.loader = DomainLoader(domain)
 
-        # Answer extractor based on domain
+        # 도메인 기반 답변 추출기 초기화
         self.answer_extractor = get_extractor(self.loader.answer_type)
 
-        # Design modules (use teacher_config for design modules)
+        # 교수설계 모듈 초기화 (교사 모델 사용)
         self.instructional_goal_gen = InstructionalGoalGenerator(teacher_config)
         self.analysis = InstructionalAnalysis(teacher_config)
         self.objectives = PerformanceObjectives(teacher_config)
         self.rubric_dev = RubricDevelopment(teacher_config)
 
-        # Model-specific directories (new structure: data/{domain}/train/{teacher_model}/{student_model}/)
+        # 모델별 디렉토리 설정 (data/{domain}/train/{teacher}/{student}/)
         self.model_dirs = get_domain_data_dirs(
             domain,
             self.student_model_name,
@@ -131,11 +149,11 @@ class IDMASPipeline:
         self.raw_data_dir = self.model_dirs["raw_data_dir"]
         self.design_dir = self.model_dirs["design_dir"]
 
-        # Student and Teacher models for pipeline
+        # 파이프라인용 학생/교사 모델 초기화
         self.student_model = StudentModel(model_name=self.student_model_name)
         self.teacher_model = TeacherModel(teacher_config)
 
-        # Initialize LangGraph Runner
+        # LangGraph 파이프라인 실행기 초기화
         self.graph_runner = IDMASGraphRunner(
             student_model=self.student_model,
             teacher_model=self.teacher_model,
@@ -148,21 +166,39 @@ class IDMASPipeline:
         learning_objective: Optional[str] = None,
         regenerate_instructional_goal: bool = False
     ) -> Dict:
-        """
-        교수 설계 단계 실행
+        """교수설계 단계를 실행합니다.
+
+        Dick & Carey 모델 기반의 5단계 교수설계를 수행합니다:
+        - Step 0: Instructional Goal 생성 (샘플 기반)
+        - Step 1: 학습 목표 설정
+        - Step 2: 교수 분석 (서브스킬 추출)
+        - Step 3: 수행목표 진술
+        - Step 4: 루브릭 개발
 
         Args:
-            learning_objective: 학습 목표 (None이면 데이터셋별 Instructional Goal 사용)
-            regenerate_instructional_goal: Instructional Goal 재생성 여부
+            learning_objective: 커스텀 학습 목표. None이면 자동 생성된
+                Instructional Goal 사용
+            regenerate_instructional_goal: True면 기존 Goal이 있어도 재생성
 
         Returns:
-            설계 결과 딕셔너리
+            설계 결과 딕셔너리. 키:
+            - domain: 도메인명
+            - train_dataset: 데이터셋명
+            - instructional_goal: 생성된 학습 목표
+            - instructional_analysis: 교수 분석 결과
+            - performance_objectives: 수행목표 목록
+            - rubrics: 루브릭 정보
+            - timestamp: 생성 시각
+
+        Raises:
+            RuntimeError: 교사 모델 호출 실패 시 (3회 재시도 후)
+            SystemExit: 치명적 오류 발생 시 프로그램 종료
         """
         print("\n" + "=" * 60)
         print("INSTRUCTIONAL DESIGN PHASE")
         print("=" * 60)
 
-        # [Step 0] Instructional Goal Generation
+        # [Step 0] Instructional Goal 생성
         instructional_goal_metadata = None
         samples_path = self.raw_data_dir / f"{self.train_dataset}_samples.json"
 
@@ -173,7 +209,7 @@ class IDMASPipeline:
                 train_samples = json.load(f)
             print(f"  Loaded {len(train_samples)} samples from {samples_path.name}")
 
-            # Teacher Model로 Instructional Goal 생성 (3번 재시도, 실패 시 종료)
+            # 교사 모델로 Instructional Goal 생성 (최대 3회 재시도)
             try:
                 instructional_goal_result = self.instructional_goal_gen.generate(
                     train_samples=train_samples,
@@ -186,7 +222,7 @@ class IDMASPipeline:
                 print(f"  Generated: {self.instructional_goal[:80]}...")
 
             except RuntimeError as e:
-                # 3번 재시도 후 실패 → 프로그램 종료
+                # 3회 재시도 실패 시 프로그램 종료
                 print(f"\n[FATAL] {e}")
                 print(f"Please check:")
                 print(f"  1. Teacher model availability")
@@ -195,7 +231,7 @@ class IDMASPipeline:
                 sys.exit(1)
 
             except Exception as e:
-                # 기타 예외 → 프로그램 종료 (fallback 없음)
+                # 예상치 못한 예외 발생 시 프로그램 종료
                 print(f"\n[FATAL] Unexpected error during Instructional Goal generation: {e}")
                 sys.exit(1)
 
@@ -206,12 +242,12 @@ class IDMASPipeline:
             if not self.instructional_goal:
                 print(f"  Instructional Goal: Not generated yet")
         else:
-            # 기존 design JSON에서 로드된 경우
+            # 기존 설계 JSON에서 로드된 경우
             if self.instructional_goal:
                 print(f"\n[Step 0] Instructional Goal (loaded from design JSON)")
                 print(f"  {self.instructional_goal[:80]}...")
 
-        # [Step 1] 학습 목표 설정 (데이터셋별 Instructional Goal 사용)
+        # [Step 1] 학습 목표 설정
         if learning_objective is None:
             if not self.instructional_goal:
                 print(f"\n[FATAL] Instructional Goal not found for {self.train_dataset}.")
@@ -222,14 +258,14 @@ class IDMASPipeline:
         print(f"\n[Step 1] Learning Objective (Instructional Goal for {self.train_dataset.upper()})")
         print(f"  {learning_objective}")
 
-        # Design Phase Steps (2-4) with RuntimeError handling
+        # [Step 2-4] 교수설계 단계 실행 (RuntimeError 처리 포함)
         try:
-            # 2. 교수 분석
+            # Step 2: 교수 분석
             print(f"\n[Step 2] Instructional Analysis")
             analysis_result = self.analysis.analyze(learning_objective, max_retries=3)
             print(f"  Analysis completed")
 
-            # 3. 수행목표 진술
+            # Step 3: 수행목표 진술
             print(f"\n[Step 3] Performance Objectives")
             objectives_result = self.objectives.generate_objectives(
                 analysis_result["raw_output"],
@@ -237,11 +273,9 @@ class IDMASPipeline:
             )
             print(f"  Generated {len(objectives_result['performance_objectives'])} objectives")
 
-            # 4. 루브릭 개발 (Essay 평가용)
+            # Step 4: 루브릭 개발
             print(f"\n[Step 4] Rubric Development")
-
-            # output_type 결정 로직 (Default for math domain)
-            output_type = "explanatory_text"
+            output_type = "explanatory_text"  # 수학 도메인 기본값
 
             rubric = self.rubric_dev.generate_rubric(
                 task_description=self.instructional_goal,
@@ -260,7 +294,7 @@ class IDMASPipeline:
             print(f"  2. Network connection (if using API)")
             sys.exit(1)
 
-        # 설계 결과 저장
+        # 설계 결과 구성
         design_result = {
             "domain": self.domain,
             "train_dataset": self.train_dataset,
@@ -274,7 +308,7 @@ class IDMASPipeline:
             "timestamp": datetime.now().isoformat()
         }
 
-        # 파일 저장
+        # 설계 결과 JSON 파일로 저장
         output_dir = get_design_output_dir(self.domain, self.teacher_model_name)
         output_path = output_dir / f"{self.identifier}_design.json"
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -286,25 +320,32 @@ class IDMASPipeline:
         return design_result
 
     def generate_enhanced_data(self, design_result: Dict) -> Path:
-        """
-        Design 결과를 기반으로 Enhanced Training Data 생성
+        """설계 결과 기반 Enhanced Training Data를 생성합니다.
 
-        중요: instruction 필드는 원본을 유지합니다.
-        - SFT 학습 시 모델은 원본 instruction만 보고 학습
-        - Enhanced instruction은 _enhanced_instruction 메타데이터로 저장 (참조용)
-        - 이를 통해 train-test mismatch 방지
+        원본 학습 데이터의 instruction을 Instructional Goal과 Task Analysis가
+        포함된 enhanced instruction으로 교체합니다.
+
+        출력 필드:
+        - instruction: 강화된 지시문 (원본 + 학습목표 + 과제분석)
+        - input: 원본 유지
+        - output: 원본 유지
+        - metadata: 원본 유지
 
         Args:
-            design_result: run_design_phase()의 결과
+            design_result: run_design_phase()에서 반환된 설계 결과
 
         Returns:
-            생성된 enhanced data 파일 경로
+            생성된 enhanced data 파일 경로 (Path 객체)
+
+        Raises:
+            ValueError: Instructional Goal이 설계 결과에 없을 때
+            FileNotFoundError: 원본 학습 데이터 파일이 없을 때
         """
         print("\n" + "=" * 60)
         print("ENHANCED DATA GENERATION")
         print("=" * 60)
 
-        # 1. 학습목표와 과제분석 추출
+        # 1. 설계 결과에서 학습목표와 과제분석 추출
         instructional_goal = design_result.get("instructional_goal", "")
         task_analysis = design_result.get("instructional_analysis", {}).get("raw_output", "")
 
@@ -317,7 +358,7 @@ class IDMASPipeline:
         print(f"\n[Step 2] Using Task Analysis")
         print(f"  {len(task_analysis)} characters")
 
-        # 2. 소스 데이터 로드
+        # 2. 원본 학습 데이터 로드
         source_path = self.raw_data_dir / f"{self.train_dataset}_train.json"
         if not source_path.exists():
             raise FileNotFoundError(f"Training data not found: {source_path}")
@@ -326,29 +367,30 @@ class IDMASPipeline:
             data = json.load(f)
         print(f"\n[Step 3] Loaded {len(data)} records from {source_path.name}")
 
-        # 3. 메타데이터 추가 (instruction은 원본 유지)
-        print(f"\n[Step 4] Adding enhancement metadata...")
+        # 3. Enhanced instruction으로 교체
+        print(f"\n[Step 4] Enhancing instructions...")
         enhanced_data = []
         for item in data:
-            new_item = item.copy()
             original_instruction = item.get("instruction", "")
 
-            # Enhanced instruction 생성 (메타데이터용)
+            # Enhanced instruction 템플릿 적용
             enhanced_instruction = ENHANCED_INSTRUCTION_TEMPLATE.format(
                 original_instruction=original_instruction,
                 instructional_goal=instructional_goal,
                 task_analysis=task_analysis
             )
 
-            # instruction은 원본 유지, enhanced version은 메타데이터로만 저장
-            new_item["_enhanced"] = True
-            new_item["_instructional_goal"] = instructional_goal
-            new_item["_task_analysis"] = task_analysis
-            new_item["_enhanced_instruction"] = enhanced_instruction
+            # 4개 필드만 유지
+            new_item = {
+                "instruction": enhanced_instruction,
+                "input": item.get("input", ""),
+                "output": item.get("output", ""),
+                "metadata": item.get("metadata", {})
+            }
 
             enhanced_data.append(new_item)
 
-        # 4. 저장
+        # 4. 파일 저장
         teacher_suffix = get_model_short_name(self.teacher_model_name)
         student_suffix = get_model_short_name(self.student_model_name)
         output_path = self.raw_data_dir / f"{self.train_dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
@@ -370,18 +412,31 @@ class IDMASPipeline:
         num_questions: Optional[int] = None,
         resume: bool = False
     ) -> Dict:
-        """
-        LangGraph 기반 Iterative Scaffolding Pipeline 실행
+        """LangGraph 기반 Iterative Scaffolding 학습을 실행합니다.
+
+        6단계 파이프라인:
+        1. 학생 모델 초기 응답 생성
+        2. 교사 모델 PO 평가 (소크라테스식 질문)
+        3. 스캐폴딩 아티팩트 생성
+        4. 학생 재응답
+        5. 응답 재구성 (Case A/B/C)
+        6. SFT 데이터 생성
 
         Args:
-            design_result: 설계 결과
-            num_questions: 학습할 질문 개수 (None이면 전체)
-            resume: 기존 로그에서 이어서 학습할지 여부
+            design_result: run_design_phase()에서 반환된 설계 결과
+            num_questions: 학습할 문제 수. None이면 전체
+            resume: True면 기존 로그에서 이어서 학습
 
         Returns:
-            학습 결과 딕셔너리
+            학습 결과 딕셔너리. 키:
+            - total_questions: 전체 문제 수
+            - scaffolding_processed: 스캐폴딩 처리된 문제 수
+            - scaffolding_correct: 정답 처리된 문제 수
+            - sft_case_a: Case A SFT 데이터 수
+            - sft_data_count: 총 SFT 데이터 수
+            - sft_data_path: SFT 데이터 저장 경로
         """
-        # Enhanced data 로드 (항상 enhanced data 사용)
+        # Enhanced 학습 데이터 로드
         teacher_suffix = get_model_short_name(self.teacher_model_name)
         student_suffix = get_model_short_name(self.student_model_name)
 
@@ -397,7 +452,7 @@ class IDMASPipeline:
         )
         print(f"\nLoaded {len(questions)} enhanced training questions")
 
-        # Prepare question data (new field names: id, instruction, input, output)
+        # 질문 데이터 준비 (새 필드명: id, instruction, input, output)
         question_data = []
         for q in questions:
             question_data.append({
@@ -408,7 +463,7 @@ class IDMASPipeline:
                 'problem_text': self.loader.format_question_as_prompt(q),
             })
 
-        # Run LangGraph pipeline
+        # LangGraph 파이프라인 실행
         thread_id = f"{self.domain}_{self.train_dataset}_{self.model_short}"
 
         final_state = self.graph_runner.run(
@@ -428,7 +483,7 @@ class IDMASPipeline:
             resume=resume,
         )
 
-        # Extract statistics
+        # 통계 추출
         stats = get_statistics(final_state)
 
         learning_results = {
@@ -447,7 +502,7 @@ class IDMASPipeline:
             "timestamp": datetime.now().isoformat()
         }
 
-        # Save learning results summary to model directory
+        # 학습 결과 요약 저장
         summary_path = self.model_dir / f"{self.train_dataset}_train_summary_{self.model_short}.json"
         with open(summary_path, 'w', encoding='utf-8') as f:
             json.dump(learning_results, f, ensure_ascii=False, indent=2)
@@ -456,13 +511,30 @@ class IDMASPipeline:
 
 
 class IDMASEvaluator:
-    """
-    ID-MAS 평가 전용 클래스
+    """ID-MAS 평가 전용 클래스.
 
-    Evaluation Methods:
-    - baseline: Base model without any training
-    - sft: SFT fine-tuned model (HuggingFace Hub)
-    - sft_id-mas: SFT_ID-MAS fine-tuned model (HuggingFace Hub)
+    세 가지 평가 방법을 지원합니다:
+    - baseline: 파인튜닝 없는 기본 모델 평가
+    - sft: SFT 파인튜닝 모델 평가 (HuggingFace Hub)
+    - sft_id-mas: ID-MAS 방식 SFT 모델 평가 (HuggingFace Hub)
+
+    Attributes:
+        domain: 도메인명
+        eval_dataset: 평가 데이터셋명
+        student_model_name: 평가할 학생 모델명
+        eval_method: 평가 방법
+        loader: 도메인 데이터 로더
+        answer_extractor: 답변 추출기
+        student_model: 초기화된 학생 모델
+
+    Example:
+        >>> evaluator = IDMASEvaluator(
+        ...     domain="math",
+        ...     eval_dataset="gsm8k",
+        ...     eval_method="sft_id-mas"
+        ... )
+        >>> result = evaluator.evaluate()
+        >>> print(f"Accuracy: {result['accuracy']:.2%}")
     """
 
     def __init__(
@@ -472,25 +544,26 @@ class IDMASEvaluator:
         student_model_name: Optional[str] = None,
         eval_method: str = "baseline"
     ):
-        """
+        """IDMASEvaluator 인스턴스를 초기화합니다.
+
         Args:
-            domain: Domain name (예: "math")
-            eval_dataset: Evaluation dataset name
-            student_model_name: Student model name (None for default)
-            eval_method: Evaluation method ("baseline", "sft", "sft_id-mas")
+            domain: 도메인명 (예: "math", "logical", "commonsense")
+            eval_dataset: 평가 데이터셋명 (예: "gsm8k", "svamp")
+            student_model_name: 학생 모델명. None이면 기본 모델 사용
+            eval_method: 평가 방법. "baseline", "sft", "sft_id-mas" 중 하나
         """
         self.domain = domain.lower()
         self.eval_dataset = eval_dataset.lower()
         self.student_model_name = student_model_name or DEFAULT_STUDENT_MODEL
         self.eval_method = eval_method
 
-        # Domain loader
+        # 도메인 데이터 로더 초기화
         self.loader = DomainLoader(domain)
 
-        # Answer extractor based on domain
+        # 도메인 기반 답변 추출기 초기화
         self.answer_extractor = get_extractor(self.loader.answer_type)
 
-        # Initialize student model based on method
+        # 평가 방법에 따른 학생 모델 초기화
         use_sft = (eval_method == "sft")
         use_sft_idmas = (eval_method == "sft_id-mas")
 
@@ -501,11 +574,11 @@ class IDMASEvaluator:
             sft_domain=domain
         )
 
-        # Get model short name
+        # 파일명용 모델 약칭
         from config.config import get_model_short_name
         self.model_short = get_model_short_name(self.student_model_name)
 
-        # Eval results directory (new structure: data/{domain}/eval/{Model}/)
+        # 평가 결과 디렉토리 (data/{domain}/eval/{Model}/)
         self.model_dirs = get_domain_data_dirs(domain, self.student_model_name, self.eval_dataset, mode="eval")
         self.eval_results_dir = self.model_dirs["model_dir"]
 
@@ -514,17 +587,26 @@ class IDMASEvaluator:
         num_questions: Optional[int] = None,
         resume: bool = True
     ) -> Dict:
-        """
-        평가 실행
+        """평가를 실행합니다.
+
+        각 문제에 대해 학생 모델이 1회 응답을 생성하고,
+        답변 추출기로 정답 여부를 판단합니다.
 
         Args:
-            num_questions: 평가할 질문 개수 (None이면 전체)
-            resume: 기존 결과에서 이어서 평가할지 여부
+            num_questions: 평가할 문제 수. None이면 전체
+            resume: True면 기존 결과 파일에서 이어서 평가
 
         Returns:
-            평가 결과 딕셔너리
+            평가 결과 딕셔너리. 키:
+            - domain: 도메인명
+            - eval_dataset: 데이터셋명
+            - method: 평가 방법명
+            - total_questions: 전체 문제 수
+            - correct_count: 정답 수
+            - accuracy: 정확도 (0~1)
+            - question_results: 문제별 상세 결과 리스트
         """
-        # Method name for file naming
+        # 파일명용 방법명 매핑
         method_name_map = {
             "baseline": "Baseline",
             "sft": "SFT",
@@ -541,13 +623,13 @@ class IDMASEvaluator:
         print(f"  Student model: {self.student_model_name}")
         print(f"  Method: {method_name}")
 
-        # Load evaluation data
+        # 평가 데이터 로드
         questions = self.loader.load_eval_data(self.eval_dataset, limit=num_questions)
 
-        # Get appropriate extractor for evaluation dataset
+        # 데이터셋에 맞는 답변 추출기 획득
         eval_extractor = self._get_extractor_for_dataset(questions)
 
-        # 평가 결과 저장
+        # 평가 결과 초기화
         eval_results = {
             "domain": self.domain,
             "eval_dataset": self.eval_dataset,
@@ -560,11 +642,9 @@ class IDMASEvaluator:
         }
 
         correct_count = 0
-
-        # 결과 파일 경로 설정
         result_path = self.eval_results_dir / f"{self.eval_dataset}_eval_results-{method_name}.json"
 
-        # Resume 모드: 기존 결과 파일에서 완료된 문제 복원
+        # Resume 모드: 기존 결과에서 완료된 문제 복원
         processed_question_ids = set()
         restored_results = []
 
@@ -585,12 +665,11 @@ class IDMASEvaluator:
             else:
                 print("  No existing results found. Starting fresh.")
 
-        # 복원된 결과로 초기화
         eval_results["question_results"] = restored_results.copy()
 
-        # 각 문제에 대해 1회만 시도
+        # 문제별 평가 실행 (1회 시도)
         for i, question in enumerate(questions):
-            # Resume 모드에서 이미 처리된 질문은 스킵
+            # 이미 처리된 문제는 스킵
             if question.question_id in processed_question_ids:
                 continue
 
@@ -603,7 +682,7 @@ class IDMASEvaluator:
             ground_truth_clean = re.sub(r'\\boxed\{([^}]+)\}', r'\1', question.ground_truth)
             print(f"Ground Truth: {ground_truth_clean}")
 
-            # 학생 모델이 1회만 응답 생성
+            # 학생 모델 응답 생성
             print("\n[Student] Generating response...")
             student_response = self.student_model.generate_initial_response(
                 problem_text=problem_text
@@ -623,7 +702,7 @@ class IDMASEvaluator:
             else:
                 print(f"\n Incorrect. (Predicted: {predicted_answer}, Expected: {ground_truth_clean})")
 
-            # 결과 저장
+            # 문제 결과 저장
             question_result = {
                 "question_id": question.question_id,
                 "question": question.question,
@@ -633,16 +712,16 @@ class IDMASEvaluator:
                 "student_response": student_response
             }
 
-            # Add MCQ-specific fields
+            # 선택지 문제인 경우 추가 필드
             if question.choices:
                 question_result["choices"] = question.choices
 
             eval_results["question_results"].append(question_result)
 
-            # 점진적 저장
+            # 점진적 저장 (문제마다 저장)
             self._save_eval_results(eval_results, result_path, correct_count)
 
-        # 정확도 계산
+        # 최종 정확도 계산
         accuracy = correct_count / len(questions) if questions else 0
 
         print(f"\n{'=' * 60}")
@@ -667,7 +746,13 @@ class IDMASEvaluator:
         result_path: Path,
         correct_count: int
     ) -> None:
-        """평가 결과를 JSON 파일로 저장"""
+        """평가 결과를 JSON 파일로 저장합니다.
+
+        Args:
+            eval_results: 평가 결과 딕셔너리
+            result_path: 저장 경로
+            correct_count: 현재까지 정답 수
+        """
         evaluated = len(eval_results["question_results"])
         eval_results["evaluated_questions"] = evaluated
         eval_results["correct_count"] = correct_count
@@ -680,17 +765,35 @@ class IDMASEvaluator:
         self,
         questions: List[QuestionData]
     ) -> AnswerExtractor:
-        """Get appropriate answer extractor for a dataset."""
+        """데이터셋에 맞는 답변 추출기를 반환합니다.
+
+        Args:
+            questions: 질문 데이터 리스트
+
+        Returns:
+            해당 데이터셋의 답변 타입에 맞는 추출기
+        """
         if questions:
             return get_extractor(questions[0].answer_type)
         return self.answer_extractor
 
 
 def run_train_mode(args):
+    """학습 모드를 실행합니다.
+
+    설계 → Iterative Scaffolding 학습 → SFT 데이터 생성의
+    전체 파이프라인을 실행합니다.
+
+    Args:
+        args: argparse로 파싱된 CLI 인자. 필수 속성:
+            - domain: 도메인명
+            - train_dataset: 학습 데이터셋명
+            - student_model: 학생 모델명 (선택)
+            - teacher_model: 교사 모델명 (선택)
+            - resume: 이어서 학습 여부
+            - run_design: 설계 단계 강제 실행 여부
     """
-    학습 모드 실행 (설계 → Iterative Scaffolding 학습 → SFT 데이터 생성)
-    """
-    # Create teacher config from CLI argument
+    # CLI 인자에서 설정 생성
     teacher_model_name = args.teacher_model or DEFAULT_TEACHER_MODEL
     student_model_name = args.student_model or DEFAULT_STUDENT_MODEL
     teacher_config = create_teacher_config(teacher_model_name)
@@ -704,7 +807,7 @@ def run_train_mode(args):
     print(f"Teacher Model: {teacher_model_name}")
     print(f"Resume: {args.resume}")
 
-    # Teacher와 Student 모델이 동일한지 확인 (로컬 모델인 경우)
+    # 로컬 모델인 경우 Teacher/Student 동일 여부 확인
     is_local_teacher = not (
         teacher_model_name.startswith("gpt-") or
         teacher_model_name.startswith("o1") or
@@ -716,7 +819,7 @@ def run_train_mode(args):
 
     print(f"{'=' * 60}\n")
 
-    # Initialize pipeline with State Machine
+    # 파이프라인 초기화
     pipeline = IDMASPipeline(
         domain=args.domain,
         train_dataset=args.train_dataset,
@@ -732,12 +835,12 @@ def run_train_mode(args):
         print(f"Instructional Goal: Not generated yet")
         print(f"  Run with --run-design flag to generate Instructional Goal first.")
 
-    # 1. 교수 설계 단계
+    # 1. 교수설계 단계
     if not args.run_design:
         design_dir = get_design_output_dir(pipeline.domain, pipeline.teacher_model_name)
         design_path = design_dir / f"{pipeline.identifier}_design.json"
 
-        # Check legacy flat structure and migrate if needed
+        # 레거시 플랫 구조 확인 및 마이그레이션
         legacy_path = DATA_DIR / "design_outputs" / f"{pipeline.identifier}_design.json"
         if not design_path.exists() and legacy_path.exists():
             legacy_path.replace(design_path)
@@ -746,7 +849,6 @@ def run_train_mode(args):
         if not design_path.exists():
             print(f"Design file not found at {design_path}")
             print("Automatically generating new instructional design...")
-            # resume=False이면 Instructional Goal도 새로 생성
             design_result = pipeline.run_design_phase(
                 regenerate_instructional_goal=(not args.resume)
             )
@@ -755,13 +857,12 @@ def run_train_mode(args):
                 design_result = json.load(f)
             print(f"Loaded existing design from {design_path}")
     else:
-        # Run design phase
-        # resume=False이면 Instructional Goal도 새로 생성
+        # 설계 단계 강제 실행
         design_result = pipeline.run_design_phase(
             regenerate_instructional_goal=(not args.resume)
         )
 
-    # 2. Enhanced Data 확인 및 생성 (항상 enhanced data 사용)
+    # 2. Enhanced Data 확인 및 생성
     teacher_suffix = get_model_short_name(pipeline.teacher_model_name)
     student_suffix = get_model_short_name(pipeline.student_model_name)
     enhanced_path = pipeline.raw_data_dir / f"{pipeline.train_dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
@@ -769,7 +870,6 @@ def run_train_mode(args):
     if enhanced_path.exists() and args.resume:
         print(f"\n[Enhanced Data] Using existing enhanced data: {enhanced_path.name}")
     else:
-        # Enhanced data 생성
         pipeline.generate_enhanced_data(design_result)
 
     # 3. Iterative Scaffolding 학습 단계
@@ -785,7 +885,7 @@ def run_train_mode(args):
     print(f"SFT Data: {learning_result['sft_data_count']} entries")
     print(f"SFT Path: {learning_result['sft_data_path']}")
 
-    # ModelCache 상태 출력
+    # 모델 캐시 상태 출력
     loaded_models = ModelCache.get_loaded_models()
     if loaded_models:
         print(f"\n[Model Cache] Loaded models: {len(loaded_models)}")
@@ -796,8 +896,17 @@ def run_train_mode(args):
 
 
 def run_eval_mode(args):
-    """
-    평가 모드 실행 (Baseline, SFT, SFT_ID-MAS)
+    """평가 모드를 실행합니다.
+
+    Baseline, SFT, SFT_ID-MAS 세 가지 방법으로 평가합니다.
+
+    Args:
+        args: argparse로 파싱된 CLI 인자. 필수 속성:
+            - domain: 도메인명
+            - eval_dataset: 평가 데이터셋명
+            - method: 평가 방법
+            - student_model: 학생 모델명 (선택)
+            - eval_resume: 이어서 평가 여부
     """
     print(f"\n{'=' * 60}")
     print(f"ID-MAS: EVAL MODE ({args.method.upper()})")
@@ -808,7 +917,7 @@ def run_eval_mode(args):
     print(f"Model: {args.student_model or DEFAULT_STUDENT_MODEL}")
     print(f"{'=' * 60}\n")
 
-    # Initialize evaluator
+    # 평가기 초기화
     evaluator = IDMASEvaluator(
         domain=args.domain,
         eval_dataset=args.eval_dataset,
@@ -829,6 +938,11 @@ def run_eval_mode(args):
 
 
 def main():
+    """CLI 진입점 함수.
+
+    argparse를 사용하여 명령줄 인자를 파싱하고
+    적절한 모드(train/eval)를 실행합니다.
+    """
     parser = argparse.ArgumentParser(
         description="ID-MAS: Instructional Design Multi-Agent System (Iterative Scaffolding Pipeline)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -884,69 +998,70 @@ Examples:
         """
     )
 
-    # Mode selection (required)
+    # 모드 선택 (필수)
     parser.add_argument(
         "--mode",
         type=str,
         required=True,
         choices=["train", "eval"],
-        help="Execution mode: 'train' (learning) or 'eval' (evaluation)"
+        help="실행 모드: 'train'(학습) 또는 'eval'(평가)"
     )
 
     # ========================================
-    # Train mode options
+    # 학습 모드 옵션
     # ========================================
     parser.add_argument(
         "--domain",
         type=str,
         choices=get_available_domains(),
-        help="Domain name (e.g., 'math'). Required for all modes."
+        help="도메인명 (예: 'math'). 모든 모드에서 필수"
     )
-    # Get all available training datasets across all domains
+
+    # 전체 도메인의 학습 데이터셋 수집
     all_train_datasets = sorted(set(ds for datasets in TRAINING_DATASETS.values() for ds in datasets))
     parser.add_argument(
         "--train-dataset",
         type=str,
         choices=all_train_datasets,
-        help="Training dataset. Required for train mode."
+        help="학습 데이터셋. 학습 모드에서 필수"
     )
     parser.add_argument(
         "--run-design",
         action="store_true",
-        help="Run design phase to generate new instructional design. By default, loads existing design if available. Train mode only."
+        help="설계 단계 실행 (기존 설계가 있어도 새로 생성). 학습 모드 전용"
     )
     parser.add_argument(
         "--resume",
         type=str,
         default="True",
         choices=["True", "False"],
-        help="Resume training from checkpoint. Train mode only. (default: True)"
+        help="체크포인트에서 이어서 학습. 학습 모드 전용 (기본값: True)"
     )
 
     # ========================================
-    # Eval mode options
+    # 평가 모드 옵션
     # ========================================
     parser.add_argument(
         "--method",
         type=str,
         choices=["baseline", "sft", "sft_id-mas"],
-        help="Evaluation method: 'baseline', 'sft', or 'sft_id-mas'. Eval mode only."
+        help="평가 방법. 평가 모드에서 필수"
     )
     parser.add_argument(
         "--eval-dataset",
         type=str,
-        help="Evaluation dataset. Required for eval mode."
+        help="평가 데이터셋. 평가 모드에서 필수"
     )
     parser.add_argument(
         "--eval-resume",
         type=str,
         default="True",
         choices=["True", "False"],
-        help="Resume evaluation from existing results. Eval mode only. (default: True)"
+        help="기존 결과에서 이어서 평가. 평가 모드 전용 (기본값: True)"
     )
 
     # ========================================
-    # Common options
+    # 공통 옵션
     # ========================================
     parser.add_argument(
         "--student-model",
@@ -954,7 +1069,7 @@ Examples:
         default=None,
         choices=AVAILABLE_STUDENT_MODELS,
         dest="student_model",
-        help=f"Student model to use. Default: {DEFAULT_STUDENT_MODEL}"
+        help=f"학생 모델. 기본값: {DEFAULT_STUDENT_MODEL}"
     )
     parser.add_argument(
         "--teacher-model",
@@ -962,79 +1077,78 @@ Examples:
         default=None,
         choices=AVAILABLE_TEACHER_MODELS,
         dest="teacher_model",
-        help=f"Teacher model for instructional design and evaluation. "
-             f"Default: {DEFAULT_TEACHER_MODEL}"
+        help=f"교사 모델 (설계 및 평가용). 기본값: {DEFAULT_TEACHER_MODEL}"
     )
 
     args = parser.parse_args()
 
     # ========================================
-    # Validation
+    # 인자 검증
     # ========================================
 
     if args.mode == "train":
-        # Train mode validation
+        # 학습 모드 검증
         if not args.domain:
-            parser.error("--domain is required for train mode")
+            parser.error("--domain은 학습 모드에서 필수입니다")
         if not args.train_dataset:
-            parser.error("--train-dataset is required for train mode")
+            parser.error("--train-dataset은 학습 모드에서 필수입니다")
 
-        # Validate train-dataset belongs to selected domain
+        # 선택한 도메인에서 학습 데이터셋 유효성 검증
         available_train = get_training_datasets_for_domain(args.domain)
         if args.train_dataset not in available_train:
             parser.error(
-                f"--train-dataset '{args.train_dataset}' is not available for {args.domain} domain. "
-                f"Available: {available_train}"
+                f"--train-dataset '{args.train_dataset}'은(는) {args.domain} 도메인에서 "
+                f"사용할 수 없습니다. 가능한 데이터셋: {available_train}"
             )
 
-        # Check for invalid options in train mode
+        # 학습 모드에서 사용할 수 없는 옵션 검증
         if args.method:
-            parser.error("--method is not allowed in train mode")
+            parser.error("--method는 학습 모드에서 사용할 수 없습니다")
         if args.eval_dataset:
-            parser.error("--eval-dataset is not allowed in train mode")
+            parser.error("--eval-dataset은 학습 모드에서 사용할 수 없습니다")
 
-        # Convert --resume string to boolean
+        # --resume 문자열을 boolean으로 변환
         args.resume = args.resume == "True"
 
-        # Run train mode
+        # 학습 모드 실행
         run_train_mode(args)
 
     elif args.mode == "eval":
-        # Eval mode validation
+        # 평가 모드 검증
         if not args.method:
-            parser.error("--method is required for eval mode")
+            parser.error("--method는 평가 모드에서 필수입니다")
         if not args.eval_dataset:
-            parser.error("--eval-dataset is required for eval mode")
+            parser.error("--eval-dataset은 평가 모드에서 필수입니다")
         if not args.domain:
-            parser.error("--domain is required for eval mode")
+            parser.error("--domain은 평가 모드에서 필수입니다")
 
-        # Check for invalid options in eval mode
+        # 평가 모드에서 사용할 수 없는 옵션 검증
         if args.train_dataset:
-            parser.error("--train-dataset is not allowed in eval mode")
+            parser.error("--train-dataset은 평가 모드에서 사용할 수 없습니다")
         if args.run_design:
-            parser.error("--run-design is not allowed in eval mode")
+            parser.error("--run-design은 평가 모드에서 사용할 수 없습니다")
 
-        # Validate eval-dataset belongs to domain
+        # 선택한 도메인에서 평가 데이터셋 유효성 검증
         available_eval = get_eval_datasets_for_domain(args.domain)
         if args.eval_dataset not in available_eval:
             parser.error(
-                f"--eval-dataset '{args.eval_dataset}' is not available for {args.domain} domain. "
-                f"Available: {available_eval}"
+                f"--eval-dataset '{args.eval_dataset}'은(는) {args.domain} 도메인에서 "
+                f"사용할 수 없습니다. 가능한 데이터셋: {available_eval}"
             )
 
-        # Validate model is supported for SFT/SFT_ID-MAS
+        # SFT/SFT_ID-MAS 모델 지원 여부 검증
         if args.method in ["sft", "sft_id-mas"]:
             model_to_check = args.student_model or DEFAULT_STUDENT_MODEL
             if model_to_check not in MODEL_NAME_TO_SHORT:
                 parser.error(
-                    f"Model '{model_to_check}' is not supported for {args.method.upper()} evaluation.\n"
-                    f"Supported models: {list(MODEL_NAME_TO_SHORT.keys())}"
+                    f"모델 '{model_to_check}'은(는) {args.method.upper()} 평가를 지원하지 않습니다.\n"
+                    f"지원 모델: {list(MODEL_NAME_TO_SHORT.keys())}"
                 )
 
-        # Convert --eval-resume string to boolean
+        # --eval-resume 문자열을 boolean으로 변환
         args.eval_resume = args.eval_resume == "True"
 
-        # Run eval mode
+        # 평가 모드 실행
         run_eval_mode(args)
 
 

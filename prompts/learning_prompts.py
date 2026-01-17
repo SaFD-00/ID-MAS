@@ -1,15 +1,47 @@
-"""
-Iterative Scaffolding Pipeline Prompts
+"""학습 파이프라인 프롬프트 모듈.
 
-Scaffolding - Iterative Response Generation with Teacher Guidance
-- Initial response generation
-- Iterative scaffolding with Socratic questions (max 5 iterations)
-- Case B: Reconstruction after max iterations
+이 모듈은 ID-MAS의 반복적 스캐폴딩 학습 파이프라인에서 사용하는
+모든 프롬프트 템플릿을 정의합니다. 교사 모델의 지도 하에 학생 모델이
+단계적으로 문제 해결 능력을 향상시키는 ReAct 스타일 학습 루프를 지원합니다.
+
+프롬프트 카테고리:
+    스캐폴딩 시스템:
+        - SCAFFOLDING_SYSTEM_PROMPT: 학생 모델 시스템 프롬프트
+        - ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT: 반복 학습용 시스템 프롬프트
+
+    교사 개입:
+        - TEACHER_INTERVENTION_PROMPT: 수행목표 평가 및 소크라테스식 질문
+        - INITIAL_HINT_PROMPT: 첫 번째 힌트 제공
+        - PROGRESSIVE_HINT_PROMPT: 점진적 힌트 제공
+        - SCAFFOLDING_ARTIFACT_PROMPT: 스캐폴딩 아티팩트 생성
+
+    학생 응답:
+        - STUDENT_SOCRATIC_RESPONSE_PROMPT: 소크라테스식 질문에 대한 응답
+        - STUDENT_WITH_HINT_PROMPT: 힌트 기반 응답
+        - STUDENT_WITH_ARTIFACT_PROMPT: 스캐폴딩 아티팩트 기반 응답
+
+    결과 재구성:
+        - SUMMARY_RECONSTRUCTION_PROMPT: 실패 후 요약 및 재구성
+        - SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT: 성공 후 재구성
+        - TEACHER_FINAL_SOLUTION_PROMPT: 최종 해답 제공 (Case C)
+
+    유틸리티:
+        - SFT_OUTPUT_TEMPLATE: SFT 데이터 출력 형식
+        - CONVERSATION_SUMMARIZATION_PROMPT: 대화 요약
+
+학습 케이스:
+    Case A: 첫 시도에 정답 → 원본 응답 사용
+    Case B: 스캐폴딩 후 정답 → 성공 재구성
+    Case C: 최대 반복 후 실패 → 교사 해답 제공
 """
 
 
 # ==============================================================================
-# Scaffolding System Prompt
+# 스캐폴딩 시스템 프롬프트 (Scaffolding System Prompt)
+# ------------------------------------------------------------------------------
+# 학생 모델이 교수분석 결과에 따라 체계적으로 문제를 해결하도록
+# 안내하는 시스템 프롬프트입니다. Instructional Goal과 Task Analysis를
+# 기반으로 추론 과정을 구조화합니다.
 # ==============================================================================
 
 SCAFFOLDING_SYSTEM_PROMPT = """The purpose of your response is to demonstrate the attainment of the Instructional Goal: {instructional_goal}
@@ -37,7 +69,12 @@ Answer: [your final answer]
 
 
 # ==============================================================================
-# Teacher Intervention Prompt (ReAct-style with Socratic Questions)
+# 교사 개입 프롬프트 (Teacher Intervention Prompt)
+# ------------------------------------------------------------------------------
+# ReAct 스타일 학습 루프에서 교사 모델이 학생 응답을 평가하고
+# 소크라테스식 질문을 통해 학습을 안내합니다. 정답을 직접 알려주지 않고
+# 추론 과정을 개선하도록 유도합니다.
+# 출력: performance_evaluation, overall_assessment JSON
 # ==============================================================================
 
 TEACHER_INTERVENTION_PROMPT = """You are a teacher supporting the learning of a student.
@@ -107,7 +144,10 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 
 
 # ==============================================================================
-# Student Response to Socratic Questions
+# 소크라테스식 질문에 대한 학생 응답 프롬프트
+# ------------------------------------------------------------------------------
+# 교사의 평가와 소크라테스식 질문을 받은 학생 모델이
+# 피드백을 반영하여 개선된 응답을 생성합니다.
 # ==============================================================================
 
 STUDENT_SOCRATIC_RESPONSE_PROMPT = """You are a student learning to solve problems with teacher guidance.
@@ -146,7 +186,10 @@ Answer: [your final answer]
 
 
 # ==============================================================================
-# SFT Data Output Format Template
+# SFT 데이터 출력 형식 템플릿
+# ------------------------------------------------------------------------------
+# 최종 SFT 학습 데이터의 output 필드 형식을 정의합니다.
+# 문제 해결 전략과 최종 답변을 포함합니다.
 # ==============================================================================
 
 SFT_OUTPUT_TEMPLATE = """Problem-solving strategy and flow:
@@ -157,7 +200,15 @@ Answer: {answer}
 
 
 # ==============================================================================
-# Iterative Scaffolding Prompts
+# 반복적 스캐폴딩 프롬프트 (Iterative Scaffolding Prompts)
+# ------------------------------------------------------------------------------
+# 학생이 문제를 풀지 못할 때 점진적으로 더 구체적인 힌트를 제공합니다.
+# 반복 횟수에 따라 힌트의 수준이 달라집니다:
+# - 1회차: 개념적 방향 제시
+# - 2회차: 구체적 오류 지적
+# - 3회차: 부분적 예시 제공
+# - 4회차: 더 완전한 예시 제공
+# - 5회차: 거의 완성된 가이드 제공
 # ==============================================================================
 
 INITIAL_HINT_PROMPT = """You are a teacher providing the first hint to help a student solve a problem.
@@ -188,6 +239,7 @@ Start with a brief encouragement, then provide:
 """
 
 
+# 점진적 힌트 프롬프트 - 반복 횟수에 따라 힌트 수준 조절
 PROGRESSIVE_HINT_PROMPT = """You are a teacher providing a follow-up hint to a student who hasn't solved the problem yet.
 
 [Problem]
@@ -225,6 +277,7 @@ Analyze what went wrong in their last attempt and address that specifically.
 """
 
 
+# 요약 재구성 프롬프트 - 5회 시도 후 실패 시 학습 요약 및 해답 재구성
 SUMMARY_RECONSTRUCTION_PROMPT = """You are a teacher summarizing a learning session where a student failed to solve a problem after 5 attempts.
 
 [Problem]
@@ -289,6 +342,7 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 """
 
 
+# 반복 스캐폴딩 시스템 프롬프트 - 교사 힌트 기반 학생 응답용
 ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT = """You are a student learning to solve problems with teacher guidance.
 
 [Task Analysis (Your Learning Framework)]
@@ -311,6 +365,7 @@ Answer: [your final answer]
 """
 
 
+# 힌트 기반 학생 응답 프롬프트 - 교사 힌트를 활용한 문제 풀이
 STUDENT_WITH_HINT_PROMPT = """Based on the teacher's guidance, solve this problem.
 
 [Problem]
@@ -323,6 +378,7 @@ Now solve the problem, incorporating the teacher's guidance. Show your thinking 
 """
 
 
+# 대화 요약 프롬프트 - 튜터링 세션의 핵심 내용 추출
 CONVERSATION_SUMMARIZATION_PROMPT = """You are a teacher analyzing a tutoring session where a student struggled with a problem.
 
 [Problem]
@@ -360,7 +416,11 @@ Do NOT include lengthy explanations. Be telegraphic and specific.
 
 
 # ==============================================================================
-# Successful Scaffolding Reconstruction Prompt (Case B)
+# 성공적 스캐폴딩 재구성 프롬프트 (Case B)
+# ------------------------------------------------------------------------------
+# 스캐폴딩을 통해 학생이 정답에 도달한 경우, 학습 과정을 통합하여
+# 깔끔한 SFT 학습 데이터로 재구성합니다. 스캐폴딩 과정의 명시적 언급 없이
+# 이상적인 학생의 응답 형태로 변환합니다.
 # ==============================================================================
 
 SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT = """You are an expert teacher reconstructing a successful learning outcome into clean SFT training data.
@@ -424,7 +484,12 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 
 
 # ==============================================================================
-# Scaffolding Artifact Generation Prompt (NEW - Replaces Socratic Questioning)
+# 스캐폴딩 아티팩트 생성 프롬프트
+# ------------------------------------------------------------------------------
+# Dick & Carey 모델 기반의 스캐폴딩 아티팩트를 생성합니다.
+# 실패한 수행목표에 대해 HOT/LOT 기술 유형에 따라
+# 적절한 스캐폴딩(전략 제안, 부분 예시, 소크라테스식 질문 등)을 설계합니다.
+# 학생이 다음 시도에서 참조할 수 있는 "Scaffolding DB"로 활용됩니다.
 # ==============================================================================
 
 SCAFFOLDING_ARTIFACT_PROMPT = """You are an instructional design expert (Dick & Carey model) creating a Scaffolding Artifact to help a student improve.
@@ -492,7 +557,10 @@ Output ONLY the JSON object above.
 
 
 # ==============================================================================
-# Student Response with Scaffolding Artifact Prompt (NEW)
+# 스캐폴딩 아티팩트 기반 학생 응답 프롬프트
+# ------------------------------------------------------------------------------
+# 교사가 준비한 스캐폴딩 정보를 활용하여 개선된 응답을 생성합니다.
+# 학생은 Scaffolding DB에서 어떤 정보를 활용했는지 명시해야 합니다.
 # ==============================================================================
 
 STUDENT_WITH_ARTIFACT_PROMPT = """You are a student learning to solve problems with scaffolding support.
@@ -539,7 +607,11 @@ Answer: [your final answer]
 
 
 # ==============================================================================
-# Teacher Final Solution Prompt (NEW - For Case C)
+# 교사 최종 해답 프롬프트 (Case C)
+# ------------------------------------------------------------------------------
+# 최대 반복 횟수 후에도 학생이 정답에 도달하지 못한 경우,
+# 교사가 완전한 해답을 제공합니다. 학생의 지속적인 약점을 직접 다루고
+# 각 단계가 왜 필요한지 설명하여 교육적 가치를 극대화합니다.
 # ==============================================================================
 
 TEACHER_FINAL_SOLUTION_PROMPT = """You are a teacher providing a complete, correct solution after the student failed to solve the problem after {max_iterations} attempts.

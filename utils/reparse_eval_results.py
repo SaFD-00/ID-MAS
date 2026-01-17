@@ -1,25 +1,30 @@
-"""
-Re-parse and Update Evaluation Results
+"""평가 결과 재분석 및 업데이트 모듈.
 
-This script re-parses student_response fields in eval_results JSON files
-using the updated extraction logic from answer_extractor.py, then updates:
-- predicted_answer
-- is_correct
-- correct_count
-- accuracy
+이 스크립트는 eval_results JSON 파일의 student_response 필드를
+answer_extractor.py의 업데이트된 추출 로직을 사용하여 재분석합니다.
 
-Usage:
-    # Full re-parse with backup
-    python utils/reparse_eval_results.py
+업데이트되는 항목:
+    - predicted_answer
+    - is_correct
+    - correct_count
+    - accuracy
 
-    # Dry-run mode (no modifications)
-    python utils/reparse_eval_results.py --dry-run
+주요 클래스:
+    ReparseResult: 단일 파일 재분석 결과
+    EvalResultsReparser: 평가 결과 재분석기
 
-    # Test on specific file
-    python utils/reparse_eval_results.py --file path/to/file.json
+사용 예시:
+    # 백업과 함께 전체 재분석
+    >>> python utils/reparse_eval_results.py
 
-    # Skip backup
-    python utils/reparse_eval_results.py --no-backup
+    # Dry-run 모드 (파일 수정 없음)
+    >>> python utils/reparse_eval_results.py --dry-run
+
+    # 특정 파일 테스트
+    >>> python utils/reparse_eval_results.py --file path/to/file.json
+
+    # 백업 건너뛰기
+    >>> python utils/reparse_eval_results.py --no-backup
 """
 
 import argparse
@@ -41,7 +46,7 @@ from utils.answer_extractor import get_extractor
 
 @dataclass
 class ReparseResult:
-    """Results from re-parsing a single file"""
+    """단일 파일 재분석 결과를 담는 데이터클래스."""
     filepath: Path
     total_questions: int
     no_change: int
@@ -71,18 +76,17 @@ class ReparseResult:
 
 
 class EvalResultsReparser:
-    """Re-parses evaluation results using updated extraction logic"""
+    """업데이트된 추출 로직을 사용하여 평가 결과를 재분석합니다."""
 
     def __init__(self, data_dir: Path, backup_dir: Optional[Path] = None,
                  dry_run: bool = False, skip_backup: bool = False):
-        """
-        Initialize the reparser.
+        """재분석기를 초기화합니다.
 
         Args:
-            data_dir: Root data directory (e.g., /path/to/ID-MAS/data)
-            backup_dir: Directory for backups (default: data_dir/backups/eval_results/{timestamp})
-            dry_run: If True, don't modify files
-            skip_backup: If True, skip creating backups
+            data_dir: 루트 데이터 디렉토리 (예: /path/to/ID-MAS/data)
+            backup_dir: 백업 디렉토리 (기본값: data_dir/backups/eval_results/{timestamp})
+            dry_run: True이면 파일을 수정하지 않음
+            skip_backup: True이면 백업 생성을 건너뜀
         """
         self.data_dir = Path(data_dir)
         self.dry_run = dry_run
@@ -95,14 +99,13 @@ class EvalResultsReparser:
             self.backup_dir = self.data_dir / "backups" / "eval_results" / timestamp
 
     def discover_eval_files(self, specific_file: Optional[Path] = None) -> List[Path]:
-        """
-        Discover all eval_results JSON files.
+        """모든 eval_results JSON 파일을 탐색합니다.
 
         Args:
-            specific_file: If provided, only process this file
+            specific_file: 제공되면 이 파일만 처리
 
         Returns:
-            List of paths to eval_results files
+            eval_results 파일 경로 리스트
         """
         if specific_file:
             # Convert to absolute path
@@ -133,14 +136,13 @@ class EvalResultsReparser:
         return sorted(eval_files)
 
     def create_backup(self, files: List[Path]) -> Dict:
-        """
-        Create backups of files before modification.
+        """수정 전 파일 백업을 생성합니다.
 
         Args:
-            files: List of files to backup
+            files: 백업할 파일 리스트
 
         Returns:
-            Manifest dictionary with file info and checksums
+            파일 정보와 체크섬이 포함된 매니페스트 딕셔너리
         """
         if self.skip_backup:
             print("Skipping backup (--no-backup flag)")
@@ -186,16 +188,15 @@ class EvalResultsReparser:
         return manifest
 
     def get_answer_type_for_file(self, filepath: Path) -> AnswerType:
-        """
-        Determine answer type from file path.
+        """파일 경로에서 답변 타입을 결정합니다.
 
-        Path pattern: data/{domain}/{model}/{dataset}/eval_results/{dataset}_eval_results-{method}.json
+        경로 패턴: data/{domain}/{model}/{dataset}/eval_results/{dataset}_eval_results-{method}.json
 
         Args:
-            filepath: Path to eval_results file
+            filepath: eval_results 파일 경로
 
         Returns:
-            AnswerType enum value
+            AnswerType 열거형 값
         """
         # Extract domain and dataset from path
         parts = filepath.parts
@@ -233,14 +234,13 @@ class EvalResultsReparser:
             return AnswerType.TEXT
 
     def reparse_file(self, filepath: Path) -> ReparseResult:
-        """
-        Re-parse a single eval_results file.
+        """단일 eval_results 파일을 재분석합니다.
 
         Args:
-            filepath: Path to eval_results JSON file
+            filepath: eval_results JSON 파일 경로
 
         Returns:
-            ReparseResult with statistics
+            통계가 포함된 ReparseResult
         """
         # Load file
         with open(filepath) as f:
@@ -335,14 +335,13 @@ class EvalResultsReparser:
         )
 
     def run(self, specific_file: Optional[Path] = None) -> List[ReparseResult]:
-        """
-        Run the re-parsing pipeline.
+        """재분석 파이프라인을 실행합니다.
 
         Args:
-            specific_file: If provided, only process this file
+            specific_file: 제공되면 이 파일만 처리
 
         Returns:
-            List of ReparseResult objects
+            ReparseResult 객체 리스트
         """
         print("="*80)
         print("Eval Results Re-parser")
@@ -394,14 +393,13 @@ class EvalResultsReparser:
         return results
 
     def generate_report(self, results: List[ReparseResult]) -> str:
-        """
-        Generate summary report.
+        """요약 보고서를 생성합니다.
 
         Args:
-            results: List of ReparseResult objects
+            results: ReparseResult 객체 리스트
 
         Returns:
-            Formatted report string
+            포맷팅된 보고서 문자열
         """
         if not results:
             return "No files processed"
@@ -463,7 +461,7 @@ class EvalResultsReparser:
 
 
 def main():
-    """Main entry point"""
+    """메인 진입점."""
     parser = argparse.ArgumentParser(
         description="Re-parse evaluation results using updated extraction logic"
     )

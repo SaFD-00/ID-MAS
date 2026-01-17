@@ -1,26 +1,30 @@
-"""
-Sample Data Extractor for Instructional Goal Generation
+"""샘플 데이터 추출기 모듈 - Instructional Goal 생성용.
 
-각 데이터셋에서 대표 샘플을 추출하여 Instructional Goal 생성에 사용.
-Design Phase 실행 전 미리 실행하여 샘플 파일 생성.
+이 모듈은 각 데이터셋에서 대표 샘플을 추출하여 Instructional Goal 생성에 사용합니다.
+Design Phase 실행 전 미리 실행하여 샘플 파일을 생성해야 합니다.
 
-Usage:
-    # 모든 데이터셋 샘플 추출
-    python -m utils.sample_extractor
+주요 함수:
+    extract_samples(): 데이터셋에서 샘플 추출
+    save_samples(): 추출된 샘플 저장
+    extract_all_samples(): 모든 데이터셋에서 샘플 추출
 
-    # 특정 데이터셋만 추출
-    python -m utils.sample_extractor --domain math --dataset math --num-samples 20
-
-    # 메타데이터 기반 계층적 샘플링 (stratified)
-    python -m utils.sample_extractor --domain math --dataset math --strategy stratified
-
-    # 길이 기반 다양성 샘플링 (diverse)
-    python -m utils.sample_extractor --domain math --dataset gsm8k --strategy diverse
-
-Sampling Strategy:
-    - stratified: 메타데이터(type > level) 기반 계층적 샘플링, 없으면 diverse로 fallback
+샘플링 전략:
+    - stratified: 메타데이터(type > level) 기반 계층적 샘플링
     - diverse: 길이 기반 다양성 샘플링 (short/medium/long 균등)
     - random: 랜덤 샘플링
+
+사용 예시:
+    # 모든 데이터셋 샘플 추출
+    >>> python -m utils.sample_extractor
+
+    # 특정 데이터셋만 추출
+    >>> python -m utils.sample_extractor --domain math --dataset math --num-samples 20
+
+    # 메타데이터 기반 계층적 샘플링 (stratified)
+    >>> python -m utils.sample_extractor --domain math --dataset math --strategy stratified
+
+    # 길이 기반 다양성 샘플링 (diverse)
+    >>> python -m utils.sample_extractor --domain math --dataset gsm8k --strategy diverse
 """
 import json
 import random
@@ -65,15 +69,14 @@ DATA_CONFIG = {
 
 
 def categorize_by_length(items: List[Dict], text_key: str = "input") -> Dict[str, List[Dict]]:
-    """
-    문제 길이로 3그룹 분류 (short/medium/long)
+    """문제 길이로 3그룹(short/medium/long)으로 분류합니다.
 
     Args:
         items: 데이터 아이템 리스트
         text_key: 길이를 측정할 필드 키
 
     Returns:
-        {"short": [...], "medium": [...], "long": [...]}
+        {"short": [...], "medium": [...], "long": [...]} 형식의 딕셔너리
     """
     if not items:
         return {"short": [], "medium": [], "long": []}
@@ -97,8 +100,7 @@ def extract_random_samples(
     data: List[Dict],
     num_samples: int = 15
 ) -> List[Dict]:
-    """
-    랜덤 샘플링
+    """랜덤 샘플링을 수행합니다.
 
     Args:
         data: 전체 데이터
@@ -117,8 +119,7 @@ def extract_diverse_samples(
     num_samples: int = 15,
     text_key: str = "input"
 ) -> List[Dict]:
-    """
-    다양성 기반 샘플링
+    """다양성 기반 샘플링을 수행합니다.
 
     1차: 60개 랜덤 추출
     2차: 문제 길이 기반으로 균등 분배
@@ -161,11 +162,10 @@ def extract_stratified_samples(
     secondary_key: Optional[str] = "level",
     text_key: str = "input"
 ) -> List[Dict]:
-    """
-    메타데이터 기반 계층적 샘플링 (type > level > length)
+    """메타데이터 기반 계층적 샘플링을 수행합니다 (type > level > length).
 
-    로컬 데이터의 metadata 필드를 활용하여 다양성 있는 샘플 추출.
-    메타데이터가 없거나 의미 없으면 기존 diverse 샘플링으로 fallback.
+    로컬 데이터의 metadata 필드를 활용하여 다양성 있는 샘플을 추출합니다.
+    메타데이터가 없거나 의미 없으면 diverse 샘플링으로 폴백합니다.
 
     Args:
         data: 로컬 데이터 리스트 (metadata 필드 포함)
@@ -267,8 +267,7 @@ def _sample_with_length_diversity(
     count: int,
     text_key: str = "input"
 ) -> List[Dict]:
-    """
-    길이 다양성을 고려한 샘플링
+    """길이 다양성을 고려한 샘플링을 수행합니다.
 
     Args:
         items: 샘플링 대상 아이템들
@@ -276,7 +275,7 @@ def _sample_with_length_diversity(
         text_key: 길이 측정용 필드
 
     Returns:
-        길이 다양성이 확보된 샘플
+        길이 다양성이 확보된 샘플 리스트
     """
     if len(items) <= count:
         return items
@@ -311,11 +310,10 @@ def extract_samples(
     num_samples: Optional[int] = None,
     strategy: str = "diverse"
 ) -> List[Dict]:
-    """
-    데이터셋에서 샘플 추출
+    """데이터셋에서 샘플을 추출합니다.
 
-    메타데이터가 있는 데이터셋은 계층적 샘플링 사용.
-    메타데이터가 없거나 의미 없으면 기존 diverse/random 샘플링 사용.
+    메타데이터가 있는 데이터셋은 계층적 샘플링을 사용합니다.
+    메타데이터가 없거나 의미 없으면 diverse/random 샘플링을 사용합니다.
 
     Args:
         domain: 도메인 이름 (math, logical, commonsense)
@@ -325,6 +323,10 @@ def extract_samples(
 
     Returns:
         추출된 샘플 리스트
+
+    Raises:
+        ValueError: 알 수 없는 도메인 또는 데이터셋인 경우
+        FileNotFoundError: 학습 파일이 존재하지 않는 경우
     """
     if domain not in DATA_CONFIG:
         raise ValueError(f"Unknown domain: {domain}. Available: {list(DATA_CONFIG.keys())}")
@@ -373,8 +375,7 @@ def save_samples(
     samples: List[Dict],
     output_dir: Optional[Path] = None
 ) -> Path:
-    """
-    추출된 샘플을 파일로 저장
+    """추출된 샘플을 파일로 저장합니다.
 
     Args:
         domain: 도메인 이름
@@ -400,14 +401,13 @@ def save_samples(
 
 
 def extract_all_samples(strategy: str = "diverse") -> Dict[str, Dict[str, Path]]:
-    """
-    모든 데이터셋에서 샘플 추출
+    """모든 데이터셋에서 샘플을 추출합니다.
 
     Args:
         strategy: 샘플링 전략
 
     Returns:
-        {domain: {dataset: output_path}} 형식의 결과
+        {domain: {dataset: output_path}} 형식의 결과 딕셔너리
     """
     results = {}
 
@@ -432,7 +432,7 @@ def extract_all_samples(strategy: str = "diverse") -> Dict[str, Dict[str, Path]]
 
 
 def main():
-    """CLI 진입점"""
+    """CLI 진입점."""
     parser = argparse.ArgumentParser(
         description="Extract representative samples from datasets for Instructional Goal generation"
     )

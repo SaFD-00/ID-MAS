@@ -1,8 +1,26 @@
-"""
-Teacher 모델 래퍼 - API와 로컬 모델 모두 지원
+"""Teacher 모델 래퍼 모듈.
 
-- OpenAI API 모델 (gpt-*, o1-*, o3-*): 직접 API 호출
-- 로컬 모델 (Qwen, Llama 등): ModelCache를 통해 로드 및 추론
+이 모듈은 ID-MAS 시스템의 Teacher 모델을 위한 통합 래퍼를 제공합니다.
+OpenAI API 모델과 로컬 HuggingFace 모델을 동일한 인터페이스로 사용할 수 있습니다.
+
+지원 모델:
+    - OpenAI API (gpt-*, o1-*, o3-*): OpenAI API를 통한 직접 호출
+    - 로컬 모델 (Qwen, Llama 등): ModelCache를 통한 로드 및 추론
+
+주요 클래스:
+    TeacherModelWrapper: Teacher 모델 통합 래퍼
+
+주요 함수:
+    _fix_control_characters: JSON 문자열 내 제어 문자 이스케이프
+    _fix_json_escapes: 유효하지 않은 JSON 이스케이프 수정
+    _find_matching_brace: 중괄호 매칭 위치 탐색
+    _strip_non_json_content: JSON 외부 텍스트 제거
+    _is_api_model: API 모델 여부 확인
+
+사용 예시:
+    >>> from models.teacher_wrapper import TeacherModelWrapper
+    >>> teacher = TeacherModelWrapper({"model": "gpt-4o"})
+    >>> response = teacher.generate("Hello, world!")
 """
 import re
 import json
@@ -18,11 +36,16 @@ from config.config import DESIGN_MODEL_CONFIG, OPENAI_API_KEY
 
 
 def _fix_control_characters(text: str) -> str:
-    """
-    JSON 문자열 내의 제어 문자(0x00-0x1F)를 유니코드 이스케이프로 변환
+    """JSON 문자열 내 제어 문자를 유니코드 이스케이프로 변환합니다.
 
-    LLM이 JSON 응답 생성 시 문자열 내에 실제 개행/탭 등을 포함할 때
-    'Invalid control character' 오류를 방지
+    LLM이 JSON 응답 생성 시 문자열 내에 실제 개행/탭 등의 제어 문자(0x00-0x1F)를
+    포함할 때 발생하는 'Invalid control character' 오류를 방지합니다.
+
+    Args:
+        text: 처리할 JSON 텍스트
+
+    Returns:
+        제어 문자가 이스케이프 처리된 텍스트
     """
     result = []
     in_string = False
@@ -62,13 +85,20 @@ def _fix_control_characters(text: str) -> str:
 
 
 def _fix_json_escapes(text: str) -> str:
-    """
-    JSON에서 유효하지 않은 백슬래시 이스케이프를 수정
+    """유효하지 않은 JSON 백슬래시 이스케이프를 수정합니다.
 
     LaTeX 문법(\\(, \\), \\frac 등)이 JSON 문자열에 포함될 때 발생하는
-    'Invalid \\escape' 오류를 방지
+    'Invalid \\escape' 오류를 방지합니다.
 
-    유효한 JSON 이스케이프: \\", \\\\, \\/, \\b, \\f, \\n, \\r, \\t, \\uXXXX
+    유효한 JSON 이스케이프 시퀀스:
+        - \\", \\\\, \\/, \\b, \\f, \\n, \\r, \\t
+        - \\uXXXX (유니코드)
+
+    Args:
+        text: 처리할 JSON 텍스트
+
+    Returns:
+        이스케이프가 수정된 텍스트
     """
     # 먼저 제어 문자를 이스케이프
     text = _fix_control_characters(text)
@@ -101,15 +131,17 @@ def _fix_json_escapes(text: str) -> str:
 
 
 def _find_matching_brace(text: str, start_pos: int) -> int:
-    """
-    시작 위치의 여는 중괄호에 대응하는 닫는 중괄호의 위치를 찾음
+    """여는 중괄호에 대응하는 닫는 중괄호 위치를 찾습니다.
+
+    중첩된 중괄호와 문자열 내부의 중괄호를 올바르게 처리합니다.
 
     Args:
-        text: 검색할 텍스트
-        start_pos: 여는 중괄호의 위치
+        text: 검색 대상 텍스트
+        start_pos: 여는 중괄호 '{' 의 인덱스
 
     Returns:
-        닫는 중괄호의 위치, 찾지 못하면 -1
+        대응하는 닫는 중괄호 '}' 의 인덱스.
+        찾지 못하면 -1 반환.
     """
     if start_pos >= len(text) or text[start_pos] != '{':
         return -1
@@ -145,14 +177,17 @@ def _find_matching_brace(text: str, start_pos: int) -> int:
 
 
 def _strip_non_json_content(text: str) -> str:
-    """
-    JSON 외부의 텍스트 제거 (첫 { 이전, 마지막 } 이후)
+    """JSON 외부의 텍스트를 제거합니다.
+
+    첫 번째 '{' 이전과 대응하는 '}' 이후의 모든 텍스트를 제거하여
+    순수 JSON 부분만 추출합니다.
 
     Args:
-        text: 원본 텍스트
+        text: JSON이 포함된 원본 텍스트
 
     Returns:
-        JSON 부분만 추출된 텍스트
+        JSON 부분만 추출된 텍스트.
+        '{' 를 찾지 못하면 원본 텍스트 반환.
     """
     # 첫 번째 { 찾기
     first_brace = text.find('{')
@@ -168,7 +203,15 @@ def _strip_non_json_content(text: str) -> str:
 
 
 def _is_api_model(model_name: str) -> bool:
-    """API 모델인지 확인 (OpenAI 모델)"""
+    """OpenAI API 모델 여부를 확인합니다.
+
+    Args:
+        model_name: 확인할 모델명
+
+    Returns:
+        gpt-*, o1-*, o3-* 패턴이면 True, 아니면 False.
+        model_name이 비어있으면 True (기본 API 모델 가정).
+    """
     if not model_name:
         return True  # 기본 모델은 API 모델
     return (
@@ -179,25 +222,45 @@ def _is_api_model(model_name: str) -> bool:
 
 
 class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
-    """
-    Teacher 모델 래퍼 클래스
+    """Teacher 모델 통합 래퍼 클래스.
 
-    API 모델과 로컬 HuggingFace 모델 모두 지원:
-    - API 모델 (gpt-*, o1-*, o3-*): OpenAI API 직접 호출
-    - 로컬 모델: ModelCache를 통해 로드 및 직접 추론
+    API 모델(OpenAI)과 로컬 HuggingFace 모델을 동일한 인터페이스로 사용합니다.
+    교수설계(Instructional Design) 및 스캐폴딩(Scaffolding) 생성에 사용됩니다.
+
+    지원 모델:
+        - API 모델 (gpt-*, o1-*, o3-*): OpenAI API 직접 호출
+        - 로컬 모델 (Qwen, Llama 등): ModelCache를 통한 공유 로드
+
+    Attributes:
+        config: 모델 설정 딕셔너리
+        model_name: 사용 중인 모델명
+        device: 실행 디바이스 ("cuda" 또는 "cpu")
+        model: 로컬 모델 객체 (API 모델이면 None)
+        tokenizer: 로컬 토크나이저 (API 모델이면 None)
+
+    Example:
+        >>> # OpenAI API 모델 사용
+        >>> teacher = TeacherModelWrapper({"model": "gpt-4o"})
+        >>> response = teacher.generate("Solve: 2+2=?")
+
+        >>> # 로컬 모델 사용
+        >>> teacher = TeacherModelWrapper({"model": "Qwen/Qwen2.5-7B-Instruct"})
+        >>> response = teacher.generate_json("Return JSON: {answer: ...}")
     """
 
     def __init__(self, config: dict = None):
-        """
-        TeacherModelWrapper 초기화
+        """TeacherModelWrapper를 초기화합니다.
 
         Args:
-            config: Teacher model 설정 딕셔너리 (None이면 기본 설정 사용)
-                - model: 모델 이름
-                - base_url: API endpoint (로컬 모델은 무시)
-                - device: 디바이스 (기본: "cuda")
-                - max_new_tokens: 최대 생성 토큰 (기본: 2048)
-                - temperature: 온도 (기본: 0.7)
+            config: Teacher 모델 설정 딕셔너리. None이면 기본 설정 사용.
+                필드:
+                - model (str): 모델명 (예: "gpt-4o", "Qwen/Qwen2.5-7B-Instruct")
+                - base_url (str): API 엔드포인트 URL (로컬 모델은 무시)
+                - api_key (str): API 키 (None이면 환경변수 사용)
+                - device (str): 디바이스 (기본: "cuda")
+                - max_new_tokens (int): 최대 생성 토큰 (기본: 8192)
+                - temperature (float): 샘플링 온도 (기본: 0.7)
+                - do_sample (bool): 샘플링 사용 여부 (기본: True)
         """
         self.config = config if config is not None else DESIGN_MODEL_CONFIG
         self.model_name = self.config.get("model", "")
@@ -228,7 +291,11 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         self.do_sample = self.config.get("do_sample", True)
 
     def _init_api_client(self):
-        """OpenAI API 클라이언트 초기화"""
+        """OpenAI API 클라이언트를 초기화합니다.
+
+        config의 base_url과 api_key를 기반으로 OpenAI 클라이언트를 생성합니다.
+        커스텀 엔드포인트 사용 여부는 _is_custom_endpoint 플래그로 구분합니다.
+        """
         base_url = self.config.get("base_url")
         api_key = self.config.get("api_key") or OPENAI_API_KEY
         timeout = self.config.get("timeout", 300.0)
@@ -247,17 +314,18 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         chat_history: Optional[List[Dict[str, str]]] = None,
         response_format: Optional[Dict[str, str]] = None
     ) -> str:
-        """
-        텍스트 생성
+        """텍스트를 생성합니다.
+
+        API 모델과 로컬 모델을 자동으로 구분하여 적절한 생성 방식을 선택합니다.
 
         Args:
-            prompt: 사용자 프롬프트
-            system_message: 시스템 메시지
-            chat_history: 대화 히스토리 (로컬 모델만 지원)
-            response_format: 응답 형식 (API 모델만 지원)
+            prompt: 사용자 프롬프트 (생성 요청 내용)
+            system_message: 시스템 메시지 (모델 행동 지침)
+            chat_history: 대화 히스토리 (로컬 모델 멀티턴 대화용)
+            response_format: 응답 형식 (API 모델 전용, 예: {"type": "json_object"})
 
         Returns:
-            생성된 텍스트
+            모델이 생성한 텍스트
         """
         if self._use_api:
             return self._generate_api(prompt, system_message, response_format)
@@ -270,16 +338,20 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         system_message: Optional[str] = None,
         response_format: Optional[Dict[str, str]] = None
     ) -> str:
-        """
-        API를 통한 텍스트 생성 (LLMWrapper 로직 통합)
+        """OpenAI API를 통해 텍스트를 생성합니다.
+
+        재시도 로직(5xx 서버 오류 시)과 OpenAI 전용 파라미터를 지원합니다.
 
         Args:
             prompt: 사용자 프롬프트
             system_message: 시스템 메시지
-            response_format: 응답 형식
+            response_format: 응답 형식 (예: {"type": "json_object"})
 
         Returns:
-            생성된 텍스트
+            API가 생성한 텍스트
+
+        Raises:
+            Exception: API 호출 실패 시 (재시도 횟수 초과 포함)
         """
         messages = []
 
@@ -355,16 +427,21 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         system_message: Optional[str] = None,
         max_tokens: Optional[int] = None
     ) -> Dict[str, Any]:
-        """
-        JSON 형식으로 응답 생성
+        """JSON 형식으로 응답을 생성합니다.
+
+        API 모델은 response_format을 사용하고, 로컬 모델은 프롬프트에
+        JSON 지시를 추가하여 응답을 유도합니다.
 
         Args:
-            prompt: 사용자 프롬프트
+            prompt: 사용자 프롬프트 (JSON 응답 요청 포함)
             system_message: 시스템 메시지
-            max_tokens: 최대 생성 토큰 (None이면 기본값 사용)
+            max_tokens: 최대 생성 토큰. None이면 기본값(8192) 사용.
 
         Returns:
-            JSON 파싱된 딕셔너리
+            파싱된 JSON 딕셔너리
+
+        Raises:
+            Exception: JSON 파싱 실패 시
         """
         # max_tokens 동적 설정
         if max_tokens is not None:
@@ -387,7 +464,20 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         prompt: str,
         system_message: Optional[str] = None
     ) -> Dict[str, Any]:
-        """API를 통한 JSON 응답 생성"""
+        """OpenAI API를 통해 JSON 응답을 생성합니다.
+
+        response_format={"type": "json_object"}를 사용하여 JSON 응답을 보장합니다.
+
+        Args:
+            prompt: 사용자 프롬프트
+            system_message: 시스템 메시지
+
+        Returns:
+            파싱된 JSON 딕셔너리
+
+        Raises:
+            Exception: JSON 파싱 실패 시
+        """
         response_text = self._generate_api(
             prompt=prompt,
             system_message=system_message,
@@ -408,15 +498,19 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         prompt: str,
         system_message: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        로컬 모델로 JSON 응답 생성
+        """로컬 HuggingFace 모델로 JSON 응답을 생성합니다.
+
+        프롬프트에 JSON 응답 지시가 없으면 자동으로 추가합니다.
 
         Args:
             prompt: 사용자 프롬프트
             system_message: 시스템 메시지
 
         Returns:
-            JSON 파싱된 딕셔너리
+            파싱된 JSON 딕셔너리
+
+        Raises:
+            Exception: JSON 추출/파싱 실패 시
         """
         json_prompt = prompt
         if "json" not in prompt.lower():
@@ -427,21 +521,23 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         return self._extract_json(response_text)
 
     def _extract_json(self, text: str) -> Dict[str, Any]:
-        """
-        텍스트에서 JSON 추출
+        """텍스트에서 JSON을 추출합니다.
 
-        여러 패턴을 시도하여 JSON 추출:
-        0. JSON 외부 텍스트 제거 (첫 { 이전, 마지막 } 이후)
-        1. 전체 텍스트가 JSON인 경우
-        2. ```json ... ``` 블록
-        3. { ... } 패턴
-        4. LaTeX 이스케이프 수정 후 재시도
+        여러 패턴을 순차적으로 시도하여 JSON을 추출합니다:
+            1. JSON 외부 텍스트 제거 (첫 '{' 이전, 마지막 '}' 이후)
+            2. 전체 텍스트가 유효한 JSON인 경우
+            3. ```json ... ``` 코드 블록 내 JSON
+            4. { ... } 패턴 매칭
+            5. LaTeX 이스케이프 수정 후 재시도
 
         Args:
-            text: 응답 텍스트
+            text: JSON이 포함된 응답 텍스트
 
         Returns:
-            JSON 딕셔너리
+            추출 및 파싱된 JSON 딕셔너리
+
+        Raises:
+            Exception: 모든 추출 시도 실패 시 (상세 오류 정보 포함)
         """
         # 0. JSON 외부 텍스트 제거
         text = _strip_non_json_content(text)
@@ -499,10 +595,18 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
 
     @property
     def is_api_model(self) -> bool:
-        """API 모델 사용 여부"""
+        """API 모델 사용 여부를 반환합니다.
+
+        Returns:
+            OpenAI API를 사용하면 True, 로컬 모델이면 False
+        """
         return self._use_api
 
     @property
     def is_local_model(self) -> bool:
-        """로컬 모델 사용 여부"""
+        """로컬 모델 사용 여부를 반환합니다.
+
+        Returns:
+            로컬 HuggingFace 모델이면 True, API 모델이면 False
+        """
         return not self._use_api

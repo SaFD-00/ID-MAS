@@ -1,15 +1,33 @@
-"""
-Answer Extraction Strategies for Different Answer Types
+"""답변 추출 전략 모듈 - 다양한 답변 타입별 추출 전략.
 
-Each extractor handles:
-1. extract(): Extract answer from model response
-2. compare(): Compare predicted answer with ground truth
+이 모듈은 모델 응답에서 답변을 추출하고 정답과 비교하는 기능을 제공합니다.
+각 추출기는 특정 답변 타입(MCQ, 숫자, LaTeX, 텍스트, Boolean)을 처리합니다.
+
+주요 클래스:
+    AnswerExtractor: 답변 추출기 추상 기본 클래스
+    MCQExtractor: 객관식 답변 추출기
+    NumericExtractor: 숫자 답변 추출기
+    LaTeXExtractor: LaTeX 수식 답변 추출기
+    TextExtractor: 자유 형식 텍스트 추출기
+    BooleanExtractor: Yes/No, True/False 추출기
+
+주요 함수:
+    get_extractor(): 답변 타입에 맞는 추출기 반환
+    extract_boxed_answer(): \\boxed{} 형식에서 답변 추출
+    grade_answer(): 예측 답변과 정답의 기호적 비교
+
+사용 예시:
+    >>> from utils.answer_extractor import get_extractor
+    >>> from utils.base_loader import AnswerType
+    >>> extractor = get_extractor(AnswerType.NUMERIC)
+    >>> answer = extractor.extract("The answer is \\\\boxed{42}")
+    >>> is_correct = extractor.compare(answer, "42")
 """
 import re
 from abc import ABC, abstractmethod
 from typing import Optional
 
-# Import sympy for enhanced mathematical comparison
+# sympy를 사용한 향상된 수학적 비교를 위한 import
 try:
     import sympy
     from sympy.parsing import sympy_parser
@@ -23,20 +41,19 @@ from utils.base_loader import AnswerType
 
 
 # =============================================================================
-# Enhanced Answer Extraction Helpers
+# 향상된 답변 추출 헬퍼 함수
 # =============================================================================
 
 def _strip_string(string: str) -> str:
-    """
-    Normalize LaTeX strings for comparison.
+    """LaTeX 문자열을 비교를 위해 정규화합니다.
 
-    Removes whitespace, normalizes LaTeX commands, and cleans formatting.
+    공백을 제거하고, LaTeX 명령을 정규화하며, 포맷팅을 정리합니다.
 
     Args:
-        string: LaTeX or mathematical string to normalize
+        string: 정규화할 LaTeX 또는 수학 문자열
 
     Returns:
-        Normalized string
+        정규화된 문자열
     """
     string = str(string)
     # Remove newlines and LaTeX spacing commands
@@ -58,16 +75,15 @@ def _strip_string(string: str) -> str:
 
 
 def mathd_normalize(answer: str) -> str:
-    """
-    Normalize mathematical answer for comparison.
+    """비교를 위해 수학 답변을 정규화합니다.
 
-    Handles LaTeX text wrappers and applies string normalization.
+    LaTeX text 래퍼를 처리하고 문자열 정규화를 적용합니다.
 
     Args:
-        answer: Answer string to normalize
+        answer: 정규화할 답변 문자열
 
     Returns:
-        Normalized answer string
+        정규화된 답변 문자열
     """
     if not answer:
         return ""
@@ -86,16 +102,15 @@ def mathd_normalize(answer: str) -> str:
 
 
 def extract_boxed_answer(text: str) -> Optional[str]:
-    """
-    Extract answer from \\boxed{} or \\fbox{} command with proper brace matching.
+    """\\boxed{} 또는 \\fbox{} 명령에서 답변을 추출합니다.
 
-    Handles nested braces correctly by tracking depth.
+    중첩된 중괄호를 깊이 추적을 통해 올바르게 처리합니다.
 
     Args:
-        text: Text containing boxed answer
+        text: boxed 답변이 포함된 텍스트
 
     Returns:
-        Extracted answer content, or None if not found
+        추출된 답변 내용, 찾지 못하면 None
     """
     if not text:
         return None
@@ -127,19 +142,18 @@ def extract_boxed_answer(text: str) -> Optional[str]:
 
 
 def grade_answer(pred: str, solution: str) -> bool:
-    """
-    Grade predicted answer against ground truth using symbolic comparison.
+    """기호적 비교를 사용하여 예측 답변을 채점합니다.
 
-    Two-stage approach:
-    1. String normalization and comparison
-    2. Symbolic math comparison using sympy (if available)
+    2단계 접근 방식:
+    1. 문자열 정규화 및 비교
+    2. sympy를 사용한 기호적 수학 비교 (사용 가능한 경우)
 
     Args:
-        pred: Predicted answer (may contain \\boxed{})
-        solution: Ground truth solution (may contain \\boxed{})
+        pred: 예측 답변 (\\boxed{} 포함 가능)
+        solution: 정답 (\\boxed{} 포함 가능)
 
     Returns:
-        True if answers match, False otherwise
+        답변이 일치하면 True, 아니면 False
     """
     if not solution:
         return False
@@ -181,46 +195,46 @@ def grade_answer(pred: str, solution: str) -> bool:
 
 
 class AnswerExtractor(ABC):
-    """Abstract base class for answer extractors"""
+    """답변 추출기의 추상 기본 클래스.
+
+    모든 답변 추출기가 구현해야 하는 인터페이스를 정의합니다.
+    """
 
     @abstractmethod
     def extract(self, response: str) -> Optional[str]:
-        """
-        Extract answer from model response.
+        """모델 응답에서 답변을 추출합니다.
 
         Args:
-            response: Model's text response
+            response: 모델의 텍스트 응답
 
         Returns:
-            Extracted answer string, or None if not found
+            추출된 답변 문자열, 찾지 못하면 None
         """
         pass
 
     @abstractmethod
     def compare(self, predicted: str, ground_truth: str) -> bool:
-        """
-        Compare predicted answer with ground truth.
+        """예측 답변과 정답을 비교합니다.
 
         Args:
-            predicted: Extracted answer from model response
-            ground_truth: Correct answer
+            predicted: 모델 응답에서 추출한 답변
+            ground_truth: 정답
 
         Returns:
-            True if answers match, False otherwise
+            답변이 일치하면 True, 아니면 False
         """
         pass
 
 
 class MCQExtractor(AnswerExtractor):
-    """
-    Extract Multiple Choice answers (A/B/C/D).
+    """객관식 답변 추출기 (A/B/C/D).
 
-    Patterns recognized:
-    - \\boxed{A} (LaTeX boxed format - new)
-    - "Answer: A", "answer is B"
-    - "The correct answer is C"
-    - "Final Answer: D"
-    - Standalone letter at end of response
+    인식하는 패턴:
+        - \\boxed{A} (LaTeX boxed 형식)
+        - "Answer: A", "answer is B"
+        - "The correct answer is C"
+        - "Final Answer: D"
+        - 응답 끝의 독립된 문자
     """
 
     def extract(self, response: str) -> Optional[str]:
@@ -272,23 +286,21 @@ class MCQExtractor(AnswerExtractor):
 
 
 class NumericExtractor(AnswerExtractor):
-    """
-    Extract numeric answers (integers, decimals).
+    """숫자 답변 추출기 (정수, 소수).
 
-    Patterns recognized:
-    - "#### 25" (GSM8K style)
-    - "The answer is 3.14"
-    - "= 42"
-    - Last number in response as fallback
+    인식하는 패턴:
+        - "#### 25" (GSM8K 스타일)
+        - "The answer is 3.14"
+        - "= 42"
+        - 폴백으로 응답의 마지막 숫자
     """
 
     def extract(self, response: str) -> Optional[str]:
-        """
-        Extract numeric answer from response.
+        """응답에서 숫자 답변을 추출합니다.
 
-        Two-stage approach:
-        1. Try current method (backward compatibility - supports both #### and \\boxed{})
-        2. Fall back to enhanced extraction
+        2단계 접근 방식:
+        1. 현재 메서드 시도 (하위 호환성 - #### 및 \\boxed{} 모두 지원)
+        2. 향상된 추출로 폴백
         """
         # Stage 1: Try current extraction method first
         # Pattern 1: GSM8K style "#### <number>" (for backward compatibility)
@@ -342,12 +354,11 @@ class NumericExtractor(AnswerExtractor):
         return None
 
     def compare(self, predicted: str, ground_truth: str) -> bool:
-        """
-        Compare numeric answers.
+        """숫자 답변을 비교합니다.
 
-        Two-stage approach:
-        1. Try current comparison method (backward compatibility)
-        2. Fall back to enhanced symbolic grading
+        2단계 접근 방식:
+        1. 현재 비교 메서드 시도 (하위 호환성)
+        2. 향상된 기호적 채점으로 폴백
         """
         if predicted is None:
             return False
@@ -375,21 +386,19 @@ class NumericExtractor(AnswerExtractor):
 
 
 class LaTeXExtractor(AnswerExtractor):
-    """
-    Extract LaTeX/mathematical answers.
+    """LaTeX/수학 답변 추출기.
 
-    Patterns recognized:
-    - \\boxed{...}
-    - $...$
-    - \\frac{...}{...}
-    - Numeric fallback
+    인식하는 패턴:
+        - \\boxed{...}
+        - $...$
+        - \\frac{...}{...}
+        - 숫자 폴백
     """
 
     def extract(self, response: str) -> Optional[str]:
-        """
-        Extract LaTeX/mathematical answer from response.
+        """응답에서 LaTeX/수학 답변을 추출합니다.
 
-        Handles nested braces correctly (e.g., \\frac{1}{8}).
+        중첩된 중괄호를 올바르게 처리합니다 (예: \\frac{1}{8}).
         """
         # Pattern 1: \boxed{...} or \fbox{...} with proper nested brace handling
         boxed_result = extract_boxed_answer(response)
@@ -410,13 +419,12 @@ class LaTeXExtractor(AnswerExtractor):
         return numeric_extractor.extract(response)
 
     def compare(self, predicted: str, ground_truth: str) -> bool:
-        """
-        Compare predicted answer with ground truth.
+        """예측 답변과 정답을 비교합니다.
 
-        Three-stage approach:
-        1. Try current comparison method (backward compatibility)
-        2. Fall back to enhanced symbolic grading
-        3. Fall back to basic normalization
+        3단계 접근 방식:
+        1. 현재 비교 메서드 시도 (하위 호환성)
+        2. 향상된 기호적 채점으로 폴백
+        3. 기본 정규화로 폴백
         """
         if predicted is None:
             return False
@@ -453,7 +461,7 @@ class LaTeXExtractor(AnswerExtractor):
         return False
 
     def _normalize_latex(self, expr: str) -> str:
-        """Normalize LaTeX expression for comparison"""
+        """비교를 위해 LaTeX 표현식을 정규화합니다."""
         if expr is None:
             return ""
         expr = str(expr)
@@ -467,7 +475,7 @@ class LaTeXExtractor(AnswerExtractor):
         return expr
 
     def _parse_fraction(self, expr: str) -> Optional[float]:
-        """Try to parse a fraction expression"""
+        """분수 표현식 파싱을 시도합니다."""
         if expr is None:
             return None
         expr = str(expr)
@@ -490,13 +498,12 @@ class LaTeXExtractor(AnswerExtractor):
 
 
 class BooleanExtractor(AnswerExtractor):
-    """
-    Extract Yes/No, True/False answers.
+    """Yes/No, True/False 답변 추출기.
 
-    Recognizes various forms:
-    - Yes/No
-    - True/False
-    - Valid/Invalid
+    다양한 형식을 인식합니다:
+        - Yes/No
+        - True/False
+        - Valid/Invalid
     """
 
     YES_VARIANTS = {'yes', 'true', 'valid', 'correct', 'y'}
@@ -560,10 +567,9 @@ class BooleanExtractor(AnswerExtractor):
 
 
 class TextExtractor(AnswerExtractor):
-    """
-    Extract free-form text answers.
+    """자유 형식 텍스트 답변 추출기.
 
-    Used for BBH tasks with text outputs.
+    텍스트 출력을 요구하는 BBH 태스크에 사용됩니다.
     """
 
     def extract(self, response: str) -> Optional[str]:
@@ -610,14 +616,13 @@ class TextExtractor(AnswerExtractor):
 
 
 def get_extractor(answer_type: AnswerType) -> AnswerExtractor:
-    """
-    Factory function to get appropriate extractor for answer type.
+    """답변 타입에 맞는 추출기를 반환하는 팩토리 함수.
 
     Args:
-        answer_type: AnswerType enum value
+        answer_type: AnswerType 열거형 값
 
     Returns:
-        Corresponding AnswerExtractor instance
+        해당하는 AnswerExtractor 인스턴스
     """
     extractors = {
         AnswerType.MCQ: MCQExtractor(),

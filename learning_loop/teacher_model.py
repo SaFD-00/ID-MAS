@@ -1,21 +1,30 @@
-"""
-교사 모델 (Teacher Model, Mt)
+"""교사 모델 (Teacher Model, Mt) 모듈.
 
-Iterative Scaffolding Pipeline Support:
-- Step 2 (Evaluation): evaluate_with_performance_objectives
-- Step 3 (Scaffolding): generate_scaffolding_artifact
-- Step 5 (Reconstruction): reconstruct_successful_scaffolding, generate_final_solution
+Iterative Scaffolding Pipeline에서 교사 역할을 담당합니다.
+학생 응답을 평가하고 스캐폴딩을 제공하여 학습을 지원합니다.
 
-Pipeline Steps:
-- Step 1: Initial Response (Student)
-- Step 2: PO Evaluation (Teacher) - this module
-- Step 3: Scaffolding Artifact (Teacher) - this module
-- Step 4: Re-response (Student)
-- Step 5: Reconstruction (Teacher) - this module
-- Step 6: SFT Generation
+파이프라인 담당 단계:
+    - Step 2 (Evaluation): Performance Objectives 기반 평가
+    - Step 3 (Scaffolding): HOT/LOT 스캐폴딩 아티팩트 생성
+    - Step 5 (Reconstruction): 성공 응답 재구성 또는 최종 솔루션 생성
+
+전체 파이프라인 흐름:
+    Step 1: 초기 응답 (Student)
+    Step 2: PO 평가 (Teacher) - 이 모듈
+    Step 3: 스캐폴딩 (Teacher) - 이 모듈
+    Step 4: 재응답 (Student)
+    Step 5: 재구성 (Teacher) - 이 모듈
+    Step 6: SFT 데이터 생성
+
+주요 클래스:
+    TeacherModel: 교사 모델 에이전트
+
+사용 예시:
+    >>> from learning_loop.teacher_model import TeacherModel
+    >>> teacher = TeacherModel(config)
+    >>> result = teacher.evaluate_with_performance_objectives(...)
 """
 from models.teacher_wrapper import TeacherModelWrapper
-from learning_loop.graph.state import PipelineStep
 from prompts.learning_prompts import (
     INITIAL_HINT_PROMPT,
     PROGRESSIVE_HINT_PROMPT,
@@ -32,14 +41,26 @@ import json
 
 
 class TeacherModel:
-    """교사 모델 - Iterative Scaffolding을 위한 학생 응답 평가 및 가이드"""
+    """교사 모델 에이전트 클래스.
+
+    Iterative Scaffolding Pipeline에서 학생 응답을 평가하고
+    적절한 스캐폴딩을 제공합니다.
+
+    주요 기능:
+        - Performance Objectives 기반 평가 (ReAct-style)
+        - HOT/LOT 구분 스캐폴딩 아티팩트 생성
+        - 성공 응답 재구성 (Case B)
+        - 최종 솔루션 생성 (Case C)
+
+    Attributes:
+        llm: Teacher 모델 래퍼
+    """
 
     def __init__(self, config: dict = None):
-        """
-        TeacherModel 초기화
+        """TeacherModel을 초기화합니다.
 
         Args:
-            config: Teacher model 설정 딕셔너리 (None이면 기본 설정 사용)
+            config: Teacher 모델 설정. None이면 기본 설정 사용.
         """
         self.llm = TeacherModelWrapper(config)
 
@@ -50,35 +71,30 @@ class TeacherModel:
         problem_text: str,
         ground_truth: str
     ) -> Dict[str, Any]:
-        """
-        Iterative Scaffolding: ReAct-style PO 평가 및 Socratic 질문 생성
+        """학생 응답을 Performance Objectives 기준으로 평가합니다.
 
-        학생 응답을 Performance Objectives 기준으로 평가하고,
-        미충족 목표에 대해 Socratic 질문을 생성합니다.
+        ReAct-style 평가를 수행하고 미충족 목표에 대해
+        Socratic 질문을 생성합니다.
 
         Args:
             student_response: 학생의 응답
             performance_objectives: Performance Objectives 리스트
             problem_text: 문제 텍스트
-            ground_truth: 정답 (교사 참고용, 공개 금지)
+            ground_truth: 정답 (교사 참고용, 학생에게 비공개)
 
         Returns:
-            {
-                "performance_evaluation": [
-                    {
-                        "objective_content": str,
-                        "is_satisfied": bool,
-                        "reason_for_unmet_objective": str or None,
-                        "socratic_question": str or None
-                    }
-                ],
-                "overall_assessment": {
-                    "objectives_met": str,
-                    "all_satisfied": bool,
-                    "primary_weakness": str or None,
-                    "recommended_focus": str or None
-                }
-            }
+            평가 결과 딕셔너리:
+                - performance_evaluation (list): 각 PO별 평가 결과
+                    - objective_content: PO 내용
+                    - is_satisfied: 충족 여부
+                    - reason_for_unmet_objective: 미충족 사유
+                    - socratic_question: Socratic 질문
+                - overall_assessment (dict): 전체 평가 요약
+                    - objectives_met: 충족 비율 (예: "3 of 5")
+                    - all_satisfied: 전체 충족 여부
+                    - primary_weakness: 주요 약점
+                    - recommended_focus: 권장 집중 영역
+                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         prompt = TEACHER_INTERVENTION_PROMPT.format(
             problem_text=problem_text,
@@ -89,7 +105,7 @@ class TeacherModel:
 
         # 최대 3회 재시도
         max_retries = 3
-        last_error = None
+        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -111,21 +127,14 @@ class TeacherModel:
                     }
                 # 성공 시 failure metadata 추가 (step2 = PO Evaluation)
                 result['_failure_metadata'] = {
-                    PipelineStep.STEP2: {
+                    "step2_performance_objectives_evaluation": {
                         "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "stage": "performance_objectives_evaluation"
-                    },
-                    # Legacy key for backward compatibility
-                    "evaluation": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "stage": "performance_objectives_evaluation"
+                        "attempts_needed": attempt
                     }
                 }
                 return result
             except Exception as e:
-                last_error = e
+                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: PO evaluation attempt {attempt}/{max_retries} failed: {e}. Retrying...")
                 else:
@@ -141,20 +150,11 @@ class TeacherModel:
                 "recommended_focus": "Try again"
             },
             "_failure_metadata": {
-                PipelineStep.STEP2: {
+                "step2_performance_objectives_evaluation": {
                     "is_fallback": True,
                     "failure_reason": "json_parse_error",
-                    "last_error": str(last_error) if last_error else "Unknown error",
-                    "max_retries_exceeded": max_retries,
-                    "stage": "performance_objectives_evaluation"
-                },
-                # Legacy key for backward compatibility
-                "evaluation": {
-                    "is_fallback": True,
-                    "failure_reason": "json_parse_error",
-                    "last_error": str(last_error) if last_error else "Unknown error",
-                    "max_retries_exceeded": max_retries,
-                    "stage": "performance_objectives_evaluation"
+                    "last_error": errors if errors else ["Unknown error"],
+                    "max_retries_exceeded": max_retries
                 }
             }
         }
@@ -169,11 +169,10 @@ class TeacherModel:
         task_analysis: str,
         ground_truth: str
     ) -> Tuple[str, Optional[Dict]]:
-        """
-        Iterative Scaffolding: 첫 번째 힌트 생성
+        """첫 번째 힌트를 생성합니다.
 
-        학생이 문제를 풀기 전에 방향을 제시하는 힌트.
-        답을 알려주지 않으면서 올바른 접근법을 안내.
+        학생이 문제를 풀기 전에 방향을 제시합니다.
+        정답을 직접 알려주지 않으면서 올바른 접근법을 안내합니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -181,7 +180,9 @@ class TeacherModel:
             ground_truth: 정답 (교사 참고용)
 
         Returns:
-            Tuple[hint_text, failure_metadata]
+            튜플 (hint_text, failure_metadata):
+                - hint_text: 생성된 힌트 텍스트
+                - failure_metadata: 실패 시 메타데이터, 성공 시 None
         """
         prompt = INITIAL_HINT_PROMPT.format(
             problem_text=problem_text,
@@ -213,11 +214,10 @@ class TeacherModel:
         ground_truth: str,
         max_iterations: int = 5
     ) -> Tuple[str, Optional[Dict]]:
-        """
-        Iterative Scaffolding: 점진적 힌트 생성
+        """점진적 힌트를 생성합니다.
 
-        이전 시도를 분석하고 더 구체적인 힌트 제공.
-        iteration이 높아질수록 더 상세한 가이드 제공.
+        이전 시도를 분석하고 더 구체적인 힌트를 제공합니다.
+        iteration이 증가할수록 더 상세한 가이드를 제공합니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -226,10 +226,12 @@ class TeacherModel:
             last_response: 학생의 마지막 응답
             iteration_number: 현재 반복 횟수 (2-5)
             ground_truth: 정답 (교사 참고용)
-            max_iterations: 최대 반복 횟수
+            max_iterations: 최대 반복 횟수. 기본값: 5
 
         Returns:
-            Tuple[hint_text, failure_metadata]
+            튜플 (hint_text, failure_metadata):
+                - hint_text: 생성된 힌트 텍스트
+                - failure_metadata: 실패 시 메타데이터, 성공 시 None
         """
         formatted_history = self._format_conversation_history(conversation_history)
 
@@ -267,13 +269,12 @@ class TeacherModel:
         final_response: str,
         iterations_needed: int
     ) -> Dict[str, Any]:
-        """
-        Case B: Iterative Scaffolding 성공 후 SFT 데이터용 응답 재구성
+        """Case B: 스캐폴딩 성공 후 SFT 데이터용 응답을 재구성합니다.
 
-        학생이 2~5회차에 성공한 경우:
-        1. scaffolding 과정에서 얻은 핵심 학습 포인트 추출
-        2. 최종 성공 응답을 기반으로 깔끔하게 재구성
-        3. teacher guidance의 핵심을 자연스럽게 통합
+        학생이 2~5회차에 성공한 경우 사용됩니다:
+            1. 스캐폴딩 과정의 핵심 학습 포인트 추출
+            2. 최종 성공 응답을 기반으로 정리된 응답 재구성
+            3. 교사 가이드의 핵심을 자연스럽게 통합
 
         Args:
             problem_text: 문제 텍스트
@@ -281,14 +282,14 @@ class TeacherModel:
             task_analysis: 과제 분석 결과
             conversation_history: 전체 대화 기록
             final_response: 최종 성공한 학생 응답
-            iterations_needed: 성공까지 걸린 iteration 수
+            iterations_needed: 성공까지 걸린 반복 횟수
 
         Returns:
-            {
-                "reconstructed_response": str,  # SFT 데이터로 사용할 재구성된 응답
-                "key_learning_points": List[str],  # scaffolding에서 얻은 핵심 학습 포인트
-                "improvement_summary": str  # 학생이 어떻게 개선했는지 요약
-            }
+            재구성 결과 딕셔너리:
+                - reconstructed_response: SFT 데이터로 사용할 재구성된 응답
+                - key_learning_points: 스캐폴딩에서 얻은 핵심 학습 포인트
+                - improvement_summary: 학생 개선 과정 요약
+                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         # AI 기반 대화 히스토리 축약
         conversation_summary, summarization_failure = self.summarize_conversation_with_ai(
@@ -308,7 +309,7 @@ class TeacherModel:
 
         # 최대 3회 재시도
         max_retries = 3
-        last_error = None
+        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -321,28 +322,20 @@ class TeacherModel:
                     result['key_learning_points'] = ["Successfully solved through iterative refinement"]
                 if 'improvement_summary' not in result:
                     result['improvement_summary'] = f"Improved through {iterations_needed} iterations of scaffolding"
-                # 성공 시 메타데이터를 Dict of dicts로 저장 (step5 = Reconstruction)
+                # 성공 시 메타데이터 저장 (step5 = Reconstruction, Case B)
                 result['_failure_metadata'] = {
-                    PipelineStep.STEP5: {
+                    "step5_case_b_reconstruction": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
-                        "case": "B",
-                        "stage": "case_b_reconstruction"
-                    },
-                    # Legacy key for backward compatibility
-                    "reconstruction": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "stage": "case_b_reconstruction"
+                        "case": "B"
                     }
                 }
                 # Summarization failure가 있으면 추가
                 if summarization_failure:
                     result['_failure_metadata']['step5_summarization'] = summarization_failure
-                    result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
                 return result
             except Exception as e:
-                last_error = e
+                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: Attempt {attempt}/{max_retries} failed: {e}. Retrying...")
                 else:
@@ -354,28 +347,18 @@ class TeacherModel:
             "key_learning_points": ["Successfully solved through iterative scaffolding"],
             "improvement_summary": f"Student succeeded after {iterations_needed} iterations with teacher guidance",
             "_failure_metadata": {
-                PipelineStep.STEP5: {
+                "step5_case_b_reconstruction": {
                     "is_fallback": True,
                     "failure_reason": "case_b_reconstruction_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "last_error": errors if errors else ["Unknown error"],
                     "max_retries_exceeded": max_retries,
-                    "case": "B",
-                    "stage": "case_b_reconstruction"
-                },
-                # Legacy key for backward compatibility
-                "reconstruction": {
-                    "is_fallback": True,
-                    "failure_reason": "case_b_reconstruction_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
-                    "max_retries_exceeded": max_retries,
-                    "stage": "case_b_reconstruction"
+                    "case": "B"
                 }
             }
         }
         # Summarization failure가 있으면 추가
         if summarization_failure:
             fallback_result['_failure_metadata']['step5_summarization'] = summarization_failure
-            fallback_result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
         return fallback_result
 
     def summarize_and_reconstruct(
@@ -385,13 +368,12 @@ class TeacherModel:
         task_analysis: str,
         conversation_history: List[Dict]
     ) -> Dict[str, Any]:
-        """
-        Iterative Scaffolding: 5회 실패 후 요약 및 정답 재구성 (Case C)
+        """Case C: 최대 시도 후 요약 및 정답을 재구성합니다.
 
-        학생이 5번 시도해도 정답을 못 맞춘 경우:
-        1. 대화를 요약하여 학생의 약점 분석
-        2. 정답 솔루션을 재구성 (학생 약점 보완 포함)
-        3. 학습 포인트 도출
+        학생이 max_iterations 시도 후에도 정답을 맞추지 못한 경우:
+            1. 대화를 요약하여 학생의 약점 분석
+            2. 정답 솔루션을 재구성 (학생 약점 보완 포함)
+            3. 학습 포인트 도출
 
         Args:
             problem_text: 문제 텍스트
@@ -400,12 +382,12 @@ class TeacherModel:
             conversation_history: 전체 대화 기록
 
         Returns:
-            {
-                "summary": str,
-                "student_weaknesses": List[str],
-                "reconstructed_response": str,
-                "learning_points": List[str]
-            }
+            재구성 결과 딕셔너리:
+                - summary: 대화 요약
+                - student_weaknesses: 학생 약점 목록
+                - reconstructed_response: 재구성된 정답 응답
+                - learning_points: 학습 포인트 목록
+                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         # AI 기반 대화 히스토리 축약 (JSON 파싱 오류 방지)
         # Teacher 모델이 중요한 학습 포인트를 파악하여 축약
@@ -424,7 +406,7 @@ class TeacherModel:
 
         # 최대 3회 재시도
         max_retries = 3
-        last_error = None
+        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -439,34 +421,26 @@ class TeacherModel:
                     result['reconstructed_response'] = f"Let me solve this correctly.\n\nAnswer: {ground_truth}"
                 if 'learning_points' not in result:
                     result['learning_points'] = ["Review the fundamental concepts"]
-                # 성공 시 메타데이터를 Dict of dicts로 저장 (step5 = Reconstruction, Case C)
+                # 성공 시 메타데이터 저장 (step5 = summarize_and_reconstruct, Case C)
                 result['_failure_metadata'] = {
-                    PipelineStep.STEP5: {
+                    "step5_summarize_and_reconstruct": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
-                        "case": "C",
-                        "stage": "case_c_reconstruction"
-                    },
-                    # Legacy key for backward compatibility
-                    "reconstruction": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "stage": "case_c_reconstruction"
+                        "case": "C"
                     }
                 }
                 # Summarization failure가 있으면 추가
                 if summarization_failure:
                     result['_failure_metadata']['step5_summarization'] = summarization_failure
-                    result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
                 return result
             except Exception as e:
-                last_error = e
+                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: Attempt {attempt}/{max_retries} failed: {e}. Retrying...")
                 else:
                     print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
 
-        # 모든 재시도 실패 시 fallback 반환 (step5 = Reconstruction, Case C)
+        # 모든 재시도 실패 시 fallback 반환 (step5 = summarize_and_reconstruct, Case C)
         fallback_result = {
             "summary": "Student needed multiple attempts but could not solve the problem.",
             "student_weaknesses": ["Fundamental understanding of the problem"],
@@ -479,39 +453,28 @@ Following the correct approach:
 Answer: {ground_truth}""",
             "learning_points": ["Review the problem-solving approach", "Practice similar problems"],
             "_failure_metadata": {
-                PipelineStep.STEP5: {
+                "step5_summarize_and_reconstruct": {
                     "is_fallback": True,
                     "failure_reason": "reconstruction_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "last_error": errors if errors else ["Unknown error"],
                     "max_retries_exceeded": max_retries,
-                    "case": "C",
-                    "stage": "case_c_reconstruction"
-                },
-                # Legacy key for backward compatibility
-                "reconstruction": {
-                    "is_fallback": True,
-                    "failure_reason": "reconstruction_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
-                    "max_retries_exceeded": max_retries,
-                    "stage": "case_c_reconstruction"
+                    "case": "C"
                 }
             }
         }
         # Summarization failure가 있으면 추가
         if summarization_failure:
             fallback_result['_failure_metadata']['step5_summarization'] = summarization_failure
-            fallback_result['_failure_metadata']['summarization'] = summarization_failure  # Legacy
         return fallback_result
 
     def _format_conversation_history(self, history: List[Dict]) -> str:
-        """
-        대화 기록을 프롬프트에 포함할 수 있는 형식으로 변환
+        """대화 기록을 프롬프트용 문자열로 변환합니다.
 
         Args:
             history: 대화 기록 리스트
 
         Returns:
-            포맷된 문자열
+            프롬프트에 포함할 수 있는 포맷된 문자열
         """
         if not history:
             return "(No previous conversation)"
@@ -535,11 +498,10 @@ Answer: {ground_truth}""",
         ground_truth: str,
         conversation_history: List[Dict]
     ) -> Tuple[str, Optional[Dict]]:
-        """
-        AI 기반 대화 히스토리 축약
+        """AI 기반으로 대화 히스토리를 축약합니다.
 
-        Teacher 모델이 대화 히스토리를 분석하여 중요한 학습 포인트를 파악하고 축약.
-        Rule-based 축약보다 맥락을 더 잘 보존함.
+        Teacher 모델이 대화 히스토리를 분석하여 중요한 학습 포인트를
+        파악하고 축약합니다. Rule-based 축약보다 맥락을 더 잘 보존합니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -547,7 +509,9 @@ Answer: {ground_truth}""",
             conversation_history: 전체 대화 기록
 
         Returns:
-            Tuple[summary_text, failure_metadata]
+            튜플 (summary_text, failure_metadata):
+                - summary_text: 축약된 대화 요약
+                - failure_metadata: 실패 시 메타데이터, 성공 시 None
         """
         # 전체 히스토리를 포맷팅
         formatted_history = self._format_conversation_history(conversation_history)
@@ -575,15 +539,14 @@ Answer: {ground_truth}""",
             return truncated, failure_metadata
 
     def _fallback_truncate_history(self, history: List[Dict], max_total_length: int = 1500) -> str:
-        """
-        Fallback: AI 축약 실패 시 단순 truncation
+        """AI 축약 실패 시 단순 truncation을 수행합니다.
 
         Args:
             history: 대화 기록
-            max_total_length: 최대 총 길이
+            max_total_length: 최대 총 길이. 기본값: 1500
 
         Returns:
-            truncated 히스토리
+            잘린 히스토리 문자열
         """
         formatted = self._format_conversation_history(history)
         if len(formatted) > max_total_length:
@@ -603,11 +566,13 @@ Answer: {ground_truth}""",
         task_analysis: str,
         max_iterations: int = 5
     ) -> Dict[str, Any]:
-        """
-        Scaffolding Artifact 생성 (Socratic questioning 대체)
+        """Scaffolding Artifact를 생성합니다.
 
-        미충족 PO에 대해 HOT/LOT를 구분하여 교수적 스캐폴딩을 설계합니다.
-        이 스캐폴딩은 학생이 다음 시도에서 참조하는 DB로 사용됩니다.
+        미충족 PO에 대해 HOT(High-Order Thinking)/LOT(Low-Order Thinking)를
+        구분하여 교수적 스캐폴딩을 설계합니다. 이 스캐폴딩은 학생이
+        다음 시도에서 참조하는 DB로 사용됩니다.
+
+        Socratic questioning을 대체하는 새로운 방식입니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -615,22 +580,18 @@ Answer: {ground_truth}""",
             po_evaluation: PO 평가 결과
             iteration_number: 현재 반복 횟수
             task_analysis: 과제 분석 결과
-            max_iterations: 최대 반복 횟수
+            max_iterations: 최대 반복 횟수. 기본값: 5
 
         Returns:
-            {
-                "scaffolding_artifacts": [
-                    {
-                        "target_objective": str,
-                        "skill_type": "HOT" or "LOT",
-                        "cognitive_level": str,
-                        "failure_analysis": str,
-                        "scaffolding_content": {...}
-                    }
-                ],
-                "scaffolding_summary": str,  # 3-5문장 요약
-                "_failure_metadata": {...}
-            }
+            스캐폴딩 결과 딕셔너리:
+                - scaffolding_artifacts (list): 스캐폴딩 아티팩트 목록
+                    - target_objective: 대상 목표
+                    - skill_type: "HOT" 또는 "LOT"
+                    - cognitive_level: 인지 수준
+                    - failure_analysis: 실패 분석
+                    - scaffolding_content: 스캐폴딩 내용
+                - scaffolding_summary: 3-5문장 요약
+                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         # Extract failed POs
         failed_objectives = [
@@ -650,7 +611,7 @@ Answer: {ground_truth}""",
 
         # Retry logic
         max_retries = 3
-        last_error = None
+        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -664,22 +625,15 @@ Answer: {ground_truth}""",
 
                 # Add success metadata (step3 = Scaffolding)
                 result['_failure_metadata'] = {
-                    PipelineStep.STEP3: {
+                    "step3_scaffolding_artifact_generation": {
                         "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "stage": "scaffolding_artifact_generation"
-                    },
-                    # Legacy key for backward compatibility
-                    "scaffolding_artifact": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "stage": "scaffolding_artifact_generation"
+                        "attempts_needed": attempt
                     }
                 }
                 return result
 
             except Exception as e:
-                last_error = e
+                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: Scaffolding artifact attempt {attempt}/{max_retries} failed: {e}. Retrying...")
                 else:
@@ -707,20 +661,11 @@ Answer: {ground_truth}""",
             "scaffolding_artifacts": fallback_artifacts,
             "scaffolding_summary": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
             "_failure_metadata": {
-                PipelineStep.STEP3: {
+                "step3_scaffolding_artifact_generation": {
                     "is_fallback": True,
                     "failure_reason": "scaffolding_artifact_generation_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
-                    "max_retries_exceeded": max_retries,
-                    "stage": "scaffolding_artifact_generation"
-                },
-                # Legacy key for backward compatibility
-                "scaffolding_artifact": {
-                    "is_fallback": True,
-                    "failure_reason": "scaffolding_artifact_generation_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
-                    "max_retries_exceeded": max_retries,
-                    "stage": "scaffolding_artifact_generation"
+                    "last_error": errors if errors else ["Unknown error"],
+                    "max_retries_exceeded": max_retries
                 }
             }
         }
@@ -734,11 +679,10 @@ Answer: {ground_truth}""",
         student_weaknesses: List[str],
         max_iterations: int = 5
     ) -> Dict[str, Any]:
-        """
-        Case C: 최종 정답 풀이 생성
+        """Case C: 최종 정답 풀이를 생성합니다.
 
         학생이 max_iterations 시도 후에도 실패한 경우,
-        Teacher가 학생의 약점을 반영한 교육적 정답 풀이를 생성합니다.
+        학생의 약점을 반영한 교육적 정답 풀이를 생성합니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -746,16 +690,15 @@ Answer: {ground_truth}""",
             task_analysis: 과제 분석 결과
             scaffolding_history: 누적된 스캐폴딩 히스토리
             student_weaknesses: 학생의 약점 목록
-            max_iterations: 최대 반복 횟수
+            max_iterations: 최대 반복 횟수. 기본값: 5
 
         Returns:
-            {
-                "solution_explanation": str,  # 완전한 풀이
-                "addressed_weaknesses": List[str],
-                "key_learning_points": List[str],
-                "final_answer": str,
-                "_failure_metadata": {...}
-            }
+            최종 솔루션 딕셔너리:
+                - solution_explanation: 완전한 풀이 설명
+                - addressed_weaknesses: 다룬 약점 목록
+                - key_learning_points: 핵심 학습 포인트
+                - final_answer: 최종 정답
+                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         # Format scaffolding history
         history_str = self._format_scaffolding_history(scaffolding_history)
@@ -773,7 +716,7 @@ Answer: {ground_truth}""",
 
         # Retry logic
         max_retries = 3
-        last_error = None
+        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -791,23 +734,16 @@ Answer: {ground_truth}""",
 
                 # Add success metadata (step5 = Reconstruction, Case C)
                 result['_failure_metadata'] = {
-                    PipelineStep.STEP5: {
+                    "step5_case_c_final_solution": {
                         "is_fallback": False,
                         "attempts_needed": attempt,
-                        "case": "C",
-                        "stage": "case_c_final_solution"
-                    },
-                    # Legacy key for backward compatibility
-                    "final_solution": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "stage": "case_c_final_solution"
+                        "case": "C"
                     }
                 }
                 return result
 
             except Exception as e:
-                last_error = e
+                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: Final solution attempt {attempt}/{max_retries} failed: {e}. Retrying...")
                 else:
@@ -831,34 +767,24 @@ Answer: {ground_truth}""",
             ],
             "final_answer": ground_truth,
             "_failure_metadata": {
-                PipelineStep.STEP5: {
+                "step5_case_c_final_solution": {
                     "is_fallback": True,
                     "failure_reason": "final_solution_generation_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
+                    "last_error": errors if errors else ["Unknown error"],
                     "max_retries_exceeded": max_retries,
-                    "case": "C",
-                    "stage": "case_c_final_solution"
-                },
-                # Legacy key for backward compatibility
-                "final_solution": {
-                    "is_fallback": True,
-                    "failure_reason": "final_solution_generation_failed",
-                    "last_error": str(last_error) if last_error else "Unknown error",
-                    "max_retries_exceeded": max_retries,
-                    "stage": "case_c_final_solution"
+                    "case": "C"
                 }
             }
         }
 
     def _format_scaffolding_history(self, scaffolding_history: List[Dict]) -> str:
-        """
-        Scaffolding 히스토리를 프롬프트용 문자열로 포맷
+        """스캐폴딩 히스토리를 프롬프트용 문자열로 변환합니다.
 
         Args:
             scaffolding_history: 스캐폴딩 히스토리 리스트
 
         Returns:
-            포맷된 문자열
+            프롬프트에 포함할 수 있는 포맷된 문자열
         """
         if not scaffolding_history:
             return "(No scaffolding history)"
@@ -884,14 +810,15 @@ Answer: {ground_truth}""",
         self,
         conversation_history: List[Dict]
     ) -> List[str]:
-        """
-        대화 히스토리에서 학생의 약점 추출
+        """대화 히스토리에서 학생의 약점을 추출합니다.
+
+        PO 평가와 스캐폴딩 아티팩트에서 학생의 약점을 수집합니다.
 
         Args:
             conversation_history: 대화 기록
 
         Returns:
-            약점 목록
+            학생 약점 목록 (최대 5개)
         """
         weaknesses = []
         seen = set()

@@ -1,5 +1,20 @@
-"""
-2단계: 교수 분석 (Instructional Analysis)
+"""교수설계 Step 1: 교수 분석(Instructional Analysis) 모듈.
+
+이 모듈은 학습 목표를 분석하여 Instructional Goal, Subskills, Subtasks를
+도출합니다. Dick & Carey 모델의 교수 분석 단계를 구현합니다.
+
+주요 클래스:
+    InstructionalAnalysis: 교수 분석 에이전트
+
+교수 분석 출력:
+    - Instructional Goal: 최종 학습 목표
+    - Subskills: 하위 기술 (계층적 구조)
+    - Subtasks: 세부 과제
+
+사용 예시:
+    >>> from design_modules.analysis import InstructionalAnalysis
+    >>> analyzer = InstructionalAnalysis(teacher_config)
+    >>> result = analyzer.analyze("학습 목표 텍스트")
 """
 from models.teacher_wrapper import TeacherModelWrapper
 from prompts.design_prompts import INSTRUCTIONAL_ANALYSIS_PROMPT
@@ -8,28 +23,43 @@ import json
 
 
 class InstructionalAnalysis:
-    """교수 분석 모듈"""
+    """교수 분석 에이전트 클래스.
+
+    학습 목표를 분석하여 하위 기술과 세부 과제를 계층적 구조로 도출합니다.
+    Teacher 모델을 사용하여 분석을 수행합니다.
+
+    Attributes:
+        llm: Teacher 모델 래퍼
+    """
 
     def __init__(self, teacher_config: dict = None):
-        """
+        """InstructionalAnalysis를 초기화합니다.
+
         Args:
-            teacher_config: Teacher model 설정 (None이면 기본 설정 사용)
+            teacher_config: Teacher 모델 설정. None이면 기본 설정 사용.
         """
         self.llm = TeacherModelWrapper(teacher_config)
 
     def analyze(self, learning_objective: str, max_retries: int = 3) -> Dict[str, Any]:
-        """
-        학습 목표를 분석하여 Instructional Goal, Subskills, Subtasks 생성 (최대 3번 재시도)
+        """학습 목표를 분석합니다.
+
+        학습 목표를 분석하여 Instructional Goal, Subskills, Subtasks를 생성합니다.
+        실패 시 최대 max_retries 횟수만큼 재시도합니다.
 
         Args:
-            learning_objective: 학습 목표
-            max_retries: 최대 재시도 횟수 (기본 3)
+            learning_objective: 분석할 학습 목표 텍스트
+            max_retries: 최대 재시도 횟수 (기본: 3)
 
         Returns:
-            분석 결과 딕셔너리
+            분석 결과 딕셔너리:
+                - learning_objective (str): 입력된 학습 목표
+                - raw_output (str): LLM 원본 출력
+                - parsed (dict): 파싱된 구조화 결과
+                    - instructional_goal: 최종 목표
+                    - subskills: 하위 기술 리스트
 
         Raises:
-            RuntimeError: max_retries 초과 시
+            RuntimeError: max_retries 횟수 초과 시
         """
         last_error = None
 
@@ -69,14 +99,18 @@ class InstructionalAnalysis:
         )
 
     def _parse_analysis_result(self, result_text: str) -> Dict[str, Any]:
-        """
-        분석 결과 텍스트를 구조화된 데이터로 파싱
+        """분석 결과 텍스트를 구조화된 데이터로 파싱합니다.
+
+        LLM 출력 텍스트에서 Instructional Goal과 Subskills를 추출합니다.
+        트리 구조(├──, └──, │)를 파싱하여 계층적 구조를 보존합니다.
 
         Args:
             result_text: LLM 출력 텍스트
 
         Returns:
-            구조화된 분석 결과
+            구조화된 분석 결과:
+                - instructional_goal: 최종 학습 목표
+                - subskills: 하위 기술 리스트
         """
         lines = result_text.strip().split('\n')
 

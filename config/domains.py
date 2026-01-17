@@ -1,5 +1,20 @@
-"""
-Domain and dataset configuration.
+"""도메인 및 데이터셋 설정 모듈.
+
+이 모듈은 ID-MAS 시스템의 도메인(math, logical, commonsense) 및
+데이터셋 관련 설정을 관리합니다.
+
+주요 상수:
+    DATASET_TO_DOMAIN: 데이터셋 → 도메인 매핑
+    TRAINING_DATASETS: 도메인별 학습 데이터셋 목록
+    DOMAIN_CONFIG: 도메인별 상세 설정
+    DATA_DIR: 데이터 디렉토리 경로
+
+주요 함수:
+    get_available_domains: 사용 가능한 도메인 목록 반환
+    get_eval_datasets_for_domain: 도메인별 평가 데이터셋 반환
+    get_training_datasets_for_domain: 도메인별 학습 데이터셋 반환
+    get_domain_data_dirs: 도메인별 디렉토리 경로 반환
+    get_instructional_goal: 설계 JSON에서 Instructional Goal 로드
 """
 import json
 from pathlib import Path
@@ -7,10 +22,10 @@ from typing import Optional
 from config.api import PROJECT_ROOT
 
 # =============================================================================
-# Domain-based Configuration
+# 도메인 기반 설정
 # =============================================================================
 
-# Dataset to domain mapping
+# 데이터셋 → 도메인 매핑
 DATASET_TO_DOMAIN = {
     "gsm8k": "math",
     "math": "math",
@@ -18,17 +33,17 @@ DATASET_TO_DOMAIN = {
     "arc_c": "commonsense",
 }
 
-# Available training datasets per domain
+# 도메인별 학습 데이터셋
 TRAINING_DATASETS = {
     "math": ["gsm8k", "math"],
     "logical": ["reclor"],
     "commonsense": ["arc_c"],
 }
 
-# Data directory path
+# 데이터 디렉토리 경로
 DATA_DIR = PROJECT_ROOT / "data"
 
-# Domain configurations
+# 도메인별 상세 설정
 DOMAIN_CONFIG = {
     "math": {
         "data_dir": DATA_DIR / "math",
@@ -41,7 +56,7 @@ DOMAIN_CONFIG = {
         "training_datasets": ["reclor"],
         "eval_datasets": [
             "reclor", "anli_r2", "anli_r3",
-            "bbh"  # Unified BBH (all subtasks in single file, subtask info in metadata)
+            "bbh"  # 통합 BBH (모든 하위 태스크가 단일 파일, subtask 정보는 metadata에)
         ],
         "default_eval": "reclor"
     },
@@ -55,54 +70,86 @@ DOMAIN_CONFIG = {
 
 
 def get_available_domains() -> list:
-    """Get list of available domains."""
+    """사용 가능한 도메인 목록을 반환합니다.
+
+    Returns:
+        도메인명 리스트 (예: ["math", "logical", "commonsense"])
+    """
     return list(DOMAIN_CONFIG.keys())
 
 
 def get_eval_datasets_for_domain(domain: str) -> list:
-    """Get available evaluation datasets for a domain."""
+    """도메인의 평가 데이터셋 목록을 반환합니다.
+
+    Args:
+        domain: 도메인명 (예: "math")
+
+    Returns:
+        평가 데이터셋 리스트 (예: ["gsm8k", "math", "svamp", ...])
+
+    Raises:
+        ValueError: 알 수 없는 도메인인 경우
+    """
     if domain not in DOMAIN_CONFIG:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
+        raise ValueError(f"알 수 없는 도메인: {domain}. 가능한 도메인: {list(DOMAIN_CONFIG.keys())}")
     return DOMAIN_CONFIG[domain]["eval_datasets"]
 
 
 def get_training_datasets_for_domain(domain: str) -> list:
-    """Get available training datasets for a domain."""
+    """도메인의 학습 데이터셋 목록을 반환합니다.
+
+    Args:
+        domain: 도메인명 (예: "math")
+
+    Returns:
+        학습 데이터셋 리스트 (예: ["gsm8k", "math"])
+
+    Raises:
+        ValueError: 알 수 없는 도메인인 경우
+    """
     if domain not in DOMAIN_CONFIG:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
+        raise ValueError(f"알 수 없는 도메인: {domain}. 가능한 도메인: {list(DOMAIN_CONFIG.keys())}")
     return DOMAIN_CONFIG[domain]["training_datasets"]
 
 
-def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str = None, mode: str = "train", teacher_model_name: str = None) -> dict:
-    """
-    도메인별, 모델별 데이터 디렉토리 경로 반환 (새 구조)
+def get_domain_data_dirs(
+    domain: str,
+    model_name: str = None,
+    train_dataset: str = None,
+    mode: str = "train",
+    teacher_model_name: str = None
+) -> dict:
+    """도메인별, 모델별 데이터 디렉토리 경로를 반환합니다.
 
-    New Structure:
-        Train: data/{domain}/train/{teacher_model}/{student_model}/
-        Eval:  data/{domain}/eval/{student_model}/
+    디렉토리 구조:
+    - Train 모드: data/{domain}/train/{teacher_model}/{student_model}/
+    - Eval 모드: data/{domain}/eval/{student_model}/
 
     Args:
-        domain: 도메인 이름 (예: "math", "logical", "commonsense")
-        model_name: Student 모델 이름 (None이면 기본 모델 사용)
-        train_dataset: 학습 데이터셋 이름 (파일명 생성에 사용, 폴더 구조에는 미사용)
+        domain: 도메인명 (예: "math", "logical", "commonsense")
+        model_name: Student 모델명. None이면 기본 모델 사용
+        train_dataset: 학습 데이터셋명 (파일명 생성에만 사용)
         mode: "train" 또는 "eval"
-        teacher_model_name: Teacher 모델 이름 (train 모드에서 사용, None이면 기본 모델 사용)
+        teacher_model_name: Teacher 모델명 (train 모드에서만 사용)
 
     Returns:
         경로 딕셔너리:
         - model_dir: 모델별 출력 디렉토리
         - raw_data_dir: 원본 데이터 디렉토리
         - design_dir: 설계 결과 디렉토리 (train 모드만)
+
+    Raises:
+        ValueError: 알 수 없는 도메인인 경우
     """
     from config.models import get_model_short_name, DEFAULT_TEACHER_MODEL
 
     if domain not in DOMAIN_CONFIG:
-        raise ValueError(f"Unknown domain: {domain}. Available: {list(DOMAIN_CONFIG.keys())}")
+        raise ValueError(f"알 수 없는 도메인: {domain}. 가능한 도메인: {list(DOMAIN_CONFIG.keys())}")
 
     model_short = get_model_short_name(model_name)
 
     if mode == "train":
-        # Teacher 모델 이름으로 상위 디렉토리 생성
+        # Teacher 모델명으로 상위 디렉토리 결정
         teacher_short = get_model_short_name(teacher_model_name) if teacher_model_name else get_model_short_name(DEFAULT_TEACHER_MODEL)
         model_dir = DATA_DIR / domain / "train" / teacher_short / model_short
         dirs = {
@@ -110,7 +157,7 @@ def get_domain_data_dirs(domain: str, model_name: str = None, train_dataset: str
             "raw_data_dir": DATA_DIR / domain / "train" / "data",
             "design_dir": DATA_DIR / domain / "train" / teacher_short / "instructional-design",
         }
-    else:  # eval
+    else:  # eval 모드
         model_dir = DATA_DIR / domain / "eval" / model_short
         dirs = {
             "model_dir": model_dir,
@@ -128,17 +175,16 @@ def get_instructional_goal(
     dataset: str,
     teacher_model: Optional[str] = None
 ) -> Optional[str]:
-    """
-    Get Instructional Goal for a training dataset from design JSON.
+    """설계 JSON 파일에서 Instructional Goal을 로드합니다.
 
-    Design JSON 파일에서만 로드하며, 없으면 None 반환 (fallback 없음).
+    설계 JSON 파일이 없으면 None을 반환합니다 (fallback 없음).
 
     Args:
-        dataset: 데이터셋 이름 (e.g., "gsm8k", "math")
-        teacher_model: Teacher 모델 이름 (필수 - design JSON 경로 결정에 사용)
+        dataset: 데이터셋명 (예: "gsm8k", "math")
+        teacher_model: Teacher 모델명 (설계 JSON 경로 결정에 필수)
 
     Returns:
-        Instructional Goal 문자열 또는 None (생성된 것이 없는 경우)
+        Instructional Goal 문자열 또는 None (파일이 없거나 미생성)
     """
     if not teacher_model:
         return None
@@ -155,16 +201,17 @@ def _load_instructional_goal_from_design(
     dataset: str,
     teacher_model: str
 ) -> Optional[str]:
-    """
-    Design JSON 파일에서 instructional_goal 로드
+    """설계 JSON 파일에서 instructional_goal 필드를 로드합니다.
+
+    내부 헬퍼 함수로, get_instructional_goal에서 호출됩니다.
 
     Args:
-        domain: 도메인 이름
-        dataset: 데이터셋 이름
-        teacher_model: Teacher 모델 이름
+        domain: 도메인명
+        dataset: 데이터셋명
+        teacher_model: Teacher 모델명
 
     Returns:
-        Instructional Goal 또는 None (파일 없거나 필드 없음)
+        Instructional Goal 문자열 또는 None
     """
     from config.config import get_model_short_name
 
@@ -182,7 +229,7 @@ def _load_instructional_goal_from_design(
                 return instructional_goal
 
     except Exception:
-        # 로드 실패 시 무시하고 fallback 사용
+        # 로드 실패 시 무시
         pass
 
     return None
