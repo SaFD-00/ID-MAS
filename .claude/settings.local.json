@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c:*)",
+      "Bash(python3:*)",
+      "Skill(git:git-push)",
+      "Skill(git:git-push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: SFT 케이스 분류 기준을 PO 충족 여부만 보도록 변경\n\n- 기존: is_correct AND all_satisfied \\(정답 + PO 충족\\)\n- 변경: all_satisfied만 \\(PO 충족 여부만\\)\n\n변경 사항:\n- learning_loop/graph/nodes.py: 성공 조건 및 실패 로직 수정\n- README.md: SFT Case 분류 설명 업데이트\n- ARCHITECTURE.md: 플로우차트 및 프로세스 설명 업데이트\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: domain_loader에서 \\\\boxed{} 패턴으로 정답 추출하도록 개선\n\n- extract_boxed_answer 함수 import하여 중첩 괄호 처리\n- 데이터셋별 answer_type 명시 \\(NUMERIC, LATEX, MCQ\\)\n- _extract_answer 우선순위: boxed → #### → 마지막 줄\n- _get_dataset_answer_type 헬퍼 메서드 추가\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(chmod:*)",
+      "Bash(while read f)",
+      "Bash(do ls -lh \"$f\")",
+      "Bash(done)",
+      "Bash(git restore:*)",
+      "Bash(/home/seungwoo.baek/miniconda3/envs/ID-MAS/bin/python:*)",
+      "Bash(source:*)",
+      "Bash(conda activate:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "playwright-test"
+  ]
+}
