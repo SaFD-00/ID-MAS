@@ -77,9 +77,7 @@ class IDMASPipeline:
         student_model_name: Optional[str] = None,
         teacher_config: Optional[Dict] = None,
         resume: bool = False,
-        checkpoint_interval: int = 10,
-        use_enhanced_data: bool = False,
-        enhanced_model_suffix: Optional[str] = None
+        checkpoint_interval: int = 10
     ):
         """
         Args:
@@ -89,8 +87,6 @@ class IDMASPipeline:
             teacher_config: Teacher model configuration (None for default OpenAI model)
             resume: Whether to resume from checkpoint
             checkpoint_interval: Save checkpoint every N questions (default: 10)
-            use_enhanced_data: Use enhanced training data with pre-generated Instructional Goal
-            enhanced_model_suffix: Model suffix for enhanced data file
         """
         self.domain = domain.lower()
         self.train_dataset = train_dataset.lower()
@@ -98,8 +94,6 @@ class IDMASPipeline:
         self.teacher_config = teacher_config
         self.checkpoint_interval = checkpoint_interval
         self.resume = resume
-        self.use_enhanced_data = use_enhanced_data
-        self.enhanced_model_suffix = enhanced_model_suffix
 
         # Identifier for design files (domain_dataset)
         self.identifier = f"{self.domain}_{self.train_dataset}"
@@ -366,7 +360,9 @@ class IDMASPipeline:
         print(f"  Records: {len(enhanced_data)}")
 
         # 5. 메타데이터 저장
-        metadata_path = self.raw_data_dir / f"{self.train_dataset}_ID-MAS_metadata_{model_suffix}.json"
+        design_dir = DATA_DIR / self.domain / "train" / model_suffix / "instructional-design"
+        design_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path = design_dir / f"{self.train_dataset}_train_id-mas_{model_suffix}_metadata.json"
         metadata = {
             "domain": self.domain,
             "dataset": self.train_dataset,
@@ -381,17 +377,14 @@ class IDMASPipeline:
 
         print(f"\n Enhanced data generation completed")
 
-        # 자동으로 enhanced data 사용 설정
-        self.use_enhanced_data = True
-        self.enhanced_model_suffix = model_suffix
-
         return output_path
 
     def run_learning_phase(
         self,
         design_result: Dict,
         num_questions: Optional[int] = None,
-        resume: bool = False
+        resume: bool = False,
+        model_suffix: Optional[str] = None
     ) -> Dict:
         """
         LangGraph 기반 Iterative Scaffolding Pipeline 실행
@@ -400,28 +393,24 @@ class IDMASPipeline:
             design_result: 설계 결과
             num_questions: 학습할 질문 개수 (None이면 전체)
             resume: 기존 로그에서 이어서 학습할지 여부
+            model_suffix: Enhanced data 파일의 모델 suffix (None이면 teacher_model_name에서 계산)
 
         Returns:
             학습 결과 딕셔너리
         """
-        # Load training data (enhanced or regular)
-        if self.use_enhanced_data and self.enhanced_model_suffix:
-            print(f"\n[Enhanced Data] Loading enhanced training data...")
-            print(f"  Model suffix: {self.enhanced_model_suffix}")
-            questions = self.loader.load_enhanced_training_data(
-                dataset=self.train_dataset,
-                model_suffix=self.enhanced_model_suffix,
-                limit=num_questions,
-                shuffle=False
-            )
-            print(f"\nLoaded {len(questions)} enhanced training questions")
-        else:
-            questions = self.loader.load_training_data(
-                dataset=self.train_dataset,
-                limit=num_questions,
-                shuffle=False
-            )
-            print(f"\nLoaded {len(questions)} training questions")
+        # Enhanced data 로드 (항상 enhanced data 사용)
+        if model_suffix is None:
+            model_suffix = get_model_short_name(self.teacher_model_name)
+
+        print(f"\n[Enhanced Data] Loading enhanced training data...")
+        print(f"  Model suffix: {model_suffix}")
+        questions = self.loader.load_enhanced_training_data(
+            dataset=self.train_dataset,
+            model_suffix=model_suffix,
+            limit=num_questions,
+            shuffle=False
+        )
+        print(f"\nLoaded {len(questions)} enhanced training questions")
 
         # Prepare question data (new field names: id, instruction, input, output)
         question_data = []
@@ -729,8 +718,6 @@ def run_train_mode(args):
     print(f"Student Model: {student_model_name}")
     print(f"Teacher Model: {teacher_model_name}")
     print(f"Resume: {args.resume}")
-    if getattr(args, 'use_enhanced_data', False):
-        print(f"Enhanced Data: Yes (suffix: {args.enhanced_model_suffix})")
 
     # Teacher와 Student 모델이 동일한지 확인 (로컬 모델인 경우)
     is_local_teacher = not (
@@ -751,9 +738,7 @@ def run_train_mode(args):
         student_model_name=args.student_model,
         teacher_config=teacher_config,
         resume=args.resume,
-        checkpoint_interval=10,
-        use_enhanced_data=getattr(args, 'use_enhanced_data', False),
-        enhanced_model_suffix=getattr(args, 'enhanced_model_suffix', None)
+        checkpoint_interval=10
     )
 
     if pipeline.instructional_goal:
@@ -791,25 +776,21 @@ def run_train_mode(args):
             regenerate_instructional_goal=(not args.resume)
         )
 
-    # 2. Enhanced Data 생성 (design phase 결과 기반)
-    # --use-enhanced-data 플래그가 없어도 자동으로 생성 및 사용
-    if not getattr(args, 'use_enhanced_data', False):
-        # Enhanced data가 이미 존재하는지 확인
-        model_suffix = get_model_short_name(pipeline.teacher_model_name)
-        enhanced_path = pipeline.raw_data_dir / f"{pipeline.train_dataset}_train_ID-MAS_{model_suffix}.json"
+    # 2. Enhanced Data 확인 및 생성 (항상 enhanced data 사용)
+    model_suffix = get_model_short_name(pipeline.teacher_model_name)
+    enhanced_path = pipeline.raw_data_dir / f"{pipeline.train_dataset}_train_ID-MAS_{model_suffix}.json"
 
-        if enhanced_path.exists() and args.resume:
-            print(f"\n[Enhanced Data] Using existing enhanced data: {enhanced_path.name}")
-            pipeline.use_enhanced_data = True
-            pipeline.enhanced_model_suffix = model_suffix
-        else:
-            # Enhanced data 생성
-            pipeline.generate_enhanced_data(design_result)
+    if enhanced_path.exists() and args.resume:
+        print(f"\n[Enhanced Data] Using existing enhanced data: {enhanced_path.name}")
+    else:
+        # Enhanced data 생성
+        pipeline.generate_enhanced_data(design_result)
 
     # 3. Iterative Scaffolding 학습 단계
     learning_result = pipeline.run_learning_phase(
         design_result=design_result,
-        resume=args.resume
+        resume=args.resume,
+        model_suffix=model_suffix
     )
 
     print("\n" + "=" * 60)
@@ -956,19 +937,6 @@ Examples:
         choices=["True", "False"],
         help="Resume training from checkpoint. Train mode only. (default: True)"
     )
-    parser.add_argument(
-        "--use-enhanced-data",
-        action="store_true",
-        dest="use_enhanced_data",
-        help="Use enhanced training data with pre-generated Instructional Goal and Task Analysis. Train mode only."
-    )
-    parser.add_argument(
-        "--enhanced-model-suffix",
-        type=str,
-        default=None,
-        dest="enhanced_model_suffix",
-        help="Model suffix for enhanced data file (e.g., 'Qwen2.5-72B-Instruct'). Required when --use-enhanced-data is set."
-    )
 
     # ========================================
     # Eval mode options
@@ -1042,10 +1010,6 @@ Examples:
 
         # Convert --resume string to boolean
         args.resume = args.resume == "True"
-
-        # Validate --use-enhanced-data requires --enhanced-model-suffix
-        if args.use_enhanced_data and not args.enhanced_model_suffix:
-            parser.error("--enhanced-model-suffix is required when using --use-enhanced-data")
 
         # Run train mode
         run_train_mode(args)

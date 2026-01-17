@@ -120,30 +120,29 @@ class DataEnhancer:
         task_analysis: str
     ) -> List[Dict]:
         """
-        데이터에 학습목표와 과제분석 메타데이터 추가
+        데이터에 학습목표와 과제분석이 포함된 enhanced instruction 적용
 
-        중요: instruction 필드는 원본을 유지합니다.
-        Enhanced instruction은 _enhanced_instruction 메타데이터로만 저장됩니다.
-        이를 통해 SFT 학습 시 train-test mismatch를 방지합니다.
+        instruction 필드에 enhanced instruction을 직접 적용하여
+        SFT 학습 시 향상된 프롬프트가 사용되도록 합니다.
         """
         enhanced = []
         for item in data:
-            new_item = item.copy()
             original_instruction = item.get("instruction", "")
 
-            # instruction은 원본 유지 (train-test mismatch 방지)
-            # enhanced version은 메타데이터로만 저장 (참조/디버깅용)
+            # Enhanced instruction 생성
             enhanced_instruction = ENHANCED_INSTRUCTION_TEMPLATE.format(
                 original_instruction=original_instruction,
                 instructional_goal=instructional_goal,
                 task_analysis=task_analysis
             )
 
-            # 메타데이터 추가 (instruction 필드는 변경하지 않음)
-            new_item["_enhanced"] = True
-            new_item["_instructional_goal"] = instructional_goal
-            new_item["_task_analysis"] = task_analysis
-            new_item["_enhanced_instruction"] = enhanced_instruction
+            # 깔끔한 구조로 새 아이템 생성
+            new_item = {
+                "instruction": enhanced_instruction,
+                "input": item.get("input", ""),
+                "output": item.get("output", ""),
+                "metadata": item.get("metadata", {})
+            }
 
             enhanced.append(new_item)
 
@@ -182,7 +181,9 @@ class DataEnhancer:
         else:
             suffix = "default"
 
-        metadata_path = PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_ID-MAS_metadata_{suffix}.json"
+        design_dir = PROJECT_ROOT / "data" / domain / "train" / suffix / "instructional-design"
+        design_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path = design_dir / f"{dataset}_train_id-mas_{suffix}_metadata.json"
 
         metadata = {
             "domain": domain,

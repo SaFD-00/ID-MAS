@@ -94,15 +94,7 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 | **평가 (In-Domain)** | `reclor` | MCQ | |
 | **평가 (OOD)** | `anli_r2` | MCQ | Adversarial NLI |
 | **평가 (OOD)** | `anli_r3` | MCQ | Adversarial NLI |
-| **평가 (OOD)** | `bbh_boolean_expressions` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_formal_fallacies` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_logical_deduction_three_objects` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_logical_deduction_five_objects` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_logical_deduction_seven_objects` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_tracking_shuffled_objects_three_objects` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_tracking_shuffled_objects_five_objects` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_tracking_shuffled_objects_seven_objects` | Text | BBH 서브태스크 |
-| **평가 (OOD)** | `bbh_web_of_lies` | Text | BBH 서브태스크 |
+| **평가 (OOD)** | `bbh` | Text | BBH |
 
 ### Commonsense 도메인
 
@@ -189,15 +181,15 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset
 #### Logical 도메인
 
 ```bash
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen2.5-3B-Instruct \
     --teacher-model Qwen/Qwen2.5-3B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen2.5-7B-Instruct \
     --teacher-model Qwen/Qwen2.5-7B-Instruct
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen2.5-72B-Instruct \
     --teacher-model Qwen/Qwen2.5-72B-Instruct
 ```
@@ -205,15 +197,15 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-data
 #### Commonsense 도메인
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen2.5-3B-Instruct \
     --teacher-model Qwen/Qwen2.5-3B-Instruct
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen2.5-7B-Instruct \
     --teacher-model Qwen/Qwen2.5-7B-Instruct
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen2.5-72B-Instruct \
     --teacher-model Qwen/Qwen2.5-72B-Instruct
 ```
