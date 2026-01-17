@@ -1,0 +1,122 @@
+[
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "At the aquarium, there are twice as many sharks as stingrays. If there are 28 stingrays, how many fish are there?",
+    "output": "The answer is \\boxed{84}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Mia has $20 more than twice as much money Darwin has. If Darwin has $45, how much money does Mia have?",
+    "output": "The answer is \\boxed{110}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Saheed made four times as much money as Kayla. Kayla made $30 less than Vika. Vika made $84. How many dollars did Saheed make?",
+    "output": "The answer is \\boxed{216}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Manny has a tree that grows at the rate of fifty centimeters every two weeks. If the tree is currently 2 meters tall, how tall, in centimeters, will the tree be in 4 months?",
+    "output": "The answer is \\boxed{600}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Liza reads 20 pages in an hour, and Suzie reads 15 pages in an hour. How many more pages does Liza read than Suzie in 3 hours?",
+    "output": "The answer is \\boxed{15}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "James goes to pet smart to adopt a puppy.  The adoption fee is $200 and his friend agrees to pay 25% of that.  How much does James have to pay?",
+    "output": "The answer is \\boxed{150}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Celia runs twice as fast as Lexie. If it takes Lexie 20 minutes to run a mile, how long, in minutes, will it take Celia to 30 miles?",
+    "output": "The answer is \\boxed{300}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Buoys are placed in the ocean at even intervals away from the beach to help swimmers monitor how far away from the beach they have swum. If a swimmer reaches the third buoy, they have swum out 72 meters. How many meters from the beach is the fourth buoy?",
+    "output": "The answer is \\boxed{96}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Johny traveled South 40 miles, then turned East and traveled for 20 more miles than the distance he took to travel to the south. If he turned North and traveled twice the distance he had traveled to the East, calculate the total distance his journey took.",
+    "output": "The answer is \\boxed{220}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Heather helps her neighbour pick weeds out of her garden. She gets paid 5 cents for every weed she picks. On average, how many seconds can she take to pick a weed if she wants to earn $10 an hour?",
+    "output": "The answer is \\boxed{18}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Walter works 5 days a week in a fast-food chain and earns $5 per hour. Since he is a working student, he can only work 4 hours a day and allocates 3/4 of his weekly earning for his schooling. How much does he allocate for school?",
+    "output": "The answer is \\boxed{75}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Carrie wants to take a trip to New York. She can get a 20% discount on an $850 flight with Delta Airlines. She can also save 30% off an $1100 flight with United Airlines. How much money would she save by choosing the cheapest flight?",
+    "output": "The answer is \\boxed{90}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Marco uses a fifth of an ounce of dry tea leaves to brew his morning cup of tea each day. He buys tea leaves in boxes of 28 ounces. How many weeks of daily tea does Marco get from a box?",
+    "output": "The answer is \\boxed{20}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Jamie and Oliver are planning to go on a vacation. A plane ticket costs $24 for each person and a hotel stay costs $12 for each person per day. How much money will they spend on the vacation if they stay for 3 days?",
+    "output": "The answer is \\boxed{120}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Jacoby wants to save money for a trip to Brickville. He needs to have $5000 total to go on his trip. He works a job earning $20 per hour and works 10 hours. He then finds he can sell cookies for $4 each, and he sells 24 pieces of cookies. With the money he has so far, he buys a lottery ticket for $10 and wins $500. Finally, he gets $500 from both of his sisters as a gift. How much more, in dollars, does Jacob need to go to Brickville?",
+    "output": "The answer is \\boxed{3214}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "A floral shop had a three day sale on rose bouquets. On Monday, they sold 12 bouquets. On Tuesday, they sold three times that many bouquets. On Wednesday it rained all day and they only sold a third of what they did the day before. How many bouquets did they sell during the three day sale?",
+    "output": "The answer is \\boxed{60}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "On Tuesday, Max's mom gave him $8 dollars for a hot dog at the Grand Boulevard park. On Wednesday, his mom gave him 5 times as much money as she gave him on Tuesday. On Thursday, his mom gave him $9 more in money than she gave him on Wednesday. How much more money did his mom give him on Thursday than she gave him on Tuesday?",
+    "output": "The answer is \\boxed{41}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "A family of 12 monkeys collected 10 piles of bananas. 6 piles had 9 hands, with each hand having 14 bananas, while the remaining piles had 12 hands, with each hand having 9 bananas. How many bananas would each monkey get if they divide the bananas equally amongst themselves?",
+    "output": "The answer is \\boxed{99}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Marla is thinking about getting a canvas tote bag to avoid using plastic bags at the grocery store. If making the canvas bag released 600 pounds of carbon dioxide, each plastic bag released 4 ounces of carbon dioxide, and Marla uses eight bags per shopping trips, how many shopping trips will she have to make before the canvas bag is the lower-carbon solution? (There are 16 ounces in a pound.)",
+    "output": "The answer is \\boxed{300}",
+    "metadata": {}
+  },
+  {
+    "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.\n\n## Response Format\nYour final answer MUST be within \\boxed{}.\nExample: \\boxed{42}",
+    "input": "Lyanna set up a food bank to collect food to give to the homeless in her local town. In the first week, 40 pounds of food were donated to the food bank by the people of her local town. In the second week, donations were twice as high as the first week. If she gave out 70% of the donated food to the homeless in the third week, calculate the amount of food remaining in the food bank.",
+    "output": "The answer is \\boxed{36}",
+    "metadata": {}
+  }
+]

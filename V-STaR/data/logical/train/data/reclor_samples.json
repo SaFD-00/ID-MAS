@@ -1,0 +1,162 @@
+[
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nTrisha: Today' s family is declining in its ability to carry out its functions of child-rearing and providing stability for adult life. There must be a return to the traditional values of commitment and responsibility. Jerod: We ought to leave what is good enough alone. Contemporary families may be less stable than traditionally, but most people do not find that to be bad. Contemporary criticisms of the family are overblown and destructive.\nQuestion: Trisha and Jerod disagree over whether the institution of the family is\nOptions:\nA. valued by most people\nB. changing over time\nC. adequate as it is\nD. no longer traditional",
+    "output": "The answer is \\boxed{C}",
+    "metadata": {
+      "id": "train_1037"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nOn average, the number of speeding tickets issued in County X every year is three times greater than the number of speeding tickets issued in County Y during the same period. Ttherefore, the number of people who exceed the speed limit must be higher in County X than in County Y.\nQuestion: Which of the following describes a flaw in the reasoning above?\nOptions:\nA. The argument fails to take into account that residents of County Y may be more law-abiding overall.\nB. The argument fails to take into account that the speed limit may be different in the two counties.\nC. The argument fails to take into account that the number of tickets issued in County X may reflect a lower proportion of drivers overall in that county.\nD. The argument fails to take into account that a single driver can receive more than one ticket in a given year.",
+    "output": "The answer is \\boxed{D}",
+    "metadata": {
+      "id": "train_2663"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nHunter: Hunters alone are blamed for the decline in Greenrock National Forest' s deer population over the past ten years. Yet clearly, <b> black bears have also played an important role in this decline </b>. In the past ten years, the forest' s protected black bear population has risen sharply, and examination of black bears found dead in the forest during the deer hunting season showed that a number of them had recently fed on deer.\nQuestion: In the hunter's argument, the boldface portion plays which of the following roles?\nOptions:\nA. It is a finding that the argument seeks to explain.\nB. It is a judgment that the argument opposes.\nC. It is an objection that has been raised against the main conclusion of the argument.\nD. It is the main conclusion of the argument.",
+    "output": "The answer is \\boxed{D}",
+    "metadata": {
+      "id": "train_3948"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nHistorian: In rebuttal of my claim that West influenced Stuart, some people point out that West' s work is mentioned only once in Stuart' s diaries. But Stuart' s diaries mention several meetings with West, and Stuart' s close friend, Abella, studied under West. Furthermore, Stuart' s work often uses West' s terminology which, though now commonplace, none of Stuart' s contemporaries used.\nQuestion: Which one of the following propositions is most supported by the historian's statements, if those statements are true?\nOptions:\nA. Stuart's work was not entirely free from West's influence\nB. Stuart's contemporaries were not influenced by West.\nC. It is more likely that Stuart influenced West than that West influenced Stuart.\nD. Stuart's discussions with Abella were one of the means by which West influenced Stuart.",
+    "output": "The answer is \\boxed{A}",
+    "metadata": {
+      "id": "train_798"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nSociologist: Research shows, contrary to popular opinion, that, all other things being equal, most people who have pets are less happy than most people who do not. Ttherefore, any person who wants to be as happy as possible would do well to consider not having a pet.\nQuestion: Which one of the following, if true, most seriously weakens the sociologist's argument?\nOptions:\nA. Most people who have no pets occasionally wish that they had pets.\nB. All people who have no pets admit to feeling unhappy sometimes.\nC. Most people who have pets feel happier because they have pets.\nD. Some people who have pets are happier than most people who do not.",
+    "output": "The answer is \\boxed{C}",
+    "metadata": {
+      "id": "train_1106"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nIt is often said that high rates of inflation tend to diminish people's incentive to save and invest. This view must be incorrect, however, because people generally saved and invested more of their income in the 1970's when inflation rates were high than they did in the 1980's when inflation rates were low.\nQuestion: Of the following, the best criticism of the argument above is that it overlooks the possibility that\nOptions:\nA. the proponents of the view cited would stand to gain if inflation rates become lower\nB. a factor that affects people's savings behavior in a certain way could affect people's investment behavior quite differently\nC. certain factors operating in the 1980's but not in the 1970's diminished people's incentive to save and invest\nD. the population was larger in the 1980's than it was in the 1970's",
+    "output": "The answer is \\boxed{C}",
+    "metadata": {
+      "id": "train_3922"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nIf Max were guilty, he would not ask the police to investigate. Ttherefore, his asking the police to investigate shows that he is not guilty.\nQuestion: The logical structure of the argument above is most similar to which one of the following?\nOptions:\nA. If Lucille were in the next room, I would not be able to see her. Ttherefore, the fact that I can see her shows that she is not in the next room.\nB. If Joe were over 40 he would not want to learn to ski. Ttherefore, the fact that he does not want to learn to ski shows that he is over 40.\nC. If Sam were rich, he would not spend his vacation in Alaska. Ttherefore, his spending his vacation in the Bahamas shows that he is rich.\nD. If Sally were sociable, she would not avoid her friends. Ttherefore, the fact that she is sociable shows that she does not avoid her friends. GO ON TO THE NEXT PAGE.",
+    "output": "The answer is \\boxed{A}",
+    "metadata": {
+      "id": "train_3043"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nEconomist: Government intervention in the free market in pursuit of socially desirable goals can affect supply and demand, thereby distorting prices. The ethics of such intervention is comparable to that of administering medicines. Most medicines have harmful as well as beneficial effects, so the use of a type of medicine is ethically justified only when its nonuse would be significantly more harmful than its use. Similarly, government intervention in the free market is justified only when it __.\nQuestion: Which one of the following most logically completes the final sentence above?\nOptions:\nA. would do less damage than would result from the government's not intervening\nB. provides a solution to some otherwise insoluble problem\nC. would likely be approved of by the majority of the affected participants\nD. is believed unlikely to significantly exacerbate any existing problems",
+    "output": "The answer is \\boxed{A}",
+    "metadata": {
+      "id": "train_3691"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nThe symptoms of mental disorders are behavioral, cognitive, or emotional problems. Some patients with mental disorders can be effectively treated with psychotherapy. But it is now known that in some patients mental disorders result from chemical imbalances affecting the brain. Thus these patients can be effectively treated only with medication that will reduce or correct the imbalance.\nQuestion: The argument depends on assuming which one of the following?\nOptions:\nA. Treatment with medication always shows faster results for patients with mental disorders than does treatment with psychotherapy.\nB. Treatment with psychotherapy has no effect on mental disorders other than a reduction of the symptoms.\nC. Treatment by psychotherapy can produce no effective reduction in or correction of chemical imbalances that cause mental disorders.\nD. Most mental disorders are not the result of chemical imbalances affecting the brain.",
+    "output": "The answer is \\boxed{C}",
+    "metadata": {
+      "id": "train_3404"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nAt the end of the year, Wilson' s Department Store awards free merchandise to its top salespeople. When presented with the fact that the number of salespeople receiving these awards has declined markedly over the past fifteen years, the newly appointed president of the company responded, \"In that case, since our award criterion at present is membership in the top third of our sales force, we can also say that the number of salespeople passed over for these awards has similarly declined. \"\nQuestion: Which one of the following is an assumption that would allow the company president's conclusion to be properly drawn?\nOptions:\nA. Wilson's calculates its salespeople's sales figures in the same way as it did fifteen years ago.\nB. Policies at Wilson's with regard to hiring salespeople have not become more lax over the past fifteen years.\nC. The number of salespeople at Wilson's has increased over the past fifteen years.\nD. The criterion used by Wilson's for selecting its award recipients has remained the same for the past fifteen years.",
+    "output": "The answer is \\boxed{D}",
+    "metadata": {
+      "id": "train_1510"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nSenator Strongwood reported that, contrary to a study cited by the administration, a thorough study by his own party concluded that a reduction in the capital gains tax would lead to an increase in the federal deficit. \"Hooray for common sense, \" he said. \"Everyone knows that when you cut taxes you lose revenue. \" He concluded that the administration' s plan for reducing the capital gains tax was now dead, because he could not imagine any senator voting to increase the deficit.\nQuestion: Which one of the following accurately describes something Senator Strongwood does in advancing his argument?\nOptions:\nA. He resorts to name-calling by expressly stating that his opponents lack common sense.\nB. He assumes that senators will rarely vote for unpopular legislation.\nC. He assumes that a study commissioned by his party must be more objective than one commissioned by the administration.\nD. He assumes senators will believe his party's report instead of the administration's.",
+    "output": "The answer is \\boxed{D}",
+    "metadata": {
+      "id": "train_1850"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nJournalist: A recent study showed that people who drink three cups of decaffeinated coffee per day are twice as likely to develop arthritis -- inflammation of joints resulting from damage to connective tissue -- as those who drink three cups of regular coffee per day. Clearly, decaffeinated coffee must contain something that damages connective tissue and that is not present in regular coffee.\nQuestion: Which one of the following would be most useful to know in order to evaluate the journalist's argument?\nOptions:\nA. whether most coffee drinkers drink more than three cups of coffee per day\nB. whether people who exercise regularly are more likely to drink decaffeinated beverages than those who do not\nC. whether people who drink decaffeinated coffee tend to drink coffee less often than those who drink regular coffee\nD. whether the degeneration of connective tissue is slowed by consumption of caffeine and other stimulants",
+    "output": "The answer is \\boxed{D}",
+    "metadata": {
+      "id": "train_1895"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nA study of ticket sales at a summer theater festival found that people who bought tickets to individual plays had a no-show rate of less than 1 percent, while those who paid in advance for all ten plays being performed that summer had a no-show rate of nearly 30 percent. This may be at least in part because the greater the awareness customers retain about the cost of an item, the more likely they are to use it.\nQuestion: Which of the following would, if true, best serve as an alternative explanation of the results of the study?\nOptions:\nA. The price per ticket was slightly cheaper for those who bought all ten tickets in advance.\nB. Those who attended all ten plays became eligible for a partial refund.\nC. People who arrived just before the performance began could not be assured of obtaining seats in a preferred location.\nD. Usually, people who bought tickets to individual plays did so immediately prior to each performance that they attended.",
+    "output": "The answer is \\boxed{D}",
+    "metadata": {
+      "id": "train_3153"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nThe number of serious traffic accidents (accidents resulting in hospitalization or death) that occurred on Park Road from 1986 to 1990 was 35 percent lower than the number of serious accidents from 1981 to 1985. The speed limit on Park Road was lowered in 1986. Hence, the reduction of the speed limit led to the decrease in serious accidents.\nQuestion: Which one of the following statements, if true, most weakens the argument?\nOptions:\nA. Until 1986 accidents were classified as \"serious\" only if they resulted in an extended hospital stay.\nB. The annual number of accidents on Park Road that did not result in hospitalization remained roughly constant from 1981 to 1990.\nC. The annual number of vehicles using Park Road decreased significantly and steadily from 1981 to 1990.\nD. The number of speeding tickets issued annually on Park Road remained roughly constant from 1981 to 1990.",
+    "output": "The answer is \\boxed{C}",
+    "metadata": {
+      "id": "train_1530"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nAlthough Ackerburg's subway system is currently operating at a deficit, the transit authority will lower subway fares next year. The authority projects that the lower fares will result in a ten percent increase in the number of subway riders. Since the additional income from the larger ridership will more than offset the decrease due to lower fares, the transit authority actually expects the fare reduction to reduce or eliminate the subway system's operating deficit for next year.\nQuestion: Which of the following, if true, provides the most support for the transit authority's expectation of reducing the subway system's operating deficit?\nOptions:\nA. The subway system can accommodate a ten percent increase in ridership without increasing the number of trains it runs each day.\nB. Next year, the transit authority will have to undertake several large-scale track maintenance projects.\nC. The current subway fares in Ackerburg are higher than subway fares in other cities in the region.\nD. Throughout the years that the subway system has operated, fares have never before been reduced.",
+    "output": "The answer is \\boxed{A}",
+    "metadata": {
+      "id": "train_1777"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nConstruction contractors working on the cutting edge of technology nearly always work on a \"cost-plus\" basis only. One kind of cost-plus contract stipulates the contractor' s profit as a fixed percentage of the contractor' s costs; the other kind stipulates a fixed amount of profit over and above costs. Under the first kind of contract, higher costs yield higher profits for the contractor, so this is where one might expect final costs in excess of original cost estimates to be more common. Paradoxically, such cost overruns are actually more common if the contract is of the fixed-profit kind.\nQuestion: Which one of the following, if true, most helps to resolve the apparent paradox in the situation described above?\nOptions:\nA. On long-term contracts, cost projections take future inflation into account, but since the figures used are provided by the government, they are usually underestimates.\nB. Clients billed under a cost-plus contract are free to review individual billings in order to uncover wasteful expenditures, but they do so only when the contractor's profit varies with cost.\nC. On any sizable construction project, the contractor bills the client monthly or quarterly, so any tendency for original cost estimates to be exceeded can be detected early.\nD. The practice of submitting deliberately exaggerated cost estimates is most common in the case of fixed-profit contracts, because it makes the profit, as a percentage of estimated cost, appear modest.",
+    "output": "The answer is \\boxed{B}",
+    "metadata": {
+      "id": "train_3186"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nA newspaper article on Britain' s unions argued that their strength was declining. The article' s evidence was the decreasing number and size of strikes, as if the reason for the unions' existence was to organize strikes. Surely, in a modern industrial society, the calling of a strike is evidence that the negotiating position of the union was too weak. Strong unions do not need to call strikes. They can concentrate their efforts on working with others in the labor market to achieve common goals, such as profitable and humane working conditions.\nQuestion: The argument criticizing the newspaper article is directed toward establishing which one of the following as its main conclusion?\nOptions:\nA. The reason for unions' existence is to work for goals such as profitable and humane working conditions by organizing strikes.\nB. Although unions represent the interests of their members, that does not preclude them from having interests in common with other participants in the labor market.\nC. There is no reason to believe, on the basis of what the newspaper article said, that union strength in Britain is declining.\nD. The negotiating position of a union is weak if the only means it has of achieving its end is a strike or the threat of a strike.",
+    "output": "The answer is \\boxed{C}",
+    "metadata": {
+      "id": "train_41"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nPolitician: Now that we are finally cleaning up the industrial pollution in the bay, we must start making the bay more accessible to the public for recreational purposes. Reporter: But if we increase public access to the bay, it will soon become polluted again. Politician: Not true. The public did not have access to the bay, and it got polluted. Ttherefore, if and when the public is given access to the bay, it will not get polluted.\nQuestion: Which one of the following most closely parallels the flawed pattern of reasoning in the politician's reply to the reporter?\nOptions:\nA. In order to like abstract art, you have to understand it. Ttherefore, in order to understand abstract art, you have to like it.\nB. When prisoners convicted of especially violent crimes were kept in solitary confinement, violence in the prisons increased. Ttherefore, violence in the prisons will not increase if such prisoners are allowed to mix with fellow prisoners.\nC. If there had been a full moon last night, the tide would be higher than usual today. Since the tide is no higher than usual, there must not have been a full moon last night.\nD. The detective said that whoever stole the money would be spending it conspicuously by now. Jones is spending money conspicuously, so he must be the thief.",
+    "output": "The answer is \\boxed{B}",
+    "metadata": {
+      "id": "train_2645"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nLetter to the editor: Recently, the city council passed an ordinance that prohibits loitering at the local shopping mall. The council' s declared goal was to eliminate overcrowding and alleviate pedestrian congestion, thereby improving the mall' s business and restoring its family-oriented image. But despite these claims, reducing overcrowding and congestion cannot be the actual goals of this measure, because even when fully implemented, the ordinance would not accomplish them.\nQuestion: Which one of the following most accurately describes a flaw in the argument's reasoning?\nOptions:\nA. The argument takes for granted that something cannot be the goal of an action performed unless the action will in fact achieve that goal.\nB. The argument takes for granted that an action that does not accomplish its stated goals will not have any beneficial effects.\nC. The argument treats a condition that is necessary for achieving an action's stated goals as if this condition were sufficient for achieving these goals.\nD. The argument dismisses a claim because of its source rather than because of its content.",
+    "output": "The answer is \\boxed{A}",
+    "metadata": {
+      "id": "train_489"
+    }
+  },
+  {
+    "instruction": "You are a logical reasoning assistant.\nRead the passage and question carefully, then think step by step to select the correct option (A, B, C, or D).\n\n## Response Format\nYour final answer MUST be a single letter within \\boxed{}.\nExample: \\boxed{A}",
+    "input": "Context:\nThe faster a car is traveling, the less time the driver has to avoid a potential accident, and if a car does crash, higher speeds increase the risk of a fatality. Between 1995 and 2000, average highway speeds increased significantly in the United States, yet, over that time, there was a drop in the number of car-crash fatalities per highway mile driven by cars.\nQuestion: Which of the following, if true about the United States between 1995 and 2000, most helps to explain why the fatality rate decreased in spite of the increase in average highway speeds?\nOptions:\nA. The increase in average highway speeds occurred as legal speed limits were raised on one highway after another.\nB. The average number of passengers per car on highways increased.\nC. There were increases in both the proportion of people who wore seat belts and the proportion of cars that were equipped with airbags as safety devices.\nD. In most locations on the highways, the density of vehicles on the highway did not decrease, although individual vehicles, on average, made their trips more quickly.",
+    "output": "The answer is \\boxed{C}",
+    "metadata": {
+      "id": "train_1238"
+    }
+  }
+]
