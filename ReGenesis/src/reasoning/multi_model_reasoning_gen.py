@@ -97,7 +97,7 @@ class ReasoningPathGenerator:
 
     def _create_sampling_params(
         self,
-        temperature: float = 1.2,
+        temperature: float = 0.85,
         top_p: float = 0.9,
         max_tokens: int = 2048,
     ) -> SamplingParams:
@@ -211,7 +211,7 @@ class ReasoningPathGenerator:
         self,
         task: str,
         num_samples: int = 20,
-        temperature: float = 1.2,
+        temperature: float = 0.85,
         top_p: float = 0.9,
         max_tokens: int = 2048,
     ) -> Dict[str, Any]:

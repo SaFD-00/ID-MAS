@@ -8,7 +8,7 @@ model:
   dtype: "bfloat16"
 
 generation:
-  temperature: 1.2
+  temperature: 0.85
   top_p: 0.9
   max_tokens: 2048
   num_samples: 20
