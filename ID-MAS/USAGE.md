@@ -407,3 +407,45 @@ CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset strategyqa \
     --model Qwen/Qwen2.5-3B-Instruct
 ```
+
+---
+
+## 기타
+
+```bash
+## [1]
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+## [2]
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+## [3]
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen2.5-3B-Instruct \
+    --teacher-model Qwen/Qwen2.5-3B-Instruct
+
+## [4]
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+
+CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen2.5-7B-Instruct \
+    --teacher-model Qwen/Qwen2.5-7B-Instruct
+```
