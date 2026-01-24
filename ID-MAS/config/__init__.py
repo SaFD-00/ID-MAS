@@ -58,21 +58,11 @@ from config.domains import (
 )
 
 # 경로 헬퍼
-from config.paths import (
-    get_design_output_dir,
-    get_model_data_dirs,
-    get_dataset_model_dirs,
-)
+from config.paths import get_design_output_dir
 
 # 하위 호환성을 위한 레거시 별칭
 DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)
 STUDENT_MODEL_CONFIG = get_student_model_config(DEFAULT_STUDENT_MODEL)
-
-# 학습 루프 설정
-LEARNING_LOOP_CONFIG = {
-    "max_iterations": 5,  # 최대 반복 횟수
-    "convergence_threshold": 0.9  # 수렴 기준 (루브릭 점수)
-}
 
 __all__ = [
     # API
@@ -92,9 +82,8 @@ __all__ = [
     'get_training_datasets_for_domain', 'get_instructional_goal',
 
     # 경로
-    'get_design_output_dir', 'get_model_data_dirs',
-    'get_dataset_model_dirs', 'get_domain_data_dirs',
+    'get_design_output_dir', 'get_domain_data_dirs',
 
     # 레거시
-    'DESIGN_MODEL_CONFIG', 'STUDENT_MODEL_CONFIG', 'LEARNING_LOOP_CONFIG',
+    'DESIGN_MODEL_CONFIG', 'STUDENT_MODEL_CONFIG',
 ]

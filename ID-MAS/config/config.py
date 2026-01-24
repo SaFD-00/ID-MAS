@@ -242,95 +242,13 @@ def get_sft_idmas_model_name(base_model_name: str, domain: str) -> str:
     return f"SaFD-00/{short_name}-{domain}_id-mas"
 
 
-def get_model_data_dirs(model_name: str = None) -> dict:
-    """모델별 데이터 디렉토리 경로를 반환합니다 (레거시).
-
-    Args:
-        model_name: 모델명. None이면 기본 모델 사용
-
-    Returns:
-        경로 딕셔너리
-    """
-    short_name = get_model_short_name(model_name)
-    model_dir = DATA_DIR / short_name
-
-    dirs = {
-        "model_dir": model_dir,
-        "learning_logs_dir": model_dir / "learning_logs",
-        "eval_results_dir": model_dir / "eval_results",
-        "knowledge_base_dir": model_dir / "knowledge_base"
-    }
-
-    for dir_path in dirs.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    return dirs
-
-
-def get_dataset_model_dirs(dataset: str, model_name: str = None) -> dict:
-    """데이터셋별, 모델별 디렉토리 경로를 반환합니다 (레거시, deprecated).
-
-    Args:
-        dataset: 데이터셋명
-        model_name: 모델명. None이면 기본 모델 사용
-
-    Returns:
-        경로 딕셔너리
-    """
-    short_name = get_model_short_name(model_name)
-    dataset_dir = DATA_DIR / dataset.lower() / short_name
-
-    dirs = {
-        "dataset_dir": dataset_dir,
-        "learning_logs_dir": dataset_dir / "learning_logs",
-        "eval_results_dir": dataset_dir / "eval_results",
-        "knowledge_base_dir": dataset_dir / "knowledge_base"
-    }
-
-    for dir_path in dirs.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    return dirs
-
-
 # =============================================================================
 # 도메인 기반 설정 (config/domains.py로 이동됨)
 # =============================================================================
-
-# 학습 데이터셋별 Instructional Goal (레거시, 현재는 설계 JSON에서 로드)
-INSTRUCTIONAL_GOALS = {
-    "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
-    "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution."
-}
 
 # 도메인 설정 (config/domains.py에서 import)
 from config.domains import DOMAIN_CONFIG
 
 
-def get_instructional_goal(dataset: str) -> str:
-    """학습 데이터셋의 Instructional Goal을 반환합니다 (레거시).
-
-    새 코드에서는 config.domains.get_instructional_goal()을 사용하세요.
-
-    Args:
-        dataset: 데이터셋명
-
-    Returns:
-        Instructional Goal 문자열
-
-    Raises:
-        ValueError: 알 수 없는 데이터셋인 경우
-    """
-    if dataset not in INSTRUCTIONAL_GOALS:
-        raise ValueError(f"알 수 없는 데이터셋: {dataset}. 가능한 데이터셋: {list(INSTRUCTIONAL_GOALS.keys())}")
-    return INSTRUCTIONAL_GOALS[dataset]
-
-
 # 기본 학생 모델 설정 (하위 호환성)
 STUDENT_MODEL_CONFIG = get_student_model_config(DEFAULT_STUDENT_MODEL)
-
-# 학습 루프 설정
-LEARNING_LOOP_CONFIG = {
-    "max_iterations": 5,  # 최대 반복 횟수
-    "convergence_threshold": 0.9  # 수렴 기준 (루브릭 점수)
-}

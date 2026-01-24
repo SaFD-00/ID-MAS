@@ -5,9 +5,7 @@
 
 주요 함수:
     get_design_output_dir: 설계 결과 저장 디렉토리
-    get_model_data_dirs: 모델별 데이터 디렉토리 (레거시)
-    get_dataset_model_dirs: 데이터셋별 모델 디렉토리 (레거시)
-    get_domain_data_dirs: 도메인별 데이터 디렉토리 (신규 구조)
+    get_domain_data_dirs: 도메인별 데이터 디렉토리
 """
 from pathlib import Path
 from config.domains import DATA_DIR, DOMAIN_CONFIG
@@ -41,73 +39,6 @@ def get_design_output_dir(domain: str, teacher_model_name: str = None) -> Path:
     design_dir = DATA_DIR / domain.lower() / "train" / teacher_short / "instructional-design"
     design_dir.mkdir(parents=True, exist_ok=True)
     return design_dir
-
-
-def get_model_data_dirs(model_name: str = None) -> dict:
-    """모델별 데이터 디렉토리 경로를 반환합니다.
-
-    레거시 함수로, 하위 호환성을 위해 유지됩니다.
-    디렉토리 구조: data/{model}/
-
-    Args:
-        model_name: 모델명. None이면 기본 모델 사용
-
-    Returns:
-        경로 딕셔너리:
-        - model_dir: 모델 루트 디렉토리
-        - learning_logs_dir: 학습 로그 디렉토리
-        - eval_results_dir: 평가 결과 디렉토리
-        - knowledge_base_dir: 지식 베이스 디렉토리
-    """
-    short_name = get_model_short_name(model_name)
-    model_dir = DATA_DIR / short_name
-
-    dirs = {
-        "model_dir": model_dir,
-        "learning_logs_dir": model_dir / "learning_logs",
-        "eval_results_dir": model_dir / "eval_results",
-        "knowledge_base_dir": model_dir / "knowledge_base"
-    }
-
-    # 디렉토리 자동 생성
-    for dir_path in dirs.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    return dirs
-
-
-def get_dataset_model_dirs(dataset: str, model_name: str = None) -> dict:
-    """데이터셋별, 모델별 데이터 디렉토리 경로를 반환합니다.
-
-    레거시 함수로, 하위 호환성을 위해 유지됩니다. (deprecated)
-    디렉토리 구조: data/{dataset}/{model}/
-
-    Args:
-        dataset: 데이터셋명 (예: "gsm8k", "math")
-        model_name: 모델명. None이면 기본 모델 사용
-
-    Returns:
-        경로 딕셔너리:
-        - dataset_dir: 데이터셋-모델 루트 디렉토리
-        - learning_logs_dir: 학습 로그 디렉토리
-        - eval_results_dir: 평가 결과 디렉토리
-        - knowledge_base_dir: 지식 베이스 디렉토리
-    """
-    short_name = get_model_short_name(model_name)
-    dataset_dir = DATA_DIR / dataset.lower() / short_name
-
-    dirs = {
-        "dataset_dir": dataset_dir,
-        "learning_logs_dir": dataset_dir / "learning_logs",
-        "eval_results_dir": dataset_dir / "eval_results",
-        "knowledge_base_dir": dataset_dir / "knowledge_base"
-    }
-
-    # 디렉토리 자동 생성
-    for dir_path in dirs.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-    return dirs
 
 
 def get_domain_data_dirs(

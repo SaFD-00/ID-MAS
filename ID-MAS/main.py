@@ -38,7 +38,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from design_modules.analysis import InstructionalAnalysis
 from design_modules.objectives import PerformanceObjectives
-from design_modules.rubric import RubricDevelopment
 from design_modules.instructional_goal import InstructionalGoalGenerator
 from learning_loop.graph import IDMASGraphRunner
 from learning_loop.graph.state import get_statistics
@@ -135,7 +134,6 @@ class IDMASPipeline:
         self.instructional_goal_gen = InstructionalGoalGenerator(teacher_config)
         self.analysis = InstructionalAnalysis(teacher_config)
         self.objectives = PerformanceObjectives(teacher_config)
-        self.rubric_dev = RubricDevelopment(teacher_config)
 
         # 모델별 디렉토리 설정 (data/{domain}/train/{teacher}/{student}/)
         self.model_dirs = get_domain_data_dirs(
@@ -187,7 +185,6 @@ class IDMASPipeline:
             - instructional_goal: 생성된 학습 목표
             - instructional_analysis: 교수 분석 결과
             - performance_objectives: 수행목표 목록
-            - rubrics: 루브릭 정보
             - timestamp: 생성 시각
 
         Raises:
@@ -273,20 +270,6 @@ class IDMASPipeline:
             )
             print(f"  Generated {len(objectives_result['performance_objectives'])} objectives")
 
-            # Step 4: 루브릭 개발
-            print(f"\n[Step 4] Rubric Development")
-            output_type = "explanatory_text"  # 수학 도메인 기본값
-
-            rubric = self.rubric_dev.generate_rubric(
-                task_description=self.instructional_goal,
-                output_type=output_type,
-                performance_objectives=objectives_result,
-                max_retries=3
-            )
-
-            criteria_count = len(rubric.get('rubric', {}).get('criteria', []))
-            print(f"  Generated rubric with {criteria_count} criteria for {output_type}")
-
         except RuntimeError as e:
             print(f"\n[FATAL] Design Phase failed: {e}")
             print(f"Please check:")
@@ -304,7 +287,6 @@ class IDMASPipeline:
             "learning_objective": learning_objective,
             "instructional_analysis": analysis_result,
             "performance_objectives": objectives_result,
-            "rubrics": rubric,
             "timestamp": datetime.now().isoformat()
         }
 

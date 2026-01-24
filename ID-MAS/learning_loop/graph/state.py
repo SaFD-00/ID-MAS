@@ -185,7 +185,6 @@ class DesignResult(TypedDict, total=False):
         learning_objective: 학습 목표 상세
         instructional_analysis: 교수 분석 결과
         performance_objectives: 수행목표 리스트
-        rubrics: 루브릭 정보
         timestamp: 생성 시간
     """
     domain: str
@@ -195,7 +194,6 @@ class DesignResult(TypedDict, total=False):
     learning_objective: str
     instructional_analysis: Dict[str, Any]
     performance_objectives: Dict[str, Any]
-    rubrics: Dict[str, Any]
     timestamp: str
 
 
@@ -253,7 +251,6 @@ class IDMASState(TypedDict, total=False):
     design_result: Optional[DesignResult]
     task_analysis: str
     performance_objectives: List[Dict[str, Any]]
-    rubric: Optional[Dict[str, Any]]
 
     # ==================== Questions ====================
     questions: List[Dict[str, Any]]
@@ -372,7 +369,6 @@ def create_initial_state(
         design_result=design_result,
         task_analysis=design_result.get("instructional_analysis", {}).get("raw_output", "") if design_result else "",
         performance_objectives=design_result.get("performance_objectives", {}).get("performance_objectives", []) if design_result else [],
-        rubric=design_result.get("rubrics") if design_result else None,
 
         # Questions
         questions=questions,
