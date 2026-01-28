@@ -1,256 +1,69 @@
-# ID-MAS: 교수설계 기반 다중 에이전트 추론 학습 시스템
+# ID-MAS: Instructional Design Multi-Agent System
 
-대규모 언어 모델(LLM)의 추론 능력 향상을 위한 교수설계 기반 학습 프레임워크입니다.
+LLM 학습을 위한 Dick & Carey 모델 기반 교수 설계 시스템
 
-## 프로젝트 구조
+## 개요
 
-이 저장소는 세 가지 주요 프로젝트를 포함합니다:
+ID-MAS는 교수 설계(Instructional Design) 이론을 LLM 학습에 적용한 Multi-Agent 시스템입니다.
 
-```
-ID-MAS/
-├── ID-MAS/          # 메인 프로젝트: 교수설계 기반 다중 에이전트 시스템
-├── STaR/            # Self-Taught Reasoner 구현
-├── V-STaR/          # Verifier 학습을 포함한 STaR 확장
-└── ReGenesis/       # 다중 모델 추론 생성 파이프라인
-```
-
-## 프로젝트 개요
-
-### ID-MAS (Instructional Design Multi-Agent System)
-
-Dick & Carey 교수설계 모델에 기반한 LangGraph 파이프라인으로, 교사-학생 모델 구조를 통해 추론 능력을 향상시킵니다.
-
-**핵심 기능:**
-- Instructional Goal 자동 생성 (데이터셋 샘플 기반)
-- Performance Objectives 기반 평가
-- Iterative Scaffolding (최대 5회 반복)
-- 소크라테스식 질문을 통한 학생 모델 가이드
-- SFT 데이터 자동 생성 (Case A/B/C)
-
-**지원 도메인:**
-- Math (GSM8K, MATH)
-- Logical (ReClor, LogiQA)
-- Commonsense (ARC-C, OBQA)
-
-자세한 내용은 [ID-MAS/README.md](ID-MAS/README.md)를 참조하세요.
-
-### STaR (Self-Taught Reasoner)
-
-[STaR 논문](https://arxiv.org/abs/2203.14465) 구현체로, 반복적 자기개선을 통해 추론 rationale을 학습합니다.
-
-**핵심 알고리즘:**
-1. Few-shot 프롬프팅으로 rationale 생성
-2. 정답으로 이어지는 rationale 필터링
-3. 오답에 대해 정답 힌트를 주고 rationalization
-4. 정답 + rationalized 예제로 파인튜닝
-5. N회 반복
-
-자세한 내용은 [STaR/README.md](STaR/README.md)를 참조하세요.
-
-### V-STaR (Verifier for Self-Taught Reasoner)
-
-[V-STaR 논문](https://arxiv.org/abs/2402.06457) 구현체로, 생성 모델과 검증 모델을 함께 학습합니다.
-
-**핵심 기능:**
-- Generator: 다양한 풀이 생성 (k개 샘플링)
-- Verifier: DPO 기반 선호도 학습
-- Best-of-N 선택으로 정확도 향상
-
-자세한 내용은 [V-STaR/README.md](V-STaR/README.md)를 참조하세요.
-
-### ReGenesis (LLM Reasoning Generalists via Self-Improvement)
-
-[ReGenesis 논문](https://arxiv.org/abs/2410.02108) 구현체로, 외부 감독 없이 LLM이 스스로 추론 경로를 생성하여 OOD(Out-of-Domain) 일반화 성능을 향상시킵니다. (ICLR 2025 Oral)
-
-**핵심 아이디어:**
-- **3단계 추론 경로 생성**: 일반 가이드라인 → 태스크 특화 구조 → 추론 경로
-- **Abstract to Concrete**: 추상에서 구체로 진행하는 합성 방식
-- **OOD 성능 향상**: 기존 자기합성 방법 대비 약 10.7% 개선
-
-**3단계 파이프라인:**
-1. 추론 경로 생성 (vLLM 기반)
-2. Ground Truth 기반 필터링 (Exact Match)
-3. SFT 모델 학습 (Full FT / LoRA)
-
-자세한 내용은 [ReGenesis/README.md](ReGenesis/README.md)를 참조하세요.
-
-## 설치
-
-```bash
-# 저장소 클론
-git clone https://github.com/your-repo/ID-MAS.git
-cd ID-MAS
-
-# 가상환경 생성 (권장)
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 또는 venv\Scripts\activate  # Windows
-
-# 의존성 설치
-pip install -r requirements.txt
-```
+**핵심 특징:**
+- **데이터셋별 분리 학습**: GSM8K, MATH 각각 고유한 Instructional Goal로 독립 학습
+- **Iterative Scaffolding Pipeline**: Performance Objectives 기반 평가 + HOT/LOT Scaffolding을 통한 6-Step 반복 학습 (최대 5회 반복)
+- **LangGraph 기반 워크플로우**: StateGraph 상태 관리, 체크포인트 기반 Resume 지원
 
 ## 빠른 시작
 
-### ID-MAS 학습
-
 ```bash
-# GSM8K로 학습
-python -m ID-MAS.main --mode train --domain math --train-dataset gsm8k
+# 1. 환경 설정
+conda create -n ID-MAS python=3.11 -y
+conda activate ID-MAS
+pip install -r requirements.txt
 
-# 이어서 학습 (체크포인트에서 재개)
-python -m ID-MAS.main --mode train --domain math --train-dataset gsm8k --resume True
+# 2. 환경변수 설정
+cp .env.example .env
+# .env 파일을 열어 OPENAI_API_KEY, HF_TOKEN 설정
 
-# 다른 모델로 학습
-python -m ID-MAS.main --mode train --domain math --train-dataset gsm8k \
-    --student-model Qwen/Qwen3-4B-Instruct-2507
+# 3. 데이터 준비
+python -m utils.dataset_preparer
+python -m utils.sample_extractor
+
+# 4. 학습 실행
+python main.py --mode train --domain math --train-dataset gsm8k
+
+# 5. 평가 실행
+python main.py --mode eval --method baseline --domain math --eval-dataset gsm8k
 ```
 
-### ID-MAS 평가
+### 환경변수
 
-```bash
-# Baseline 평가 (파인튜닝 없는 기본 모델)
-python -m ID-MAS.main --mode eval --method baseline --domain math --eval-dataset gsm8k
-
-# SFT 평가 (일반 SFT 모델)
-python -m ID-MAS.main --mode eval --method sft --domain math --eval-dataset gsm8k
-
-# SFT_ID-MAS 평가 (ID-MAS 방식 SFT 모델)
-python -m ID-MAS.main --mode eval --method sft_id-mas --domain math --eval-dataset gsm8k
-```
-
-### STaR 학습
-
-```bash
-# GSM8K로 STaR 학습
-python -m STaR.cli train --model Qwen/Qwen2.5-3B-Instruct --dataset gsm8k
-
-# 커스텀 설정
-python -m STaR.cli train --model Qwen/Qwen2.5-7B-Instruct --dataset gsm8k \
-    --iterations 5 --output-dir ./my_output
-```
-
-### V-STaR 학습
-
-```bash
-# V-STaR 학습
-python V-STaR/main.py train --model Qwen/Qwen2.5-3B-Instruct \
-    --domains math --iterations 3 --k 16
-```
-
-### ReGenesis 학습
-
-```bash
-# 단일 모델 전체 파이프라인 실행
-cd ReGenesis
-./scripts/run_full_pipeline.sh meta-llama/Llama-3.1-8B-Instruct
-
-# 8개 모델 일괄 실행
-./scripts/run_all_models.sh all
-
-# Python 직접 실행
-python -m src.pipeline.training_pipeline \
-    --model_name meta-llama/Llama-3.1-8B-Instruct \
-    --datasets gsm8k math reclor arc_c
-```
-
-## 지원 모델
-
-### 학생 모델
-- `Qwen/Qwen2.5-3B-Instruct`
-- `Qwen/Qwen2.5-7B-Instruct`
-- `Qwen/Qwen3-4B-Instruct-2507`
-- `meta-llama/Llama-3.2-3B-Instruct`
-
-### 교사 모델
-- OpenAI: `gpt-4o-mini`, `gpt-4o`, `o1-mini`
-- 로컬: 학생 모델과 동일 (모델 공유 가능)
-
-## 프로젝트 아키텍처
-
-### ID-MAS 파이프라인
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    INSTRUCTIONAL DESIGN                      │
-│  Step 0: Instructional Goal 생성 (샘플 기반)                │
-│  Step 1-4: 교수분석 → 수행목표 → 루브릭 개발                │
-└─────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   ITERATIVE SCAFFOLDING                      │
-│  1. 학생 모델 초기 응답                                     │
-│  2. 교사 모델 PO 평가 + 소크라테스 질문                     │
-│  3. 스캐폴딩 아티팩트 생성                                   │
-│  4. 학생 재응답 (최대 5회)                                  │
-│  5. 응답 재구성 (Case A/B/C)                                │
-│  6. SFT 데이터 생성                                         │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 데이터 흐름
-
-```
-원본 데이터 → Enhanced Instruction → Iterative Learning → SFT Data
-     ↓              ↓                      ↓                ↓
- GSM8K 등    + Instructional Goal   Teacher-Student    Case A/B/C
-             + Task Analysis          Interaction       데이터셋
-```
+| 변수 | 설명 | 필수 여부 |
+|------|------|----------|
+| `OPENAI_API_KEY` | OpenAI API 키 | gpt-* 모델 사용 시 |
+| `HF_TOKEN` | HuggingFace 토큰 | 로컬 모델 사용 시 |
+| `IDMAS_DEBUG_API` | API 디버그 로그 출력 | 선택 (기본값: 0) |
 
 ## 디렉토리 구조
 
 ```
 ID-MAS/
-├── ID-MAS/
-│   ├── main.py                 # 메인 진입점
-│   ├── config/                 # 설정 파일
-│   ├── design_modules/         # 교수설계 모듈
-│   ├── learning_loop/          # LangGraph 파이프라인
-│   ├── models/                 # 모델 래퍼
-│   ├── prompts/                # 프롬프트 템플릿
-│   └── utils/                  # 유틸리티
-├── STaR/
-│   ├── cli.py                  # CLI 진입점
-│   ├── star/                   # STaR 핵심 모듈
-│   └── ...
-├── V-STaR/
-│   ├── main.py                 # CLI 진입점
-│   ├── training/               # SFT/DPO 학습
-│   └── ...
-├── ReGenesis/
-│   ├── src/                    # 소스 코드
-│   │   ├── reasoning/          # 추론 경로 생성
-│   │   ├── pipeline/           # 통합 파이프라인
-│   │   └── finetune_code/      # 학습 코드
-│   ├── scripts/                # 실행 스크립트
-│   └── configs/                # 모델/학습 설정
-└── data/                       # 데이터셋 (gitignore)
+├── main.py                      # 메인 실행 파일
+├── config/                      # 설정 모듈
+├── design_modules/              # 교수 설계 단계
+├── learning_loop/               # Iterative Scaffolding Pipeline
+├── models/                      # 모델 래퍼
+├── prompts/                     # 프롬프트 템플릿
+├── utils/                       # 유틸리티
+└── data/                        # 데이터 디렉토리
 ```
 
-## 환경 변수
+## 문서
 
-```bash
-# OpenAI API (교사 모델 사용 시)
-export OPENAI_API_KEY="your-api-key"
-
-# HuggingFace (모델 다운로드)
-export HF_TOKEN="your-token"
-```
-
-## 기여
-
-이슈 및 PR을 환영합니다. 기여 전 다음을 확인해주세요:
-1. 코드 스타일 가이드 준수
-2. 테스트 추가 또는 업데이트
-3. 문서화 업데이트
+| 문서 | 설명 |
+|------|------|
+| [사용 가이드](USAGE.md) | 지원 모델, 데이터셋, CLI 상세 사용법, 실행 예제 |
+| [아키텍처](ARCHITECTURE.md) | 시스템 구조, 파이프라인 상세, 데이터 흐름 |
 
 ## 참고 문헌
 
-- [STaR: Bootstrapping Reasoning With Reasoning](https://arxiv.org/abs/2203.14465) (NeurIPS 2022)
-- [V-STaR: Training Verifiers for Self-Taught Reasoners](https://arxiv.org/abs/2402.06457) (ICML 2024)
-- [ReGenesis: LLMs can Grow into Reasoning Generalists via Self-Improvement](https://arxiv.org/abs/2410.02108) (ICLR 2025 Oral)
-- [Dick & Carey Instructional Design Model](https://en.wikipedia.org/wiki/Dick_and_Carey_model)
-
-## 라이선스
-
-MIT License
+1. Dick, W., Carey, L., & Carey, J. O. (2015). The systematic design of instruction (8th ed.). Pearson.
+2. Anderson, L. W., & Krathwohl, D. R. (2001). A taxonomy for learning, teaching, and assessing. Longman.
