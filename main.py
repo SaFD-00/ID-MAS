@@ -468,16 +468,17 @@ class IDMASPipeline:
         # 통계 추출
         stats = get_statistics(final_state)
 
+        case_stats = stats.get('case_statistics', {})
         learning_results = {
             "domain": self.domain,
             "train_dataset": self.train_dataset,
             "instructional_goal": self.instructional_goal,
             "total_questions": stats['total_questions'],
             "scaffolding_processed": stats['scaffolding_processed'],
-            "scaffolding_correct": stats['scaffolding_correct'],
-            "sft_case_a": stats['sft_case_a'],
-            "sft_case_a_failed": stats['sft_case_a_failed'],
-            "iterative_scaffolding": stats.get('iterative_scaffolding', {}),
+            "scaffolding_correct": case_stats.get('success_total', 0),
+            "sft_case_a": case_stats.get('case_a', 0),
+            "sft_case_a_failed": case_stats.get('case_c', 0),
+            "case_statistics": case_stats,
             "sft_data_count": len(final_state.get('sft_data', [])),
             "sft_data_path": final_state.get('sft_path', ''),
             "results_path": final_state.get('results_path', ''),

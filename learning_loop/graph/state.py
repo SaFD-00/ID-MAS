@@ -469,9 +469,9 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
         "total_questions": state.get("total_questions", 0),
         "scaffolding_processed": processed,
         "case_statistics": {
-            "case_a": case_a,  # 1회차 성공
-            "case_b": case_b,  # 2~5회차 성공
-            "case_c": case_c,  # 5회 실패 후 재구성
+            "case_a": case_a,  # First attempt success
+            "case_b": case_b,  # Success on attempts 2-5
+            "case_c": case_c,  # Reconstructed after 5 failures
             "success_total": case_a + case_b,
             "success_rate": (case_a + case_b) / processed if processed > 0 else 0,
         },
