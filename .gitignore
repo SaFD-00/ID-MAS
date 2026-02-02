@@ -94,9 +94,3 @@ logs/
 
 # Data preparation scripts (not for production)
 ID-MAS/utils/reparse_eval_results.py
-
-# ============================================
-# Baseline frameworks (local only)
-# ============================================
-ReGenesis/
-STaR/
