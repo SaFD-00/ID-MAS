@@ -43,6 +43,9 @@ TRAINING_DATASETS = {
 # 데이터 디렉토리 경로
 DATA_DIR = PROJECT_ROOT / "data"
 
+# 출력 디렉토리 경로 (학습 결과물)
+OUTPUT_DIR = PROJECT_ROOT / "outputs"
+
 # 도메인별 상세 설정
 DOMAIN_CONFIG = {
     "math": {
@@ -151,11 +154,11 @@ def get_domain_data_dirs(
     if mode == "train":
         # Teacher 모델명으로 상위 디렉토리 결정
         teacher_short = get_model_short_name(teacher_model_name) if teacher_model_name else get_model_short_name(DEFAULT_TEACHER_MODEL)
-        model_dir = DATA_DIR / domain / "train" / teacher_short / model_short
+        model_dir = OUTPUT_DIR / domain / "train" / teacher_short / model_short
         dirs = {
             "model_dir": model_dir,
             "raw_data_dir": DATA_DIR / domain / "train" / "data",
-            "design_dir": DATA_DIR / domain / "train" / teacher_short / "instructional-design",
+            "design_dir": OUTPUT_DIR / domain / "train" / teacher_short / "instructional-design",
         }
     else:  # eval 모드
         model_dir = DATA_DIR / domain / "eval" / model_short
@@ -217,7 +220,7 @@ def _load_instructional_goal_from_design(
 
     try:
         teacher_short = get_model_short_name(teacher_model)
-        design_dir = DATA_DIR / domain / "train" / teacher_short / "instructional-design"
+        design_dir = OUTPUT_DIR / domain / "train" / teacher_short / "instructional-design"
         design_path = design_dir / f"{domain}_{dataset}_design.json"
 
         if design_path.exists():

@@ -441,7 +441,7 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-
     --teacher-model Qwen/Qwen2.5-3B-Instruct
 
 ## [4]
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen2.5-7B-Instruct \
     --teacher-model Qwen/Qwen2.5-7B-Instruct
 
