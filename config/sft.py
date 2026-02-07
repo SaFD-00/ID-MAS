@@ -14,15 +14,10 @@
 # 기본 모델명 → HuggingFace Hub 레포지토리용 짧은 이름 매핑
 # SaFD-00/{short_name}-{domain} 형식으로 사용됨
 MODEL_NAME_TO_SHORT = {
-    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
-    "meta-llama/Llama-3.1-70B-Instruct": "llama3.1-70b",
-    "meta-llama/Llama-3.2-3B-Instruct": "llama3.2-3b",
-    "meta-llama/Llama-3.3-70B-Instruct": "llama3.3-70b",
-    "Qwen/Qwen2.5-3B-Instruct": "qwen2.5-3b",
-    "Qwen/Qwen2.5-7B-Instruct": "qwen2.5-7b",
-    "Qwen/Qwen2.5-14B-Instruct": "qwen2.5-14b",
-    "Qwen/Qwen2.5-72B-Instruct": "qwen2.5-72b",
-    "Qwen/Qwen3-4B-Instruct-2507": "qwen3-4b",
+    "Qwen/Qwen3-1.7B": "qwen3-1.7b",
+    "Qwen/Qwen3-4B": "qwen3-4b",
+    "Qwen/Qwen3-8B": "qwen3-8b",
+    "Qwen/Qwen3-32B": "qwen3-32b",
 }
 
 
@@ -56,18 +51,18 @@ def get_sft_model_name(base_model_name: str, domain: str) -> str:
     """SFT 파인튜닝 모델의 HuggingFace Hub 이름을 생성합니다.
 
     Args:
-        base_model_name: 기본 모델명 (예: "Qwen/Qwen2.5-3B-Instruct")
+        base_model_name: 기본 모델명 (예: "Qwen/Qwen3-4B")
         domain: 도메인명 (예: "math")
 
     Returns:
-        SFT 모델 HF Hub 이름 (예: "SaFD-00/qwen2.5-3b-math")
+        SFT 모델 HF Hub 이름 (예: "SaFD-00/qwen3-4b-math")
 
     Raises:
         ValueError: 지원하지 않는 모델이거나 알 수 없는 도메인인 경우
 
     Example:
-        >>> get_sft_model_name("Qwen/Qwen2.5-3B-Instruct", "math")
-        'SaFD-00/qwen2.5-3b-math'
+        >>> get_sft_model_name("Qwen/Qwen3-4B", "math")
+        'SaFD-00/qwen3-4b-math'
     """
     _validate_sft_model_and_domain(base_model_name, domain)
 
@@ -81,18 +76,18 @@ def get_sft_idmas_model_name(base_model_name: str, domain: str) -> str:
     ID-MAS 방식으로 학습된 SFT 모델의 이름을 반환합니다.
 
     Args:
-        base_model_name: 기본 모델명 (예: "Qwen/Qwen2.5-3B-Instruct")
+        base_model_name: 기본 모델명 (예: "Qwen/Qwen3-8B")
         domain: 도메인명 (예: "math")
 
     Returns:
-        SFT_ID-MAS 모델 HF Hub 이름 (예: "SaFD-00/qwen2.5-3b-math_id-mas")
+        SFT_ID-MAS 모델 HF Hub 이름 (예: "SaFD-00/qwen3-8b-math_id-mas")
 
     Raises:
         ValueError: 지원하지 않는 모델이거나 알 수 없는 도메인인 경우
 
     Example:
-        >>> get_sft_idmas_model_name("Qwen/Qwen2.5-3B-Instruct", "math")
-        'SaFD-00/qwen2.5-3b-math_id-mas'
+        >>> get_sft_idmas_model_name("Qwen/Qwen3-8B", "math")
+        'SaFD-00/qwen3-8b-math_id-mas'
     """
     _validate_sft_model_and_domain(base_model_name, domain)
 

@@ -13,7 +13,7 @@ Teacher/Student 모델 아키텍처를 지원하며, API 및 로컬 HuggingFace 
 사용 예시:
     >>> from models import TeacherModelWrapper, StudentModelWrapper
     >>> teacher = TeacherModelWrapper(config)
-    >>> student = StudentModelWrapper("Qwen/Qwen2.5-3B-Instruct")
+    >>> student = StudentModelWrapper("Qwen/Qwen3-1.7B")
 """
 
 from models.base_wrapper import BaseModelWrapper

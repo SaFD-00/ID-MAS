@@ -244,9 +244,9 @@ class DomainLoader(BaseDatasetLoader):
         Args:
             dataset: 학습 데이터셋 이름 (예: "gsm8k", "math", "reclor", "arc_c")
             teacher_suffix: 향상된 데이터 생성 시 사용한 Teacher 모델 접미사
-                (예: "Qwen2.5-72B-Instruct", "gpt-5-2025-08-07")
+                (예: "Qwen3-32B", "gpt-5.2")
             student_suffix: 학습용 Student 모델 접미사
-                (예: "Qwen2.5-7B-Instruct", "Qwen2.5-3B-Instruct")
+                (예: "Qwen3-4B", "Qwen3-1.7B")
             limit: 로드할 최대 질문 수
             shuffle: 데이터 셔플 여부 (기본값: False)
 
@@ -261,8 +261,8 @@ class DomainLoader(BaseDatasetLoader):
             >>> loader = DomainLoader("math")
             >>> data = loader.load_enhanced_training_data(
             ...     dataset="gsm8k",
-            ...     teacher_suffix="Qwen2.5-72B-Instruct",
-            ...     student_suffix="Qwen2.5-7B-Instruct",
+            ...     teacher_suffix="Qwen3-32B",
+            ...     student_suffix="Qwen3-4B",
             ...     limit=100
             ... )
         """

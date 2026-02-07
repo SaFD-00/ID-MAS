@@ -1,7 +1,7 @@
 """Student 모델 래퍼 모듈.
 
 이 모듈은 ID-MAS 시스템의 Student 모델을 위한 래퍼를 제공합니다.
-Qwen, Llama 등 다양한 HuggingFace 로컬 모델을 지원합니다.
+Qwen 등 다양한 HuggingFace 로컬 모델을 지원합니다.
 
 SFT(Supervised Fine-Tuning) 모델과 SFT_ID-MAS 모델도 지원하여
 파인튜닝된 모델의 평가가 가능합니다.
@@ -12,9 +12,9 @@ SFT(Supervised Fine-Tuning) 모델과 SFT_ID-MAS 모델도 지원하여
 사용 예시:
     >>> from models.student_wrapper import StudentModelWrapper
     >>> # 기본 모델
-    >>> student = StudentModelWrapper("Qwen/Qwen2.5-3B-Instruct")
+    >>> student = StudentModelWrapper("Qwen/Qwen3-1.7B")
     >>> # SFT 파인튜닝 모델
-    >>> student = StudentModelWrapper("Qwen/Qwen2.5-3B-Instruct", use_sft_model=True, sft_domain="math")
+    >>> student = StudentModelWrapper("Qwen/Qwen3-1.7B", use_sft_model=True, sft_domain="math")
 """
 from typing import Optional, List, Dict, Any
 from config.config import get_student_model_config, DEFAULT_STUDENT_MODEL
@@ -26,11 +26,11 @@ from models.model_cache import ModelCache
 class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
     """Student 모델 래퍼 클래스.
 
-    로컬 HuggingFace 모델을 사용하여 응답을 생성합니다.
+    vLLM을 사용하여 응답을 생성합니다.
     Teacher 모델의 스캐폴딩을 받아 학습하는 학생 역할을 합니다.
 
     지원 기능:
-        - 기본 모델 (Qwen, Llama 등)
+        - 기본 모델 (Qwen 등)
         - SFT 파인튜닝 모델 (HuggingFace Hub)
         - SFT_ID-MAS 파인튜닝 모델 (HuggingFace Hub)
         - ModelCache를 통한 Teacher와 모델 공유
@@ -41,8 +41,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         is_sft: SFT 파인튜닝 모델 사용 여부
         is_sft_idmas: SFT_ID-MAS 파인튜닝 모델 사용 여부
         config: 모델 설정 딕셔너리
-        model: HuggingFace 모델 객체
-        tokenizer: HuggingFace 토크나이저
+        llm: vLLM LLM 인스턴스
     """
 
     def __init__(
@@ -55,7 +54,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         """StudentModelWrapper를 초기화합니다.
 
         Args:
-            model_name: 사용할 모델명. None이면 기본 모델(Qwen2.5-3B-Instruct) 사용.
+            model_name: 사용할 모델명. None이면 기본 모델(Qwen3-1.7B) 사용.
             use_sft_model: SFT 파인튜닝 모델 사용 여부
             use_sft_idmas_model: SFT_ID-MAS 파인튜닝 모델 사용 여부
             sft_domain: SFT/SFT_ID-MAS 모델의 도메인 (예: "math", "logical")
@@ -95,10 +94,14 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         self.temperature = self.config["temperature"]
         self.do_sample = self.config["do_sample"]
 
-        # 공유 ModelCache를 사용하여 모델 로드 (Teacher와 동일 모델일 경우 공유됨)
-        cached = ModelCache.get_or_load(actual_model_name, self.device)
-        self.tokenizer = cached["tokenizer"]
-        self.model = cached["model"]
+        # 공유 ModelCache를 사용하여 vLLM 모델 로드 (Teacher와 동일 모델일 경우 공유됨)
+        cached = ModelCache.get_or_load(
+            actual_model_name,
+            self.device,
+            tensor_parallel_size=self.config.get("tensor_parallel_size", 1),
+            gpu_memory_utilization=self.config.get("gpu_memory_utilization", 0.90),
+        )
+        self.llm = cached["llm"]
 
     def generate(
         self,
@@ -109,7 +112,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
     ) -> str:
         """텍스트를 생성합니다.
 
-        로컬 HuggingFace 모델을 사용하여 응답을 생성합니다.
+        vLLM을 사용하여 응답을 생성합니다.
 
         Args:
             prompt: 사용자 프롬프트 (문제 또는 질문)

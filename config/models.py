@@ -25,28 +25,23 @@ from config.api import OPENAI_API_KEY
 # 지원하는 교사 모델 목록
 AVAILABLE_TEACHER_MODELS = [
     # OpenAI API
-    "gpt-5-2025-08-07",
+    "gpt-5.2",
     # 로컬 HuggingFace 모델 (ModelCache를 통해 직접 로드)
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-72B-Instruct",
-    "Qwen/Qwen3-4B-Instruct-2507",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3-32B",
 ]
 
 # 기본 교사 모델
-DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
+DEFAULT_TEACHER_MODEL = "gpt-5.2"
 
 
 def create_teacher_config(model_name: str = None) -> dict:
     """교사 모델 설정 딕셔너리를 생성합니다.
 
     모델명에 따라 OpenAI API 설정 또는 로컬 HuggingFace 모델 설정을 반환합니다.
-    gpt-*, o1-*, o3-*로 시작하는 모델은 OpenAI API로, 그 외는 로컬 모델로 처리합니다.
+    gpt-*로 시작하는 모델은 OpenAI API로, 그 외는 로컬 모델로 처리합니다.
 
     Args:
         model_name: 교사 모델명. None이면 DEFAULT_TEACHER_MODEL 사용
@@ -70,11 +65,7 @@ def create_teacher_config(model_name: str = None) -> dict:
         model_name = DEFAULT_TEACHER_MODEL
 
     # OpenAI API 모델 판단
-    is_openai_model = (
-        model_name.startswith("gpt-") or
-        model_name.startswith("o1") or
-        model_name.startswith("o3")
-    )
+    is_openai_model = model_name.startswith("gpt-")
 
     # OpenAI API 모델 설정
     if is_openai_model:
@@ -87,13 +78,15 @@ def create_teacher_config(model_name: str = None) -> dict:
             "max_tokens": 8192
         }
 
-    # 로컬 HuggingFace 모델 설정
+    # 로컬 모델 설정 (vLLM)
     return {
         "model": model_name,
         "device": "cuda",
         "max_new_tokens": 8192,
         "temperature": 0.7,
-        "do_sample": True
+        "do_sample": True,
+        "tensor_parallel_size": 1,
+        "gpu_memory_utilization": 0.90,
     }
 
 
@@ -103,26 +96,23 @@ def create_teacher_config(model_name: str = None) -> dict:
 
 # 지원하는 학생 모델 목록
 AVAILABLE_STUDENT_MODELS = [
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-72B-Instruct",
-    "Qwen/Qwen3-4B-Instruct-2507",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3-32B",
 ]
 
 # 기본 학생 모델
-DEFAULT_STUDENT_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+DEFAULT_STUDENT_MODEL = "Qwen/Qwen3-1.7B"
 
 # 학생 모델 공통 설정
 STUDENT_MODEL_BASE_CONFIG = {
     "device": "cuda",
     "max_new_tokens": 2048,
     "temperature": 0.7,
-    "do_sample": True
+    "do_sample": True,
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.90,
 }
 
 
@@ -164,7 +154,7 @@ def get_model_short_name(model_name: str = None) -> str:
     """모델명의 짧은 버전을 반환합니다.
 
     폴더명이나 파일명에 사용하기 적합한 형태로 변환합니다.
-    "Qwen/Qwen2.5-3B-Instruct" → "Qwen2.5-3B-Instruct"
+    "Qwen/Qwen3-1.7B" → "Qwen3-1.7B"
 
     Args:
         model_name: 전체 모델명. None이면 DEFAULT_STUDENT_MODEL 사용
@@ -175,7 +165,7 @@ def get_model_short_name(model_name: str = None) -> str:
     if model_name is None:
         model_name = DEFAULT_STUDENT_MODEL
 
-    # "Qwen/Qwen2.5-3B-Instruct" → "Qwen2.5-3B-Instruct"
+    # "Qwen/Qwen3-1.7B" → "Qwen3-1.7B"
     if "/" in model_name:
         return model_name.split("/")[-1]
     return model_name

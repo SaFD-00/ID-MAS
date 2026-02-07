@@ -80,7 +80,7 @@ class IDMASPipeline:
         >>> pipeline = IDMASPipeline(
         ...     domain="math",
         ...     train_dataset="gsm8k",
-        ...     student_model_name="Qwen/Qwen2.5-3B-Instruct"
+        ...     student_model_name="Qwen/Qwen3-1.7B"
         ... )
         >>> design_result = pipeline.run_design_phase()
         >>> learning_result = pipeline.run_learning_phase(design_result)
@@ -115,7 +115,7 @@ class IDMASPipeline:
         # 설계 파일용 식별자 (domain_dataset 형식)
         self.identifier = f"{self.domain}_{self.train_dataset}"
 
-        # 파일명용 모델 약칭 (예: "Qwen3-4B-Instruct-2507")
+        # 파일명용 모델 약칭 (예: "Qwen3-4B")
         self.model_short = get_model_short_name(self.student_model_name)
 
         # 교사 모델명 (Instructional Goal 로딩에 필요하므로 먼저 정의)
@@ -946,7 +946,7 @@ Examples:
 
   # MATH로 학습 (다른 모델)
   python main.py --mode train --domain math --train-dataset math \\
-      --student-model Qwen/Qwen3-4B-Instruct-2507
+      --student-model Qwen/Qwen3-4B
 
   # ========================================
   # EVAL MODE - Baseline (Base Model)
@@ -963,7 +963,7 @@ Examples:
   # GSM8K SFT 평가
   python main.py --mode eval --method sft \\
       --domain math --eval-dataset gsm8k \\
-      --student-model Qwen/Qwen2.5-3B-Instruct
+      --student-model Qwen/Qwen3-1.7B
 
   # ========================================
   # EVAL MODE - SFT_ID-MAS (ID-MAS Fine-tuned)
@@ -972,12 +972,12 @@ Examples:
   # GSM8K SFT_ID-MAS 평가
   python main.py --mode eval --method sft_id-mas \\
       --domain math --eval-dataset gsm8k \\
-      --student-model Qwen/Qwen2.5-3B-Instruct
+      --student-model Qwen/Qwen3-1.7B
 
   # Cross-dataset SFT_ID-MAS 평가
   python main.py --mode eval --method sft_id-mas \\
       --domain math --eval-dataset svamp \\
-      --student-model Qwen/Qwen2.5-7B-Instruct
+      --student-model Qwen/Qwen3-4B
         """
     )
 

@@ -4,8 +4,8 @@
 OpenAI API 모델과 로컬 HuggingFace 모델을 동일한 인터페이스로 사용할 수 있습니다.
 
 지원 모델:
-    - OpenAI API (gpt-*, o1-*, o3-*): OpenAI API를 통한 직접 호출
-    - 로컬 모델 (Qwen, Llama 등): ModelCache를 통한 로드 및 추론
+    - OpenAI API (gpt-*): OpenAI API를 통한 직접 호출
+    - 로컬 모델 (Qwen 등): ModelCache를 통한 로드 및 추론
 
 주요 클래스:
     TeacherModelWrapper: Teacher 모델 통합 래퍼
@@ -26,7 +26,6 @@ import re
 import json
 import time
 import os
-import torch
 from openai import OpenAI
 from typing import Dict, Any, Optional, List
 from models.base_wrapper import BaseModelWrapper
@@ -209,42 +208,37 @@ def _is_api_model(model_name: str) -> bool:
         model_name: 확인할 모델명
 
     Returns:
-        gpt-*, o1-*, o3-* 패턴이면 True, 아니면 False.
+        gpt-* 패턴이면 True, 아니면 False.
         model_name이 비어있으면 True (기본 API 모델 가정).
     """
     if not model_name:
         return True  # 기본 모델은 API 모델
-    return (
-        model_name.startswith("gpt-") or
-        model_name.startswith("o1") or
-        model_name.startswith("o3")
-    )
+    return model_name.startswith("gpt-")
 
 
 class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
     """Teacher 모델 통합 래퍼 클래스.
 
-    API 모델(OpenAI)과 로컬 HuggingFace 모델을 동일한 인터페이스로 사용합니다.
+    API 모델(OpenAI)과 로컬 vLLM 모델을 동일한 인터페이스로 사용합니다.
     교수설계(Instructional Design) 및 스캐폴딩(Scaffolding) 생성에 사용됩니다.
 
     지원 모델:
-        - API 모델 (gpt-*, o1-*, o3-*): OpenAI API 직접 호출
-        - 로컬 모델 (Qwen, Llama 등): ModelCache를 통한 공유 로드
+        - API 모델 (gpt-*): OpenAI API 직접 호출
+        - 로컬 모델 (Qwen 등): vLLM ModelCache를 통한 공유 로드
 
     Attributes:
         config: 모델 설정 딕셔너리
         model_name: 사용 중인 모델명
         device: 실행 디바이스 ("cuda" 또는 "cpu")
-        model: 로컬 모델 객체 (API 모델이면 None)
-        tokenizer: 로컬 토크나이저 (API 모델이면 None)
+        llm: vLLM LLM 인스턴스 (API 모델이면 None)
 
     Example:
         >>> # OpenAI API 모델 사용
-        >>> teacher = TeacherModelWrapper({"model": "gpt-4o"})
+        >>> teacher = TeacherModelWrapper({"model": "gpt-5.2"})
         >>> response = teacher.generate("Solve: 2+2=?")
 
         >>> # 로컬 모델 사용
-        >>> teacher = TeacherModelWrapper({"model": "Qwen/Qwen2.5-7B-Instruct"})
+        >>> teacher = TeacherModelWrapper({"model": "Qwen/Qwen3-8B"})
         >>> response = teacher.generate_json("Return JSON: {answer: ...}")
     """
 
@@ -254,7 +248,7 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         Args:
             config: Teacher 모델 설정 딕셔너리. None이면 기본 설정 사용.
                 필드:
-                - model (str): 모델명 (예: "gpt-4o", "Qwen/Qwen2.5-7B-Instruct")
+                - model (str): 모델명 (예: "gpt-5.2", "Qwen/Qwen3-8B")
                 - base_url (str): API 엔드포인트 URL (로컬 모델은 무시)
                 - api_key (str): API 키 (None이면 환경변수 사용)
                 - device (str): 디바이스 (기본: "cuda")
@@ -272,17 +266,20 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         if self._use_api:
             # API 모델: OpenAI 클라이언트 초기화
             self._init_api_client()
-            self.model = None
-            self.tokenizer = None
+            self.llm = None
             print(f"[TeacherModelWrapper] Using API model: {self.model_name}")
         else:
-            # 로컬 모델: ModelCache를 통해 로드
+            # 로컬 모델: vLLM ModelCache를 통해 로드
             self._api_client = None
             self._is_custom_endpoint = False
-            cached = ModelCache.get_or_load(self.model_name, self.device)
-            self.model = cached["model"]
-            self.tokenizer = cached["tokenizer"]
-            print(f"[TeacherModelWrapper] Using local model: {self.model_name}")
+            cached = ModelCache.get_or_load(
+                self.model_name,
+                self.device,
+                tensor_parallel_size=self.config.get("tensor_parallel_size", 1),
+                gpu_memory_utilization=self.config.get("gpu_memory_utilization", 0.90),
+            )
+            self.llm = cached["llm"]
+            print(f"[TeacherModelWrapper] Using local model (vLLM): {self.model_name}")
 
         # 로컬 모델용 생성 설정 (LocalModelMixin에서 사용)
         # JSON 생성을 위해 기본값을 4096으로 증가 (긴 응답 지원)
@@ -498,7 +495,7 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         prompt: str,
         system_message: Optional[str] = None
     ) -> Dict[str, Any]:
-        """로컬 HuggingFace 모델로 JSON 응답을 생성합니다.
+        """로컬 vLLM 모델로 JSON 응답을 생성합니다.
 
         프롬프트에 JSON 응답 지시가 없으면 자동으로 추가합니다.
 
@@ -607,6 +604,6 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         """로컬 모델 사용 여부를 반환합니다.
 
         Returns:
-            로컬 HuggingFace 모델이면 True, API 모델이면 False
+            로컬 vLLM 모델이면 True, API 모델이면 False
         """
         return not self._use_api

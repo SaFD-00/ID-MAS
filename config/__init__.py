@@ -14,8 +14,8 @@
 
 사용 예시:
     >>> from config import create_teacher_config, get_model_short_name
-    >>> teacher_config = create_teacher_config("gpt-5-2025-08-07")
-    >>> short_name = get_model_short_name("Qwen/Qwen2.5-3B-Instruct")
+    >>> teacher_config = create_teacher_config("gpt-5.2")
+    >>> short_name = get_model_short_name("Qwen/Qwen3-1.7B")
 """
 
 # API 자격증명

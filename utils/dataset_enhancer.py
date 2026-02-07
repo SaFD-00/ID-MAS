@@ -217,7 +217,7 @@ Examples:
     python scripts/enhance_data.py --all
 
     # Specify teacher model
-    python scripts/enhance_data.py --all --teacher-model Qwen/Qwen2.5-72B-Instruct
+    python scripts/enhance_data.py --all --teacher-model Qwen/Qwen3-32B
         """
     )
 
@@ -241,7 +241,7 @@ Examples:
         "--teacher-model",
         type=str,
         default=None,
-        help="Teacher model name (e.g., Qwen/Qwen2.5-72B-Instruct)"
+        help="Teacher model name (e.g., Qwen/Qwen3-32B)"
     )
     parser.add_argument(
         "--model-suffix",

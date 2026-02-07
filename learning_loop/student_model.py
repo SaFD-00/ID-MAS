@@ -20,7 +20,7 @@ Iterative Scaffolding Pipeline에서 학생 역할을 담당합니다.
 
 사용 예시:
     >>> from learning_loop.student_model import StudentModel
-    >>> student = StudentModel(model_name="Qwen/Qwen2.5-3B-Instruct")
+    >>> student = StudentModel(model_name="Qwen/Qwen3-1.7B")
     >>> response = student.generate_initial_response_with_scaffolding(...)
 """
 from models.student_wrapper import StudentModelWrapper

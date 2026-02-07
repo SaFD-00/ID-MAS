@@ -9,7 +9,7 @@
 
 사용 예시:
     >>> from learning_loop import StudentModel, TeacherModel
-    >>> student = StudentModel(model_name="Qwen/Qwen2.5-3B-Instruct")
+    >>> student = StudentModel(model_name="Qwen/Qwen3-1.7B")
     >>> teacher = TeacherModel(config)
 """
 

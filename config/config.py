@@ -34,21 +34,16 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 # 지원하는 교사 모델 목록
 AVAILABLE_TEACHER_MODELS = [
     # OpenAI
-    "gpt-5-2025-08-07",
+    "gpt-5.2",
     # 로컬 HuggingFace 모델
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-72B-Instruct",
-    "Qwen/Qwen3-4B-Instruct-2507",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3-32B",
 ]
 
 # 기본 교사 모델
-DEFAULT_TEACHER_MODEL = "gpt-5-2025-08-07"
+DEFAULT_TEACHER_MODEL = "gpt-5.2"
 
 
 def create_teacher_config(model_name: str = None, use_api: bool = None) -> dict:
@@ -65,11 +60,7 @@ def create_teacher_config(model_name: str = None, use_api: bool = None) -> dict:
         model_name = DEFAULT_TEACHER_MODEL
 
     # OpenAI API 모델 판단
-    is_openai_model = (
-        model_name.startswith("gpt-") or
-        model_name.startswith("o1") or
-        model_name.startswith("o3")
-    )
+    is_openai_model = model_name.startswith("gpt-")
 
     # OpenAI API 모델 설정
     if is_openai_model:
@@ -82,13 +73,15 @@ def create_teacher_config(model_name: str = None, use_api: bool = None) -> dict:
             "max_tokens": 8192
         }
 
-    # 로컬 HuggingFace 모델 설정
+    # 로컬 모델 설정 (vLLM)
     return {
         "model": model_name,
         "device": "cuda",
         "max_new_tokens": 8192,
         "temperature": 0.7,
-        "do_sample": True
+        "do_sample": True,
+        "tensor_parallel_size": 1,
+        "gpu_memory_utilization": 0.90,
     }
 
 
@@ -97,26 +90,23 @@ DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)
 
 # 지원하는 학생 모델 목록
 AVAILABLE_STUDENT_MODELS = [
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "meta-llama/Llama-3.2-3B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-72B-Instruct",
-    "Qwen/Qwen3-4B-Instruct-2507",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3-32B",
 ]
 
 # 기본 학생 모델
-DEFAULT_STUDENT_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+DEFAULT_STUDENT_MODEL = "Qwen/Qwen3-1.7B"
 
 # 학생 모델 공통 설정
 STUDENT_MODEL_BASE_CONFIG = {
     "device": "cuda",
     "max_new_tokens": 2048,
     "temperature": 0.7,
-    "do_sample": True
+    "do_sample": True,
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.90,
 }
 
 # 데이터 경로
@@ -176,15 +166,10 @@ def get_model_short_name(model_name: str = None) -> str:
 
 # 기본 모델명 → HF Hub 레포지토리용 짧은 이름 매핑
 MODEL_NAME_TO_SHORT = {
-    "meta-llama/Llama-3.1-8B-Instruct": "llama3.1-8b",
-    "meta-llama/Llama-3.1-70B-Instruct": "llama3.1-70b",
-    "meta-llama/Llama-3.2-3B-Instruct": "llama3.2-3b",
-    "meta-llama/Llama-3.3-70B-Instruct": "llama3.3-70b",
-    "Qwen/Qwen2.5-3B-Instruct": "qwen2.5-3b",
-    "Qwen/Qwen2.5-7B-Instruct": "qwen2.5-7b",
-    "Qwen/Qwen2.5-14B-Instruct": "qwen2.5-14b",
-    "Qwen/Qwen2.5-72B-Instruct": "qwen2.5-72b",
-    "Qwen/Qwen3-4B-Instruct-2507": "qwen3-4b",
+    "Qwen/Qwen3-1.7B": "qwen3-1.7b",
+    "Qwen/Qwen3-4B": "qwen3-4b",
+    "Qwen/Qwen3-8B": "qwen3-8b",
+    "Qwen/Qwen3-32B": "qwen3-32b",
 }
 
 
