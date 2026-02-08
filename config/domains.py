@@ -125,8 +125,8 @@ def get_domain_data_dirs(
     """도메인별, 모델별 데이터 디렉토리 경로를 반환합니다.
 
     디렉토리 구조:
-    - Train 모드: data/{domain}/train/{teacher_model}/{student_model}/
-    - Eval 모드: data/{domain}/eval/{student_model}/
+    - Train 모드: outputs/{domain}/train/{teacher_short}/{student_short}/
+    - Eval 모드: outputs/{domain}/eval/{student_short}/
 
     Args:
         domain: 도메인명 (예: "math", "logical", "commonsense")
@@ -161,7 +161,7 @@ def get_domain_data_dirs(
             "design_dir": OUTPUT_DIR / domain / "train" / teacher_short / "instructional-design",
         }
     else:  # eval 모드
-        model_dir = DATA_DIR / domain / "eval" / model_short
+        model_dir = OUTPUT_DIR / domain / "eval" / model_short
         dirs = {
             "model_dir": model_dir,
             "raw_data_dir": DATA_DIR / domain / "eval" / "data",

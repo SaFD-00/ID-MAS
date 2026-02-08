@@ -1,7 +1,7 @@
 openai>=1.30.0
-transformers>=4.40.0
+vllm>=0.6.0
 torch>=2.2.0
-accelerate>=0.28.0
+# transformers, accelerate는 vllm 의존성으로 자동 설치됨
 pydantic>=2.6.0
 python-dotenv>=1.0.0
 tiktoken>=0.6.0
