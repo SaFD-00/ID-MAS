@@ -28,7 +28,7 @@ from prompts.learning_prompts import (
     SCAFFOLDING_SYSTEM_PROMPT,
     ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT,
     STUDENT_WITH_HINT_PROMPT,
-    STUDENT_SOCRATIC_RESPONSE_PROMPT,
+    STUDENT_FEEDBACK_RESPONSE_PROMPT,
     # New Scaffolding Artifact prompt
     STUDENT_WITH_ARTIFACT_PROMPT,
 )
@@ -110,12 +110,12 @@ class StudentModel:
         """스캐폴딩과 함께 초기 응답을 생성합니다.
 
         과제분석 결과를 System Prompt에 포함하여 문제 풀이를 지원합니다.
-        Terminal Goal 달성을 목표로 응답을 생성합니다.
+        Instructional Goal 달성을 목표로 응답을 생성합니다.
 
         Args:
             problem_text: 문제 텍스트
             task_analysis: 과제 분석 결과 (Instructional Analysis)
-            instructional_goal: 학습 목표 (Terminal Goal). 기본값: ""
+            instructional_goal: 학습 목표 (Instructional Goal). 기본값: ""
 
         Returns:
             생성된 응답 텍스트
@@ -132,18 +132,18 @@ class StudentModel:
 
         return response
 
-    def respond_to_socratic_questions(
+    def respond_to_feedback(
         self,
         problem_text: str,
         teacher_evaluation: Dict[str, Any],
         previous_response: str,
         task_analysis: str
     ) -> str:
-        """교사의 Socratic 질문에 응답하여 개선된 풀이를 생성합니다.
+        """교사의 피드백에 응답하여 개선된 풀이를 생성합니다.
 
         Args:
             problem_text: 문제 텍스트
-            teacher_evaluation: 교사의 PO 평가 및 Socratic 질문
+            teacher_evaluation: 교사의 PO 평가 및 피드백
             previous_response: 이전 응답
             task_analysis: 과제 분석 결과
 
@@ -153,7 +153,7 @@ class StudentModel:
         # Format teacher evaluation for the prompt
         teacher_eval_str = json.dumps(teacher_evaluation, ensure_ascii=False, indent=2)
 
-        prompt = STUDENT_SOCRATIC_RESPONSE_PROMPT.format(
+        prompt = STUDENT_FEEDBACK_RESPONSE_PROMPT.format(
             problem_text=problem_text,
             previous_response=previous_response[:1500],  # Truncate if too long
             teacher_evaluation=teacher_eval_str,
@@ -162,7 +162,7 @@ class StudentModel:
 
         response = self.model.generate(
             prompt=prompt,
-            system_message="You are a student learning from teacher feedback. Carefully address the Socratic questions and improve your solution."
+            system_message="You are a student learning from teacher feedback. Carefully address the feedback questions and improve your solution."
         )
 
         return response
@@ -241,7 +241,7 @@ class StudentModel:
         return "\n\n".join(formatted)
 
     # =========================================================================
-    # Scaffolding Artifact Methods (NEW - Replaces Socratic Questioning)
+    # Scaffolding Artifact Methods
     # =========================================================================
 
     def respond_with_scaffolding_artifact(
@@ -253,18 +253,18 @@ class StudentModel:
     ) -> str:
         """Scaffolding Artifact를 참조하여 개선된 응답을 생성합니다.
 
-        Teacher가 생성한 Scaffolding DB(artifact)를 참조하여
-        개선된 풀이를 생성합니다. 학생은 DB에서 참조한 정보를
+        Teacher가 생성한 Scaffolding Artifact를 참조하여
+        개선된 풀이를 생성합니다. 학생은 Artifact에서 참조한 정보를
         명시적으로 언급해야 합니다.
 
         Args:
             problem_text: 문제 텍스트
             previous_response: 이전 응답
-            scaffolding_artifact: Scaffolding DB (artifacts + summary)
+            scaffolding_artifact: Scaffolding Artifact (artifacts + summary)
             task_analysis: 과제 분석 결과
 
         Returns:
-            DB 참조 정보를 명시한 개선된 응답 텍스트
+            Artifact 참조 정보를 명시한 개선된 응답 텍스트
         """
         # Format scaffolding artifacts for the prompt
         artifacts_str = self._format_scaffolding_artifacts(
@@ -282,7 +282,7 @@ class StudentModel:
 
         response = self.model.generate(
             prompt=prompt,
-            system_message="You are a student learning from scaffolding guidance. Apply the provided scaffolding to improve your solution and explicitly acknowledge what you learned from the Scaffolding DB."
+            system_message="You are a student learning from scaffolding guidance. Apply the provided scaffolding to improve your solution and explicitly acknowledge what you learned from the Scaffolding Artifact."
         )
 
         return response
@@ -319,8 +319,8 @@ class StudentModel:
                     formatted.append(f"Suggested Strategy: {content['strategy_suggestion']}")
                 if content.get("partial_example"):
                     formatted.append(f"Partial Example: {content['partial_example']}")
-                if content.get("socratic_question"):
-                    formatted.append(f"Guiding Question: {content['socratic_question']}")
+                if content.get("feedback_question"):
+                    formatted.append(f"Guiding Question: {content['feedback_question']}")
             else:
                 # Low-Order Thinking scaffolding
                 if content.get("missed_concept"):
@@ -334,23 +334,23 @@ class StudentModel:
         return "\n".join(formatted)
 
     def extract_db_references(self, response: str) -> List[str]:
-        """학생 응답에서 DB 참조 정보를 추출합니다.
+        """학생 응답에서 Artifact 참조 정보를 추출합니다.
 
-        "Information Retrieved from Scaffolding DB:" 섹션에서
+        "Information Retrieved from Scaffolding Artifact:" 섹션에서
         참조된 정보 목록을 추출합니다.
 
         Args:
             response: 학생의 응답 텍스트
 
         Returns:
-            참조된 DB 정보 목록
+            참조된 Artifact 정보 목록
         """
         references = []
 
-        # Look for the "Information Retrieved from Scaffolding DB" section
-        if "Information Retrieved from Scaffolding DB:" in response:
+        # Look for the "Information Retrieved from Scaffolding Artifact" section
+        if "Information Retrieved from Scaffolding Artifact:" in response:
             # Extract the section
-            parts = response.split("Information Retrieved from Scaffolding DB:")
+            parts = response.split("Information Retrieved from Scaffolding Artifact:")
             if len(parts) > 1:
                 ref_section = parts[1].split("Improved Reasoning:")[0] if "Improved Reasoning:" in parts[1] else parts[1]
                 # Extract bullet points
@@ -375,7 +375,7 @@ if __name__ == "__main__":
 
     # Scaffolding 테스트
     task_analysis = """
-    Terminal Goal: Explain machine learning concepts clearly
+    Instructional Goal: Explain machine learning concepts clearly
     ├── [1] Understand the algorithm
     │   ├── [1-1] Define the objective function
     │   └── [1-2] Explain optimization process

@@ -7,7 +7,7 @@ Dick & Carey 모델의 수행목표 진술 단계를 구현합니다.
     PerformanceObjectives: 수행목표 진술 에이전트
 
 수행목표 구성 요소 (ABCD 모델):
-    - Target: 목표 대상 (Terminal Goal, Subskill 등)
+    - Target: 목표 대상 (Instructional Goal, Subskill 등)
     - Behavior: 관찰 가능한 행동
     - Condition: 행동 수행 조건
     - Criterion: 성공 기준
@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     # 샘플 교수 분석 결과
     sample_analysis = """
-Terminal Goal: classify Iris dataset using linear regression (Apply – Procedural Knowledge)
+Instructional Goal: classify Iris dataset using linear regression (Apply – Procedural Knowledge)
 ├── [1] prepare dataset for modeling (Apply – Procedural Knowledge)
 │   ├── [1-1] load Iris dataset (Remember – Factual Knowledge)
 │   └── [1-2] preprocess data for regression (Apply – Procedural Knowledge)

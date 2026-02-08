@@ -159,8 +159,8 @@ class QuestionResult(QuestionResultRequired, total=False):
     reconstruction: Optional[Dict[str, Any]]
 
     # NEW: Scaffolding Artifact fields
-    scaffolding_db: Optional[List[Dict[str, Any]]]  # 누적된 Scaffolding Artifacts
-    db_references: Optional[List[str]]  # Student가 참조한 DB 정보 목록
+    scaffolding_artifacts: Optional[List[Dict[str, Any]]]  # 누적된 Scaffolding Artifacts
+    artifact_references: Optional[List[str]]  # Student가 참조한 Artifact 정보 목록
     hot_count: Optional[int]  # HOT (High-Order Thinking) scaffolding count
     lot_count: Optional[int]  # LOT (Low-Order Thinking) scaffolding count
 
@@ -653,10 +653,10 @@ def load_checkpoint_from_logs(
                     checkpoint_data["step5_skip_count"] += 1
                     checkpoint_data["final_solution_fallback_count"] += 1
 
-            # Count HOT/LOT scaffolding from scaffolding_db
-            scaffolding_db = result.get("scaffolding_db") or []
-            for db_entry in scaffolding_db:
-                for artifact in db_entry.get("artifacts", []):
+            # Count HOT/LOT scaffolding from scaffolding_artifacts
+            scaffolding_artifacts_data = result.get("scaffolding_artifacts") or result.get("scaffolding_db") or []
+            for artifact_entry in scaffolding_artifacts_data:
+                for artifact in artifact_entry.get("artifacts", []):
                     skill_type = artifact.get("skill_type", "")
                     if skill_type == "HOT":
                         checkpoint_data["hot_scaffolding_count"] += 1

@@ -10,13 +10,13 @@
         - ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT: 반복 학습용 시스템 프롬프트
 
     교사 개입:
-        - TEACHER_INTERVENTION_PROMPT: 수행목표 평가 및 소크라테스식 질문
+        - TEACHER_INTERVENTION_PROMPT: 수행목표 평가 및 피드백
         - INITIAL_HINT_PROMPT: 첫 번째 힌트 제공
         - PROGRESSIVE_HINT_PROMPT: 점진적 힌트 제공
         - SCAFFOLDING_ARTIFACT_PROMPT: 스캐폴딩 아티팩트 생성
 
     학생 응답:
-        - STUDENT_SOCRATIC_RESPONSE_PROMPT: 소크라테스식 질문에 대한 응답
+        - STUDENT_FEEDBACK_RESPONSE_PROMPT: 피드백에 대한 응답
         - STUDENT_WITH_HINT_PROMPT: 힌트 기반 응답
         - STUDENT_WITH_ARTIFACT_PROMPT: 스캐폴딩 아티팩트 기반 응답
 
@@ -53,14 +53,14 @@ You must adhere to the specific performance procedures and required knowledge/sk
 
 [Instructions]
 1. Identify which skills and sub-skills from the instructional analysis are relevant to this problem
-2. Plan your problem-solving strategy based on the terminal goal and subskills
+2. Plan your problem-solving strategy based on the instructional goal and subskills
 3. Execute each step systematically, demonstrating the required performance behaviors
 4. Ensure your solution describes the full reasoning process using all provided steps and resources
 5. Provide your final answer clearly
 
 [Output Format]
 Problem-solving strategy and flow:
-- Terminal goal alignment: [how this solution demonstrates the terminal goal]
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
 - Relevant skills applied: [list the relevant skills from instructional analysis]
 - Step-by-step reasoning: [your detailed solution following the instructional structure]
 
@@ -72,7 +72,7 @@ Answer: [your final answer]
 # 교사 개입 프롬프트 (Teacher Intervention Prompt)
 # ------------------------------------------------------------------------------
 # ReAct 스타일 학습 루프에서 교사 모델이 학생 응답을 평가하고
-# 소크라테스식 질문을 통해 학습을 안내합니다. 정답을 직접 알려주지 않고
+# 피드백을 통해 학습을 안내합니다. 정답을 직접 알려주지 않고
 # 추론 과정을 개선하도록 유도합니다.
 # 출력: performance_evaluation, overall_assessment JSON
 # ==============================================================================
@@ -81,7 +81,7 @@ TEACHER_INTERVENTION_PROMPT = """You are a teacher supporting the learning of a 
 
 Your role is NOT to provide correct answers, but to generate a reasoning state that guides the student's next response. You must monitor the student's reasoning steps to ensure they meet the established performance objectives.
 
-In cases of non-compliance or error, you must generate tailored feedback to guide the student toward the desired outcome using Socratic questioning. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student's next reasoning action.
+In cases of non-compliance or error, you must generate tailored feedback to guide the student toward the desired outcome using feedback questions. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student's next reasoning action.
 
 [Input Data]
 - Problem: {problem_text}
@@ -107,7 +107,7 @@ In cases of non-compliance or error, you must generate tailored feedback to guid
       "objective_content": "The specific objective being evaluated (copy from performance objectives)",
       "is_satisfied": true or false,
       "reason_for_unmet_objective": "Detailed description of the cause if false; null if true",
-      "socratic_question": "Socratic question to bridge the gap if false; null if true"
+      "feedback_question": "Feedback question to bridge the gap if false; null if true"
     }}
   ],
   "overall_assessment": {{
@@ -144,15 +144,15 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 
 
 # ==============================================================================
-# 소크라테스식 질문에 대한 학생 응답 프롬프트
+# 피드백에 대한 학생 응답 프롬프트
 # ------------------------------------------------------------------------------
-# 교사의 평가와 소크라테스식 질문을 받은 학생 모델이
+# 교사의 평가와 피드백을 받은 학생 모델이
 # 피드백을 반영하여 개선된 응답을 생성합니다.
 # ==============================================================================
 
-STUDENT_SOCRATIC_RESPONSE_PROMPT = """You are a student learning to solve problems with teacher guidance.
+STUDENT_FEEDBACK_RESPONSE_PROMPT = """You are a student learning to solve problems with teacher guidance.
 
-Your teacher has evaluated your previous response and provided Socratic questions to guide your thinking. You must carefully consider this feedback and improve your response.
+Your teacher has evaluated your previous response and provided feedback questions to guide your thinking. You must carefully consider this feedback and improve your response.
 
 [Problem]
 {problem_text}
@@ -160,14 +160,14 @@ Your teacher has evaluated your previous response and provided Socratic question
 [Your Previous Response]
 {previous_response}
 
-[Teacher's Evaluation and Socratic Questions]
+[Teacher's Evaluation and Feedback]
 {teacher_evaluation}
 
 [Instructional Analysis (Learning Structure)]
 {task_analysis}
 
 [Instructions]
-1. Carefully read and consider each Socratic question from your teacher
+1. Carefully read and consider each feedback question from your teacher
 2. Identify where your previous reasoning was incomplete or incorrect
 3. Address each unsatisfied performance objective
 4. Show your improved thinking step by step
@@ -175,7 +175,7 @@ Your teacher has evaluated your previous response and provided Socratic question
 
 [Output Format]
 Reflection on teacher feedback:
-- Questions to address: [summarize the Socratic questions]
+- Questions to address: [summarize the feedback questions]
 - Improvements to make: [what you will change in your approach]
 
 Improved reasoning:
@@ -488,13 +488,13 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 # ------------------------------------------------------------------------------
 # Dick & Carey 모델 기반의 스캐폴딩 아티팩트를 생성합니다.
 # 실패한 수행목표에 대해 HOT/LOT 기술 유형에 따라
-# 적절한 스캐폴딩(전략 제안, 부분 예시, 소크라테스식 질문 등)을 설계합니다.
-# 학생이 다음 시도에서 참조할 수 있는 "Scaffolding DB"로 활용됩니다.
+# 적절한 스캐폴딩(전략 제안, 부분 예시, 피드백 등)을 설계합니다.
+# 학생이 다음 시도에서 참조할 수 있는 "Scaffolding Artifact"로 활용됩니다.
 # ==============================================================================
 
 SCAFFOLDING_ARTIFACT_PROMPT = """You are an instructional design expert (Dick & Carey model) creating a Scaffolding Artifact to help a student improve.
 
-Your role is to design pedagogical scaffolding for Performance Objectives that the student failed to meet. This scaffolding will be stored as a "Scaffolding DB" that the student can reference in their next attempt.
+Your role is to design pedagogical scaffolding for Performance Objectives that the student failed to meet. This scaffolding will be stored as a "Scaffolding Artifact" that the student can reference in their next attempt.
 
 [Input Data]
 - Problem: {problem_text}
@@ -516,7 +516,7 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
    For **HOT skills**:
    - Strategy suggestion: Propose an approach or reasoning strategy
    - Partial worked example: Show partial reasoning (stop before the final answer)
-   - Socratic question: Guide thinking without revealing the answer
+   - Feedback question: Guide thinking without revealing the answer
    - Key attention points: What the student should focus on
 
    For **LOT skills**:
@@ -536,7 +536,7 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
       "scaffolding_content": {{
         "strategy_suggestion": "Suggested approach (for HOT) or null",
         "partial_example": "Partial worked example showing key reasoning (for HOT) or null",
-        "socratic_question": "Guiding question (for HOT) or null",
+        "feedback_question": "Guiding question (for HOT) or null",
         "missed_concept": "Concept the student missed (for LOT) or null",
         "brief_explanation": "Concise explanation (for LOT) or null",
         "key_attention_points": "What to focus on in next attempt"
@@ -560,7 +560,7 @@ Output ONLY the JSON object above.
 # 스캐폴딩 아티팩트 기반 학생 응답 프롬프트
 # ------------------------------------------------------------------------------
 # 교사가 준비한 스캐폴딩 정보를 활용하여 개선된 응답을 생성합니다.
-# 학생은 Scaffolding DB에서 어떤 정보를 활용했는지 명시해야 합니다.
+# 학생은 Scaffolding Artifact에서 어떤 정보를 활용했는지 명시해야 합니다.
 # ==============================================================================
 
 STUDENT_WITH_ARTIFACT_PROMPT = """You are a student learning to solve problems with scaffolding support.
@@ -591,10 +591,10 @@ The following scaffolding information has been prepared to help you:
 4. Show your improved reasoning step by step
 5. Provide your final answer clearly
 
-CRITICAL: You MUST explicitly state which information you retrieved from the Scaffolding DB. This helps track learning progress.
+CRITICAL: You MUST explicitly state which information you retrieved from the Scaffolding Artifact. This helps track learning progress.
 
 [Output Format]
-Information Retrieved from Scaffolding DB:
+Information Retrieved from Scaffolding Artifact:
 - [List the specific concepts, strategies, or guidance you are using from the scaffolding]
 - [Be specific about what you learned and will apply]
 

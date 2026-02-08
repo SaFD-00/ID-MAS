@@ -29,7 +29,7 @@ You are an instructional design expert. Perform the Instructional Analysis step 
 
 [Instructions]
 Perform the Instructional Analysis and construct a hierarchical structure in the form of:
-Terminal Goal → Subskills → Subtasks
+Instructional Goal → Subskills → Subtasks
 
 - Present the instructional analysis results as a text-based tree structure.
 - If a required sub-component is unknown or not applicable, still keep the slot but write 'N/A' instead of modifying the structure.
@@ -37,7 +37,7 @@ Terminal Goal → Subskills → Subtasks
 - For every function or sub-function, indicate the learning type based on Anderson and Krathwohl's Revised Taxonomy in the form:
   (Cognitive Process Dimension(Remember / Understand / Apply / Analyze / Evaluate / Create) – Knowledge Dimension(Factual, Conceptual, Procedural, Metacognitive knowledge))
   Examples: (Understand – Conceptual Knowledge), (Apply – Procedural Knowledge)
-- Include only the minimum number of Subskills and Subtasks that are essential to achieving the Terminal Goal.
+- Include only the minimum number of Subskills and Subtasks that are essential to achieving the Instructional Goal.
 
 The final output must strictly follow the structure and labels in the Output Format below.
 - Do not change the wording, ordering, line breaks, or section titles.
@@ -46,7 +46,7 @@ The final output must strictly follow the structure and labels in the Output For
 
 [Output Format]
 ### Instructional Analysis Results
-Terminal Goal: [Learning objective statement] (Cognitive Process Dimension – Knowledge Dimension)
+Instructional Goal: [Learning objective statement] (Cognitive Process Dimension – Knowledge Dimension)
  ├── [1] [Subskill statement] (Cognitive Process Dimension – Knowledge Dimension)
  │   ├── [1-1] [Subtask statement] (Cognitive Process Dimension – Knowledge Dimension)
  ├── [2] [Subskill statement] (Cognitive Process Dimension – Knowledge Dimension)
@@ -71,7 +71,7 @@ Terminal Goal: [Learning objective statement] (Cognitive Process Dimension – K
 
 PERFORMANCE_OBJECTIVES_PROMPT = """
 You are an instructional designer specializing in the Dick and Carey instructional design model, and a researcher in LLM learning methodologies.
-Based on the provided Terminal Goal and Instructional Analysis Result, generate a set of Performance Objectives that will serve as the criteria for evaluating the observable performance within the LLM's reasoning process.
+Based on the provided Instructional Goal and Instructional Analysis Result, generate a set of Performance Objectives that will serve as the criteria for evaluating the observable performance within the LLM's reasoning process.
 
 Performance objectives should be written using the guidelines provided in Anderson & Krathwohl's Taxonomy for Learning.
 Specifically, they should be created using information from the learning outcomes identified in the Instructional Analysis Results.
@@ -121,7 +121,7 @@ Your output must be formatted as JSON, following this structure and no other for
 {{
   "performance_objectives": [
     {{
-      "target": "Terminal Goal",
+      "target": "Instructional Goal",
       "Behavior": "...",
       "Condition": "...",
       "Criterion": "..."

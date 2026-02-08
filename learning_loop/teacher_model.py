@@ -74,7 +74,7 @@ class TeacherModel:
         """학생 응답을 Performance Objectives 기준으로 평가합니다.
 
         ReAct-style 평가를 수행하고 미충족 목표에 대해
-        Socratic 질문을 생성합니다.
+        피드백 질문을 생성합니다.
 
         Args:
             student_response: 학생의 응답
@@ -88,7 +88,7 @@ class TeacherModel:
                     - objective_content: PO 내용
                     - is_satisfied: 충족 여부
                     - reason_for_unmet_objective: 미충족 사유
-                    - socratic_question: Socratic 질문
+                    - feedback_question: 피드백 질문
                 - overall_assessment (dict): 전체 평가 요약
                     - objectives_met: 충족 비율 (예: "3 of 5")
                     - all_satisfied: 전체 충족 여부
@@ -554,7 +554,7 @@ Answer: {ground_truth}""",
         return formatted
 
     # =========================================================================
-    # Scaffolding Artifact Methods (NEW - Replaces Socratic Questioning)
+    # Scaffolding Artifact Methods
     # =========================================================================
 
     def generate_scaffolding_artifact(
@@ -571,8 +571,6 @@ Answer: {ground_truth}""",
         미충족 PO에 대해 HOT(High-Order Thinking)/LOT(Low-Order Thinking)를
         구분하여 교수적 스캐폴딩을 설계합니다. 이 스캐폴딩은 학생이
         다음 시도에서 참조하는 DB로 사용됩니다.
-
-        Socratic questioning을 대체하는 새로운 방식입니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -650,7 +648,7 @@ Answer: {ground_truth}""",
                 "scaffolding_content": {
                     "strategy_suggestion": None,
                     "partial_example": None,
-                    "socratic_question": failed_po.get("socratic_question", "What key concept might you be missing?"),
+                    "feedback_question": failed_po.get("feedback_question", "What key concept might you be missing?"),
                     "missed_concept": "Review the problem requirements carefully",
                     "brief_explanation": "Focus on the specific criteria mentioned in the problem",
                     "key_attention_points": "Pay attention to what the question is actually asking"
@@ -853,7 +851,7 @@ if __name__ == "__main__":
     problem = "Calculate 15 + 27"
     student_resp = "15 + 27 = 41"  # Wrong answer
     ground_truth = "42"
-    task_analysis = "Terminal Goal: Perform basic arithmetic correctly"
+    task_analysis = "Instructional Goal: Perform basic arithmetic correctly"
 
     performance_objectives = [
         {

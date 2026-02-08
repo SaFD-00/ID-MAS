@@ -110,7 +110,7 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 | `--run-design` | 새로운 설계 생성 강제 | `False` |
 | `--resume` | 기존 로그에서 이어서 학습 | `True` |
 
-**참고**: `--resume False` 사용 시 Terminal Goal도 샘플 데이터에서 재생성됩니다.
+**참고**: `--resume False` 사용 시 Instructional Goal도 샘플 데이터에서 재생성됩니다.
 
 ### 평가 모드 (--mode eval)
 

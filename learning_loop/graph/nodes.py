@@ -244,11 +244,11 @@ def _process_iterative_scaffolding(
 ) -> QuestionResult:
     """Scaffolding Artifact 기반 반복적 스캐폴딩으로 문제를 처리합니다.
 
-    처리 흐름 (Socratic Questioning 대체):
-        1. 학생이 Terminal Goal 강조와 함께 초기 응답 생성
+    처리 흐름 (Scaffolding Artifact 기반):
+        1. 학생이 Instructional Goal 강조와 함께 초기 응답 생성
         2. 교사가 Performance Objectives로 평가
         3. PO 미충족 시 → 교사가 Scaffolding Artifact (HOT/LOT) 생성
-        4. 학생이 Scaffolding DB를 참조하여 응답 (출처 인용 필수)
+        4. 학생이 Scaffolding Artifacts를 참조하여 응답 (출처 인용 필수)
         5. 모든 PO 충족 또는 최대 반복 도달까지 반복
         6. Case A: 1회차 성공
         7. Case B: 2-5회차 성공 (재구성)
@@ -269,7 +269,7 @@ def _process_iterative_scaffolding(
     """
     conversation_history = []
     iterations = []
-    scaffolding_db = []  # NEW: Cumulative Scaffolding Artifacts
+    scaffolding_artifacts = []  # NEW: Cumulative Scaffolding Artifacts
     is_correct = False
     all_satisfied = False
     predicted = None
@@ -436,13 +436,13 @@ def _process_iterative_scaffolding(
                             "conversation_history": conversation_history,
                             "iterations": iterations,
                         },
-                        scaffolding_db=scaffolding_db if scaffolding_db else None,
+                        scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
                         hot_count=hot_count if hot_count > 0 else None,
                         lot_count=lot_count if lot_count > 0 else None,
                     )
 
-        # Accumulate scaffolding DB
-        scaffolding_db.append({
+        # Accumulate scaffolding artifacts
+        scaffolding_artifacts.append({
             "iteration": iteration,
             "artifacts": scaffolding_artifact.get("scaffolding_artifacts", []),
             "summary": scaffolding_artifact.get("scaffolding_summary", ""),
@@ -523,7 +523,7 @@ def _process_iterative_scaffolding(
                             "conversation_history": conversation_history,
                             "iterations": iterations,
                         },
-                        scaffolding_db=scaffolding_db if scaffolding_db else None,
+                        scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
                         hot_count=hot_count if hot_count > 0 else None,
                         lot_count=lot_count if lot_count > 0 else None,
                     )
@@ -531,8 +531,8 @@ def _process_iterative_scaffolding(
             sft_output = reconstruction.get("reconstructed_response", response)
             sft_case = SFTCase.B.value
 
-        # Extract DB references from student response (if available)
-        db_references = student_model.extract_db_references(response) if iterations_needed > 1 else []
+        # Extract artifact references from student response (if available)
+        artifact_references = student_model.extract_db_references(response) if iterations_needed > 1 else []
 
         return QuestionResult(
             id=question["id"],
@@ -551,8 +551,8 @@ def _process_iterative_scaffolding(
                 "conversation_history": conversation_history,
                 "iterations": iterations,
             },
-            scaffolding_db=scaffolding_db if scaffolding_db else None,
-            db_references=db_references if db_references else None,
+            scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
+            artifact_references=artifact_references if artifact_references else None,
             hot_count=hot_count if hot_count > 0 else None,
             lot_count=lot_count if lot_count > 0 else None,
             skip_details=skip_details if skip_details else None,
@@ -570,7 +570,7 @@ def _process_iterative_scaffolding(
             problem_text=question["problem_text"],
             ground_truth=question["output"],
             task_analysis=task_analysis,
-            scaffolding_history=scaffolding_db,
+            scaffolding_history=scaffolding_artifacts,
             student_weaknesses=student_weaknesses,
             max_iterations=max_iterations,
         )
@@ -610,7 +610,7 @@ def _process_iterative_scaffolding(
                             "last_correct_iteration": last_correct_iteration,
                             "last_correct_response": last_correct_response,
                         },
-                        scaffolding_db=scaffolding_db if scaffolding_db else None,
+                        scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
                         hot_count=hot_count if hot_count > 0 else None,
                         lot_count=lot_count if lot_count > 0 else None,
                     )
@@ -635,7 +635,7 @@ def _process_iterative_scaffolding(
                 "last_correct_iteration": last_correct_iteration,
                 "last_correct_response": last_correct_response,
             },
-            scaffolding_db=scaffolding_db if scaffolding_db else None,
+            scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
             reconstruction={
                 "addressed_weaknesses": final_solution.get("addressed_weaknesses", []),
                 "key_learning_points": final_solution.get("key_learning_points", []),
@@ -654,7 +654,7 @@ def _build_sft_response_from_iterations(
     """반복 히스토리에서 SFT 응답을 구축합니다.
 
     첫 번째 반복은 교사 가이드가 없을 수 있습니다 (첫 시도에 성공한 경우).
-    이후 반복에는 Socratic 질문이 포함된 teacher_evaluation이 있습니다.
+    이후 반복에는 피드백 질문이 포함된 teacher_evaluation이 있습니다.
 
     Args:
         iterations: 반복 히스토리 리스트
@@ -671,9 +671,9 @@ def _build_sft_response_from_iterations(
             # Extract guidance from teacher evaluation if available
             teacher_eval = it.get("teacher_evaluation")
             if teacher_eval and isinstance(teacher_eval, dict):
-                socratic = teacher_eval.get("socratic_questions", [])
-                if socratic:
-                    guidance = "\n".join(f"- {q}" for q in socratic)
+                feedback_items = teacher_eval.get("feedback_questions", [])
+                if feedback_items:
+                    guidance = "\n".join(f"- {q}" for q in feedback_items)
                     parts.append(f"[Guidance]\n{guidance}")
 
         parts.append(f"[Solution Attempt]\n{it['student_response']}")
