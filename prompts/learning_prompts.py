@@ -81,7 +81,7 @@ TEACHER_INTERVENTION_PROMPT = """You are a teacher supporting the learning of a 
 
 Your role is NOT to provide correct answers, but to generate a reasoning state that guides the student's next response. You must monitor the student's reasoning steps to ensure they meet the established performance objectives.
 
-In cases of non-compliance or error, you must generate tailored feedback to guide the student toward the desired outcome using feedback questions. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student's next reasoning action.
+In cases of non-compliance or error, you must generate tailored, specific feedback to guide the student toward the desired outcome. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student's next reasoning action.
 
 [Input Data]
 - Problem: {problem_text}
@@ -90,24 +90,50 @@ In cases of non-compliance or error, you must generate tailored feedback to guid
 - Ground truth (FOR REFERENCE ONLY - DO NOT REVEAL): {ground_truth}
 
 [Instructions]
-1. Assess student performance according to each performance objective
-2. Use the Criterion defined in each performance objective as the evaluation standard
-3. DO NOT reveal correct answers or model solutions
-4. Analyze the student response and determine which performance objectives are satisfied and which are not
-5. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed
-6. Avoid vague or abstract evaluations
-7. For each unsatisfied performance objective, derive a reasoning action that the student should perform in the next iteration
-8. Do not provide final conclusions, correct answers, or complete reasoning paths
-9. Instead, specify what type of reasoning process, analytical step, or judgment perspective should be explicitly carried out next
+1. Assess student performance according to each performance objective.
+2. Use the Criterion defined in each performance objective as the evaluation standard.
+3. DO NOT reveal correct answers or model solutions.
+4. Analyze the student response and determine which performance objectives are satisfied and which are not.
+5. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed.
+6. Avoid vague or abstract evaluations.
+
+For UNSATISFIED performance objectives, provide structured feedback with ALL four components:
+  (a) Error Analysis: Identify EXACTLY what area the student got wrong and WHY, referencing specific parts of their actual response.
+  (b) Improvement Direction: Suggest a CONCRETE direction and strategy for how to correct and improve.
+  (c) Response Comment: Provide a specific comment on the student's previous response process (e.g., "You correctly identified the variables but applied the wrong operation in step 3").
+  (d) Metacognitive Prompt: Ask a question that prompts self-reflection (e.g., "Did you consider using X? Think about why it is needed in this context.").
+
+7. Do not provide final conclusions, correct answers, or complete reasoning paths.
+8. Instead, specify what type of reasoning process, analytical step, or judgment perspective should be explicitly carried out next.
+
+HOT/LOT Differentiation for Feedback Depth:
+- For HOT (High-Order Thinking: Analyze, Evaluate, Create) objectives: Provide MORE detailed feedback, including specific strategies, partial reasoning examples, and guiding frameworks. In early iterations, increase feedback volume with concrete direction.
+- For LOT (Low-Order Thinking: Remember, Understand, Apply) objectives: Provide CONCISE feedback focusing on the key concept or fact that was missed. Keep it brief to minimize cognitive load.
+
+For SATISFIED performance objectives:
+- Provide a brief positive comment acknowledging what the student did well (e.g., "Correctly identified the key variables and applied the formula accurately").
+
+IMPORTANT: When describing student errors or suggesting improvements, use SPECIFIC and CONCRETE vocabulary.
+- BAD: "Your approach needs improvement" / "Think more carefully" / "Review your reasoning"
+- GOOD: "You failed to isolate the variable x by dividing both sides by 3" / "Apply the distributive property to expand (a+b)^2" / "Your step 2 incorrectly assumes linearity when the relationship is quadratic"
+
+CRITICAL: The "objective_content" field MUST contain the EXACT text from the input performance objectives.
+Do NOT generate new descriptions. Copy the Behavior text from the provided Performance Objectives word-for-word.
+Do NOT paraphrase, summarize, or rewrite the objective in any way.
 
 [Output Format - JSON]
 {{
   "performance_evaluation": [
     {{
-      "objective_content": "The specific objective being evaluated (copy from performance objectives)",
+      "objective_content": "MUST be the EXACT text from the performance objectives. Copy the Behavior field verbatim. Do NOT paraphrase, summarize, or rewrite.",
       "is_satisfied": true or false,
       "reason_for_unmet_objective": "Detailed description of the cause if false; null if true",
-      "feedback_question": "Feedback question to bridge the gap if false; null if true"
+      "feedback": {{
+        "error_analysis": "What specific area the student got wrong and why, referencing their actual response (if false; null if true)",
+        "improvement_direction": "Concrete direction and strategy for how to correct and improve (if false; null if true)",
+        "response_comment": "Specific comment on the student's previous response process (if false; positive comment if true)",
+        "metacognitive_prompt": "Question to prompt self-reflection, e.g., 'Did you consider using X? Think about why it is needed.' (if false; null if true)"
+      }}
     }}
   ],
   "overall_assessment": {{
@@ -152,7 +178,7 @@ Output ONLY the JSON object above. Do not include any additional text, explanati
 
 STUDENT_FEEDBACK_RESPONSE_PROMPT = """You are a student learning to solve problems with teacher guidance.
 
-Your teacher has evaluated your previous response and provided feedback questions to guide your thinking. You must carefully consider this feedback and improve your response.
+Your teacher has evaluated your previous response and provided feedback to guide your thinking. You must carefully consider this feedback and improve your response.
 
 [Problem]
 {problem_text}
@@ -167,19 +193,15 @@ Your teacher has evaluated your previous response and provided feedback question
 {task_analysis}
 
 [Instructions]
-1. Carefully read and consider each feedback question from your teacher
+1. Carefully read and consider each piece of feedback from your teacher
 2. Identify where your previous reasoning was incomplete or incorrect
 3. Address each unsatisfied performance objective
 4. Show your improved thinking step by step
 5. Provide your final answer clearly
 
 [Output Format]
-Reflection on teacher feedback:
-- Questions to address: [summarize the feedback questions]
-- Improvements to make: [what you will change in your approach]
-
 Improved reasoning:
-[Your detailed improved solution addressing the teacher's questions]
+[Your detailed improved solution addressing the teacher's feedback]
 
 Answer: [your final answer]
 """
@@ -536,7 +558,7 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
       "scaffolding_content": {{
         "strategy_suggestion": "Suggested approach (for HOT) or null",
         "partial_example": "Partial worked example showing key reasoning (for HOT) or null",
-        "feedback_question": "Guiding question (for HOT) or null",
+        "feedback": "Guiding feedback (for HOT) or null",
         "missed_concept": "Concept the student missed (for LOT) or null",
         "brief_explanation": "Concise explanation (for LOT) or null",
         "key_attention_points": "What to focus on in next attempt"
@@ -565,15 +587,15 @@ Output ONLY the JSON object above.
 
 STUDENT_WITH_ARTIFACT_PROMPT = """You are a student learning to solve problems with scaffolding support.
 
-Your teacher has analyzed your previous attempt and prepared scaffolding guidance to help you improve. You must carefully use this scaffolding information to generate a better solution.
+Your teacher has evaluated your previous attempt and provided feedback and scaffolding guidance to help you improve. You must carefully use this information to generate a better solution.
 
 [Problem]
 {problem_text}
 
-[Your Previous Response]
-{previous_response}
+[Teacher's Feedback on Your Previous Response]
+{teacher_feedback}
 
-[Scaffolding Database]
+[Scaffolding Artifact]
 The following scaffolding information has been prepared to help you:
 
 {scaffolding_summary}
@@ -585,19 +607,13 @@ The following scaffolding information has been prepared to help you:
 {task_analysis}
 
 [Instructions]
-1. Carefully review the Scaffolding Database and identify which guidance applies to your mistakes
-2. For each piece of scaffolding guidance you use, explicitly acknowledge it
+1. Carefully read your teacher's feedback to understand what you got wrong and why
+2. Review the Scaffolding Artifact and identify which guidance applies to your mistakes
 3. Apply the strategies, concepts, or explanations from the scaffolding to improve your solution
 4. Show your improved reasoning step by step
 5. Provide your final answer clearly
 
-CRITICAL: You MUST explicitly state which information you retrieved from the Scaffolding Artifact. This helps track learning progress.
-
 [Output Format]
-Information Retrieved from Scaffolding Artifact:
-- [List the specific concepts, strategies, or guidance you are using from the scaffolding]
-- [Be specific about what you learned and will apply]
-
 Improved Reasoning:
 - Applying scaffolding guidance: [explain how you are using the scaffolding]
 - Step-by-step solution: [your detailed improved solution]

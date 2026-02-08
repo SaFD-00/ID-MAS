@@ -88,7 +88,7 @@ class TeacherModel:
                     - objective_content: PO 내용
                     - is_satisfied: 충족 여부
                     - reason_for_unmet_objective: 미충족 사유
-                    - feedback_question: 피드백 질문
+                    - feedback: 구조화된 피드백
                 - overall_assessment (dict): 전체 평가 요약
                     - objectives_met: 충족 비율 (예: "3 of 5")
                     - all_satisfied: 전체 충족 여부
@@ -648,7 +648,7 @@ Answer: {ground_truth}""",
                 "scaffolding_content": {
                     "strategy_suggestion": None,
                     "partial_example": None,
-                    "feedback_question": failed_po.get("feedback_question", "What key concept might you be missing?"),
+                    "feedback": failed_po.get("feedback", "What key concept might you be missing?"),
                     "missed_concept": "Review the problem requirements carefully",
                     "brief_explanation": "Focus on the specific criteria mentioned in the problem",
                     "key_attention_points": "Pay attention to what the question is actually asking"

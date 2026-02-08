@@ -232,6 +232,75 @@ def _process_single_shot(
     )
 
 
+def _extract_teacher_feedback(evaluation: Dict[str, Any]) -> str:
+    """교사 평가에서 학생에게 전달할 피드백을 추출합니다.
+
+    performance_evaluation의 각 PO별 feedback을 구조화하여
+    학생이 이해하기 쉬운 텍스트로 변환합니다.
+
+    Args:
+        evaluation: 교사의 PO 평가 결과
+
+    Returns:
+        포맷된 피드백 문자열
+    """
+    if not evaluation:
+        return "(No feedback available)"
+
+    pe = evaluation.get("performance_evaluation", [])
+    if not pe:
+        return "(No feedback available)"
+
+    feedback_parts = []
+    for po in pe:
+        objective = po.get("objective_content", "Unknown objective")
+        is_satisfied = po.get("is_satisfied", True)
+        feedback = po.get("feedback", {})
+
+        if is_satisfied:
+            # Satisfied: show positive comment
+            if isinstance(feedback, dict):
+                comment = feedback.get("response_comment") or feedback.get("positive_comment", "")
+            elif isinstance(feedback, str):
+                comment = feedback
+            else:
+                comment = ""
+            if comment:
+                feedback_parts.append(f"[Objective: {objective}]\n- Status: Satisfied\n- Comment: {comment}")
+        else:
+            # Unsatisfied: show structured feedback
+            reason = po.get("reason_for_unmet_objective", "")
+            if isinstance(feedback, dict):
+                error_analysis = feedback.get("error_analysis", "")
+                improvement = feedback.get("improvement_direction", "")
+                comment = feedback.get("response_comment", "")
+                metacognitive = feedback.get("metacognitive_prompt", "")
+                feedback_text = f"[Objective: {objective}]\n- Status: Not Satisfied"
+                if reason:
+                    feedback_text += f"\n- Issue: {reason}"
+                if error_analysis:
+                    feedback_text += f"\n- Error Analysis: {error_analysis}"
+                if improvement:
+                    feedback_text += f"\n- How to Improve: {improvement}"
+                if comment:
+                    feedback_text += f"\n- Comment: {comment}"
+                if metacognitive:
+                    feedback_text += f"\n- Think About: {metacognitive}"
+                feedback_parts.append(feedback_text)
+            elif isinstance(feedback, str) and feedback:
+                feedback_parts.append(f"[Objective: {objective}]\n- Status: Not Satisfied\n- Feedback: {feedback}")
+            else:
+                feedback_parts.append(f"[Objective: {objective}]\n- Status: Not Satisfied\n- Issue: {reason}")
+
+    overall = evaluation.get("overall_assessment", {})
+    if isinstance(overall, dict):
+        focus = overall.get("recommended_focus")
+        if focus:
+            feedback_parts.append(f"\n[Recommended Focus]\n{focus}")
+
+    return "\n\n".join(feedback_parts) if feedback_parts else "(No feedback available)"
+
+
 def _process_iterative_scaffolding(
     question: Dict[str, Any],
     task_analysis: str,
@@ -280,7 +349,7 @@ def _process_iterative_scaffolding(
     hot_count = 0  # HOT scaffolding count
     lot_count = 0  # LOT scaffolding count
 
-    last_response = None
+    last_teacher_feedback = None
     last_scaffolding_artifact = None
 
     for iteration in range(1, max_iterations + 1):
@@ -293,10 +362,10 @@ def _process_iterative_scaffolding(
                 instructional_goal=instructional_goal,
             )
         else:
-            # Step 4 (NEW): Student responds using Scaffolding Artifact DB
+            # Step 4 (NEW): Student responds using teacher feedback + Scaffolding Artifact
             response = student_model.respond_with_scaffolding_artifact(
                 problem_text=question["problem_text"],
-                previous_response=last_response,
+                teacher_feedback=last_teacher_feedback,
                 scaffolding_artifact=last_scaffolding_artifact,
                 task_analysis=task_analysis,
             )
@@ -466,8 +535,8 @@ def _process_iterative_scaffolding(
             "timestamp": datetime.now().isoformat(),
         })
 
-        # Store for next iteration
-        last_response = response
+        # Store for next iteration: extract feedback from evaluation for student
+        last_teacher_feedback = _extract_teacher_feedback(evaluation)
         last_scaffolding_artifact = scaffolding_artifact
 
     # Build result
@@ -671,7 +740,7 @@ def _build_sft_response_from_iterations(
             # Extract guidance from teacher evaluation if available
             teacher_eval = it.get("teacher_evaluation")
             if teacher_eval and isinstance(teacher_eval, dict):
-                feedback_items = teacher_eval.get("feedback_questions", [])
+                feedback_items = teacher_eval.get("feedback", [])
                 if feedback_items:
                     guidance = "\n".join(f"- {q}" for q in feedback_items)
                     parts.append(f"[Guidance]\n{guidance}")

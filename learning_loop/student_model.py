@@ -247,24 +247,23 @@ class StudentModel:
     def respond_with_scaffolding_artifact(
         self,
         problem_text: str,
-        previous_response: str,
+        teacher_feedback: str,
         scaffolding_artifact: Dict[str, Any],
         task_analysis: str
     ) -> str:
-        """Scaffolding Artifact를 참조하여 개선된 응답을 생성합니다.
+        """Scaffolding Artifact와 교사 피드백을 참조하여 개선된 응답을 생성합니다.
 
-        Teacher가 생성한 Scaffolding Artifact를 참조하여
-        개선된 풀이를 생성합니다. 학생은 Artifact에서 참조한 정보를
-        명시적으로 언급해야 합니다.
+        Teacher가 생성한 피드백과 Scaffolding Artifact를 참조하여
+        개선된 풀이를 생성합니다.
 
         Args:
             problem_text: 문제 텍스트
-            previous_response: 이전 응답
+            teacher_feedback: 교사의 피드백 (evaluation에서 추출)
             scaffolding_artifact: Scaffolding Artifact (artifacts + summary)
             task_analysis: 과제 분석 결과
 
         Returns:
-            Artifact 참조 정보를 명시한 개선된 응답 텍스트
+            개선된 응답 텍스트
         """
         # Format scaffolding artifacts for the prompt
         artifacts_str = self._format_scaffolding_artifacts(
@@ -274,7 +273,7 @@ class StudentModel:
 
         prompt = STUDENT_WITH_ARTIFACT_PROMPT.format(
             problem_text=problem_text,
-            previous_response=previous_response[:1500],
+            teacher_feedback=teacher_feedback,
             scaffolding_summary=scaffolding_summary,
             scaffolding_artifacts=artifacts_str,
             task_analysis=task_analysis[:1500]
@@ -282,7 +281,7 @@ class StudentModel:
 
         response = self.model.generate(
             prompt=prompt,
-            system_message="You are a student learning from scaffolding guidance. Apply the provided scaffolding to improve your solution and explicitly acknowledge what you learned from the Scaffolding Artifact."
+            system_message="You are a student learning from teacher feedback and scaffolding guidance. Apply the provided feedback and scaffolding to improve your solution."
         )
 
         return response
@@ -319,8 +318,8 @@ class StudentModel:
                     formatted.append(f"Suggested Strategy: {content['strategy_suggestion']}")
                 if content.get("partial_example"):
                     formatted.append(f"Partial Example: {content['partial_example']}")
-                if content.get("feedback_question"):
-                    formatted.append(f"Guiding Question: {content['feedback_question']}")
+                if content.get("feedback"):
+                    formatted.append(f"Guiding Feedback: {content['feedback']}")
             else:
                 # Low-Order Thinking scaffolding
                 if content.get("missed_concept"):
