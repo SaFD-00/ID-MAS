@@ -24,40 +24,24 @@ Note:
 INSTRUCTIONAL_ANALYSIS_PROMPT = """
 You are an instructional design expert. Perform the Instructional Analysis step of the Dick & Carey model for the learning objective provided below.
 
-[Learning Goal]
-{learning_objective}
+[Learning objective]: {learning_objective}
 
 [Instructions]
-Perform the Instructional Analysis and construct a hierarchical structure in the form of:
-Instructional Goal → Subskills → Subtasks
-
-- Present the instructional analysis results as a text-based tree structure.
-- If a required sub-component is unknown or not applicable, still keep the slot but write 'N/A' instead of modifying the structure.
-- Write all skill statements concisely using an action verb + object format.
-- For every function or sub-function, indicate the learning type based on Anderson and Krathwohl's Revised Taxonomy in the form:
-  (Cognitive Process Dimension(Remember / Understand / Apply / Analyze / Evaluate / Create) – Knowledge Dimension(Factual, Conceptual, Procedural, Metacognitive knowledge))
-  Examples: (Understand – Conceptual Knowledge), (Apply – Procedural Knowledge)
-- Include only the minimum number of Subskills and Subtasks that are essential to achieving the Instructional Goal.
-
-The final output must strictly follow the structure and labels in the Output Format below.
-- Do not change the wording, ordering, line breaks, or section titles.
-- The Output Format example is provided ONLY to specify formatting and structure.
-- Determine all subskills and subtasks strictly based on the given Learning Goal.
+Perform the Instructional Analysis and construct a hierarchical structure in the form of: Instructional Goal → Subskills → Subtasks.
+Present the instructional analysis results as a text-based tree structure.
+Write all skill statements concisely using an action verb + object format.
+Include only the minimum number of Subskills and Subtasks that are essential to achieving the Instructional Goal. For every function or sub-function, indicate the learning outcome based on Bloom's revised Taxonomy: Remember / Understand / Apply / Analyze / Evaluate / Create.
+The final output must follow the structure and labels in the Output Format below. Do not change the wording, ordering, line breaks, or section titles. The Output Format example is provided ONLY to specify formatting and structure. Determine all subskills and subtasks strictly based on the given Learning Goal.
 
 [Output Format]
 ### Instructional Analysis Results
-Instructional Goal: [Learning objective statement] (Cognitive Process Dimension – Knowledge Dimension)
- ├── [1] [Subskill statement] (Cognitive Process Dimension – Knowledge Dimension)
- │   ├── [1-1] [Subtask statement] (Cognitive Process Dimension – Knowledge Dimension)
- ├── [2] [Subskill statement] (Cognitive Process Dimension – Knowledge Dimension)
- │   ├── [2-1] [Subtask statement] (Cognitive Process Dimension – Knowledge Dimension)
- │   └── [2-2] [Subtask statement] (Cognitive Process Dimension – Knowledge Dimension)
- └── [3] [Subskill statement] (Cognitive Process Dimension – Knowledge Dimension)
+Instructional Goal: [Learning objective statement] (learning outcome)
+ ├── [Subskill statements] (learning outcome)
+ │   ├── [Subtask statements, if needed] (learning outcome)
 
-[Requirements]
-- Maintain the exact structure, titles, line breaks, and tree characters (├──, │, └──).
-- Do not change section name ("Instructional Analysis Results").
-- Output only the required instructional analysis products; do not include introductions, explanations, or references.
+[Output Format Description]
+- Use consistent numbering (e.g., [1], [1-1])
+- Use tree characters (├──, │, └──) where applicable
 """
 
 
