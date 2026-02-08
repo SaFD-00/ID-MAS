@@ -654,7 +654,7 @@ def load_checkpoint_from_logs(
                     checkpoint_data["final_solution_fallback_count"] += 1
 
             # Count HOT/LOT scaffolding from scaffolding_artifacts
-            scaffolding_artifacts_data = result.get("scaffolding_artifacts") or result.get("scaffolding_db") or []
+            scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
             for artifact_entry in scaffolding_artifacts_data:
                 for artifact in artifact_entry.get("artifacts", []):
                     skill_type = artifact.get("skill_type", "")

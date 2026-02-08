@@ -71,6 +71,7 @@ Thumbs.db
 *.safetensors
 **/checkpoints/
 **/output/
+**/outputs/
 
 # ============================================
 # Logs

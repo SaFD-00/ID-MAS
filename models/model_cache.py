@@ -42,7 +42,7 @@ class ModelCache:
         device: str = "cuda",
         dtype: Optional[str] = None,
         tensor_parallel_size: int = 1,
-        gpu_memory_utilization: float = 0.90,
+        gpu_memory_utilization: float = 0.85,
         max_model_len: Optional[int] = None,
     ) -> Dict[str, object]:
         """캐시에서 모델을 반환하거나, 없으면 로드합니다.
@@ -72,6 +72,7 @@ class ModelCache:
             "tensor_parallel_size": tensor_parallel_size,
             "gpu_memory_utilization": gpu_memory_utilization,
             "trust_remote_code": True,
+            "attention_config": {"backend": "TRITON_ATTN"},
         }
 
         if max_model_len is not None:

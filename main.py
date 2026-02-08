@@ -791,11 +791,7 @@ def run_train_mode(args):
     print(f"Resume: {args.resume}")
 
     # 로컬 모델인 경우 Teacher/Student 동일 여부 확인
-    is_local_teacher = not (
-        teacher_model_name.startswith("gpt-") or
-        teacher_model_name.startswith("o1") or
-        teacher_model_name.startswith("o3")
-    )
+    is_local_teacher = not teacher_model_name.startswith("gpt-")
     if is_local_teacher and teacher_model_name == student_model_name:
         print(f"\n[Model Sharing] Teacher and Student use same model: {teacher_model_name}")
         print(f"[Model Sharing] Model will be loaded ONCE and shared (memory optimized)")
