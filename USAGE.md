@@ -484,19 +484,19 @@ CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-
     --teacher-model Qwen/Qwen3-4B
 
 ## [3] Qwen3-8B
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset gsm8k \
+CUDA_VISIBLE_DEVICES=0,1 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-8B
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+CUDA_VISIBLE_DEVICES=0,1 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-8B
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+CUDA_VISIBLE_DEVICES=0,1 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-8B
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+CUDA_VISIBLE_DEVICES=0,1 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-8B
 

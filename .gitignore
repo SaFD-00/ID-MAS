@@ -70,8 +70,6 @@ Thumbs.db
 *.bin
 *.safetensors
 **/checkpoints/
-**/output/
-**/outputs/
 
 # ============================================
 # Logs
@@ -88,10 +86,9 @@ logs/
 # ============================================
 # ID-MAS specific
 # ============================================
-# Model output directories
-**/data/**/Llama-*/
-**/data/**/Qwen*/
-**/data/**/instructional-design/
+# Data and outputs (large files)
+data/
+outputs/
 
 # Data preparation scripts (not for production)
 ID-MAS/utils/reparse_eval_results.py
