@@ -9,10 +9,6 @@ LLM을 통해 교수설계 산출물(학습목표, 교수분석, 수행목표)�
     INSTRUCTIONAL_ANALYSIS_PROMPT: 교수분석 생성 프롬프트 (2단계)
     PERFORMANCE_OBJECTIVES_PROMPT: 수행목표 진술 생성 프롬프트 (4단계)
 
-함수:
-    format_samples_for_prompt: 샘플 데이터를 프롬프트용 문자열로 변환
-    get_instructional_goal_prompt: 완성된 학습목표 생성 프롬프트 구성
-
 Note:
     프롬프트 내용은 LLM이 이해하기 쉽도록 영어로 작성되어 있습니다.
     프롬프트 수정 시 출력 형식(Output Format)을 변경하지 마세요.
@@ -81,72 +77,6 @@ Below are {sample_count} representative samples from the dataset:
 """
 
 
-def format_samples_for_prompt(samples: list, max_samples: int = 20) -> str:
-    """샘플 데이터를 프롬프트용 문자열로 변환합니다.
-
-    각 샘플의 instruction과 input 필드를 추출하여 번호가 매겨진
-    형식의 문자열로 변환합니다. output 필드는 학습목표 도출에
-    편향을 줄 수 있으므로 의도적으로 제외합니다.
-
-    Args:
-        samples: 샘플 데이터 리스트. 각 샘플은 instruction, input 키를 가진 딕셔너리
-        max_samples: 프롬프트에 포함할 최대 샘플 수. 기본값: 20
-
-    Returns:
-        "### Sample N\\n{instruction}\\n{input}" 형식으로 구성된 문자열.
-        instruction은 최대 200자, input은 최대 500자로 절단됩니다.
-    """
-    formatted_samples = []
-
-    for i, sample in enumerate(samples[:max_samples]):
-        instruction = sample.get("instruction", "")
-        input_text = sample.get("input", "")
-
-        # instruction과 input만 포함 (output 제외)
-        instruction_truncated = instruction[:200] if instruction else "N/A"
-        input_truncated = input_text[:500] if input_text else "N/A"
-
-        sample_text = f"""### Sample {i + 1}
-{instruction_truncated}
-{input_truncated}
-"""
-        formatted_samples.append(sample_text)
-
-    return "\n".join(formatted_samples)
-
-
-def get_instructional_goal_prompt(
-    domain: str,
-    dataset: str,
-    samples: list,
-    custom_template: str = None
-) -> str:
-    """학습목표 생성용 완성된 프롬프트를 구성합니다.
-
-    샘플 데이터를 포맷하고 템플릿에 삽입하여 LLM에 전달할
-    최종 프롬프트 문자열을 생성합니다.
-
-    Args:
-        domain: 도메인 이름 (math, logical, commonsense 등)
-        dataset: 데이터셋 이름 (gsm8k, reclor, arc_c 등)
-        samples: 학습목표 도출에 사용할 샘플 데이터 리스트
-        custom_template: 커스텀 프롬프트 템플릿. None이면 기본 템플릿 사용
-
-    Returns:
-        {sample_count}, {train_data} 등이 채워진 완성된 프롬프트 문자열
-    """
-    template = custom_template or INSTRUCTIONAL_GOAL_PROMPT
-
-    train_data = format_samples_for_prompt(samples)
-
-    return template.format(
-        domain=domain,
-        dataset=dataset,
-        sample_count=len(samples),
-        train_data=train_data
-    )
-
-
 # ==============================================================================
 # 2단계: 교수분석 (Instructional Analysis)
 # ------------------------------------------------------------------------------
@@ -184,7 +114,7 @@ Instructional Goal: [Learning objective statement] (learning outcome)
 # ------------------------------------------------------------------------------
 # Dick & Carey 모델의 4단계로, 교수분석 결과를 바탕으로
 # 학습자가 달성해야 할 구체적인 수행목표를 진술합니다.
-# 각 수행목표는 행동(Behavior), 조건(Condition), 기준(Criterion)을 포함합니다.
+# 각 수행목표는 행동(Behavior), 조건(Condition), 기준(Criterion)을 하나의 문장으로 통합합니다.
 # ==============================================================================
 
 PERFORMANCE_OBJECTIVES_PROMPT = """
@@ -196,12 +126,12 @@ Specifically, they should be created using information from the learning outcome
 Instructional Analysis Result: {instructional_analysis}
 
 [Instructions]
-For each Subskills and Subtask in the instructional analysis, you must create at least one Performance Objective.
-Every Performance Objective must include all three components—Behavior, Condition, and Criterion—and each component must be explicitly stated.
-- Behavior: This is a description of LLM’s intellectual skill including actions, content, and concepts. 
-- Condition: This is a description of the tools and resources that will be available to the learner when performing the skill. Write the conditions based solely on the data given in the problem or generated during the reasoning process.  And it should always begin with 'Given ~'.
+For each Subskills and Subtasks in the instructional analysis, you must create at least one Performance Objective. You can create multiple performance objectives for subskills or subtasks that have more than one requirement.
+Every Performance Objective must include all three components—Behavior, Condition, and Criterion—and each component must be explicitly stated in one sentence.
+- Behavior: This is a description of LLM's intellectual skill including actions, content, and concepts.
+- Condition: This is a description of the tools and resources that will be available to the learner when performing the skill. Write the conditions based solely on the data given in the problem or generated during the reasoning process. And it should always begin with 'given ~'.
 - Criterion: This is a description of acceptable performance of the skill. The Criterion component must be tailored to the nature of the task: for tasks with correct answers, it must include a clear and measurable standard such as accuracy requirements, acceptable error ranges, or the number of correct responses; whereas for tasks with no single correct answer, it must specify the information or features that must be present for an acceptable response. Furthermore, these criteria must be formulated to evaluate the observable reasoning process within a single problem-solving task.
-Each Performance Objective must correspond directly to a single Subskill and Subtask, and you must not add content that does not appear in the Instructional Analysis Result.
+Each Performance Objective must correspond directly to a single Subskill and Subtask, and you must not add content that does not appear in the Instructional Analysis Result. Each performance objective must start with an action verb and must not include an explicit subject.
 
 [Output Format]
 Your output must be formatted as JSON, following this structure and no other form of explanation or commentary:
@@ -210,21 +140,15 @@ Your output must be formatted as JSON, following this structure and no other for
   "performance_objectives": [
     {{
       "target": "Instructional Goal",
-      "Behavior": "...",
-      "Condition": "...",
-      "Criterion": "..."
+      "performance_objective": "A single sentence integrating behavior, condition, and criteria"
     }},
     {{
-      "target": "Subskill [X]",
-      "Behavior": "...",
-      "Condition": "...",
-      "Criterion": "..."
+      "target": "Subskill X",
+      "performance_objective": "A single sentence integrating behavior, condition, and criteria"
     }},
     {{
-      "target": "Subtask [X-Y]",
-      "Behavior": "...",
-      "Condition": "...",
-      "Criterion": "..."
+      "target": "Subtask X",
+      "performance_objective": "A single sentence integrating behavior, condition, and criteria"
     }}
   ]
 }}

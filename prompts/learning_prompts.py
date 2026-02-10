@@ -10,22 +10,18 @@
 
     교사 개입:
         - TEACHER_INTERVENTION_PROMPT: 수행목표 평가 (평가 전용)
-        - SCAFFOLDING_ARTIFACT_PROMPT: 스캐폴딩 아티팩트 + 서술형 피드백 생성
+        - SCAFFOLDING_ARTIFACT_PROMPT: 스캐폴딩 아티팩트 + 서술형 피드백 + iteration summary 생성
 
     학생 응답:
         - STUDENT_FEEDBACK_RESPONSE_PROMPT: SCAFFOLDING_SYSTEM_PROMPT 기반 피드백 응답
 
     결과 재구성:
-        - SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT: 성공 후 재구성 (Case B, 평문)
         - TEACHER_FINAL_SOLUTION_PROMPT: 최종 해답 제공 (Case C, 평문)
-
-    유틸리티:
-        - CONVERSATION_SUMMARIZATION_PROMPT: 대화 요약
 
 학습 케이스:
     Case A: 첫 시도에 정답 → 원본 응답 사용
-    Case B: 스캐폴딩 후 정답 → 성공 재구성
-    Case C: 최대 반복 후 실패 → 교사 해답 제공
+    Case B: 스캐폴딩 후 정답 → PO 통과한 응답 직접 사용
+    Case C: 최대 반복 후 실패 → 교사 해답 제공 (last iteration summary 기반)
 """
 
 
@@ -41,7 +37,7 @@ SCAFFOLDING_SYSTEM_PROMPT = """The purpose of your response is to demonstrate th
 
 You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
 
-[Instructional Analysis (Learning Structure)]
+[Instructional Analysis]
 {task_analysis}
 
 [Instructions]
@@ -52,12 +48,9 @@ You must adhere to the specific performance procedures and required knowledge/sk
 5. Provide your final answer clearly
 
 [Output Format]
-Problem-solving strategy and flow:
 - Instructional goal alignment: [how this solution demonstrates the instructional goal]
-- Relevant skills applied: [list the relevant skills from instructional analysis]
 - Step-by-step reasoning: [your detailed solution following the instructional structure]
-
-The answer is \\boxed{{your final answer}}
+- Final answer: \"The answer is \\boxed{{your final answer}}\"
 """
 
 
@@ -66,7 +59,7 @@ The answer is \\boxed{{your final answer}}
 # ------------------------------------------------------------------------------
 # ReAct 스타일 학습 루프에서 교사 모델이 학생 응답을 평가합니다.
 # 피드백 생성은 SCAFFOLDING_ARTIFACT_PROMPT에서 담당합니다.
-# 출력: performance_evaluation JSON (feedback 필드 없음)
+# 출력: performance_evaluation JSON (objective_content, is_satisfied, feedback)
 # ==============================================================================
 
 TEACHER_INTERVENTION_PROMPT = """You are a teacher supporting the learning of a student.
@@ -81,16 +74,19 @@ Your role is to evaluate the student's response against the established performa
 
 [Instructions]
 Evaluate the student model's response according to the following rules.
-1. Assess student performance according to the performance objectives. Use the Criterion defined in the performance objectives as the evaluation standard. Do not reveal correct answers or model solutions.
+1. Assess student performance according to the performance objectives. Use the criterion embedded in each performance objective as the evaluation standard. Do not reveal correct answers or model solutions.
 2. Analyze the student response and determine which performance objectives are satisfied and which are not. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed. Avoid vague or abstract evaluations.
+3. For each PO, write a "feedback" that references the student's actual response:
+   - If satisfied: describe specific strengths observed (e.g., which reasoning steps, strategies, or expressions demonstrate mastery).
+   - If NOT satisfied: explain the specific reason the objective was not met, citing what the student wrote or omitted.
 
 [Output Format - JSON]
 {{
   "performance_evaluation": [
     {{
-      "objective_content": "Copy the Behavior field from performance objectives VERBATIM",
+      "objective_content": "Copy the performance_objective field from performance objectives VERBATIM",
       "is_satisfied": true or false,
-      "reason_for_unmet_objective": "Why not met (null if satisfied)"
+      "feedback": "If satisfied: specific strengths observed in the student's response. If NOT satisfied: specific reason this objective was not met, referencing what the student wrote or omitted."
     }}
   ]
 }}
@@ -111,117 +107,19 @@ STUDENT_FEEDBACK_RESPONSE_PROMPT = """{dataset_prompt}
 
 {scaffolding_system_prompt}
 
-[Teacher Feedback]
-Your teacher has evaluated your previous response and provided the following feedback to guide your improvement:
+[Scaffolding Artifact]
+Your teacher has evaluated your previous response and designed the following scaffolding to guide your improvement:
 
-{feedback}
+{scaffolding_artifact}
 
 [Instructions]
-1. Carefully read and consider the teacher's feedback
-2. Identify where your previous reasoning was incomplete or incorrect
-3. Address each unsatisfied performance objective
-4. Follow the improvement direction and verify the intermediate steps suggested in the feedback
-5. Show your improved thinking step by step
-6. Provide your final answer clearly
-"""
-
-
-# ==============================================================================
-# 대화 요약 프롬프트 - 튜터링 세션의 핵심 내용 추출
-# ==============================================================================
-
-CONVERSATION_SUMMARIZATION_PROMPT = """You are a teacher analyzing a tutoring session where a student struggled with a problem.
-
-[Problem]
-{problem_text}
-
-[Correct Answer]
-{ground_truth}
-
-[Full Conversation History]
-{conversation_history}
-
-[Your Task]
-Summarize this tutoring session concisely, focusing on what's important for understanding the student's learning gaps.
-
-Extract and preserve:
-1. The specific mathematical/logical errors in each attempt (not vague descriptions)
-2. How the student's approach changed between iterations
-3. Any recurring misconceptions or patterns
-4. The final answer attempted in each iteration
-
-[Output Format]
-Keep your summary under 1000 characters. Use this structure:
-
-ATTEMPT SUMMARY:
-- Iter 1: [approach] → [specific error] → Answer: [answer]
-- Iter 2: [approach] → [specific error] → Answer: [answer]
-...
-
-KEY PATTERNS:
-- Main weakness: [specific skill/concept gap]
-- Recurring error: [pattern across attempts]
-
-Do NOT include lengthy explanations. Be telegraphic and specific.
-"""
-
-
-# ==============================================================================
-# 성공적 스캐폴딩 재구성 프롬프트 (Case B) — 평문 출력
-# ------------------------------------------------------------------------------
-# 스캐폴딩을 통해 학생이 정답에 도달한 경우, 학습 과정을 통합하여
-# 깔끔한 SFT 학습 데이터로 재구성합니다. 스캐폴딩 과정의 명시적 언급 없이
-# 이상적인 학생의 응답 형태로 변환합니다.
-# 출력: 풀이과정 + The answer is \boxed{answer} 형식의 평문 텍스트
-# ==============================================================================
-
-SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT = """You are an expert teacher reconstructing a successful learning outcome into clean SFT training data.
-
-[Problem]
-{problem_text}
-
-[Correct Answer]
-{ground_truth}
-
-[Task Analysis]
-{task_analysis}
-
-[Scaffolding Process Summary]
-The student succeeded after {iterations_needed} iterations.
-{conversation_summary}
-
-[Feedback History]
-The following feedback was provided across iterations:
-{feedback_history}
-
-[Final Successful Response]
-{final_response}
-
-[Your Task]
-Reconstruct the student's learning journey into a single, clean response that:
-1. Incorporates the key insights gained through scaffolding
-2. Presents a clear, step-by-step solution
-3. Naturally integrates the guidance that led to success
-4. Is suitable for SFT training (no explicit mention of scaffolding process)
-5. MUST end with exactly this format: The answer is \\boxed{{final answer}}
-
-The reconstructed response should be what an ideal student would produce after having learned from this scaffolding experience.
-
-[Output Format]
-Write your response as plain text (NOT JSON). Structure your solution clearly with step-by-step reasoning and end with the boxed answer.
-
-Example format:
-[Understanding the problem]
-The problem asks us to calculate...
-
-[Step-by-step solution]
-Step 1: Identify the key values...
-Step 2: Apply the formula...
-Step 3: Calculate the result...
-
-The answer is \\boxed{{answer}}
-
-Output ONLY the reconstructed solution as plain text. Do not include any JSON, metadata, or commentary.
+1. Carefully study the scaffolding artifact above, including the strategies and examples provided
+2. For High Order Skills: follow the suggested strategies and reasoning approaches
+3. For Low Order Skills: review the missed concepts and explanations
+4. Pay special attention to the Key Attention Points and Feedback sections
+5. Address each unsatisfied performance objective systematically
+6. Show your improved thinking step by step
+7. Provide your final answer clearly
 """
 
 
@@ -242,9 +140,9 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
 - Problem: {problem_text}
 - Student's Response: {student_response}
 - Performance Objectives Evaluation: {po_evaluation}
-- Failed Performance Objectives: {failed_objectives}
-- Instructional Analysis: {task_analysis}
-- Iteration Number: {iteration_number} of {max_iterations}
+
+[Previous Iteration Summaries]
+{previous_iteration_summaries}
 
 [Instructions]
 1. **Select scaffolding targets**: Focus on Performance Objectives with high failure rates that are critical for achieving the Instructional Goal.
@@ -258,7 +156,6 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
    For **HOT skills**:
    - Strategy suggestion: Propose an approach or reasoning strategy
    - Partial worked example: Show partial reasoning (stop before the final answer)
-   - Feedback question: Guide thinking without revealing the answer
    - Key attention points: What the student should focus on
 
    For **LOT skills**:
@@ -272,35 +169,63 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
 
 5. **Do NOT reveal correct answers** - guide reasoning, don't solve.
 
-[Output Format - JSON]
-{{
-  "scaffolding_artifacts": [
-    {{
-      "target_objective": "The specific unmet Performance Objective",
-      "skill_type": "HOT" or "LOT",
-      "cognitive_level": "Analyze/Evaluate/Create" or "Remember/Understand/Apply",
-      "failure_analysis": "Why the student failed this objective",
-      "scaffolding_content": {{
-        "strategy_suggestion": "Suggested approach (for HOT) or null",
-        "partial_example": "Partial worked example showing key reasoning (for HOT) or null",
-        "feedback": "Guiding feedback (for HOT) or null",
-        "missed_concept": "Concept the student missed (for LOT) or null",
-        "brief_explanation": "Concise explanation (for LOT) or null",
-        "key_attention_points": "What to focus on in next attempt"
-      }}
-    }}
-  ],
-  "feedback": "A single cohesive narrative paragraph integrating ALL unsatisfied POs. Describes: (1) what went wrong and why, (2) the fundamental direction for improvement, and (3) concrete intermediate verification steps. This is directly provided to the student as teacher feedback. Do NOT reveal correct answers.",
-  "scaffolding_summary": "A 3-5 sentence summary synthesizing the key guidance for the student's next attempt. This should be actionable and reference the specific strategies or concepts without revealing answers."
-}}
+6. **Generate iteration summary**: Write a concise summary of THIS iteration that captures:
+   (a) What the student attempted and how (brief response summary)
+   (b) Which Performance Objectives were not met and why
+   (c) What scaffolding was provided and the key guidance direction
+   This summary will be used as context for the next iteration's scaffolding generation.
+
+[Output Format - Structured Text]
+
+[Instructional Goal]
+{instructional_goal}
+
+[Instructional Analysis]
+{task_analysis}
+
+[Scaffolding for Task [1] (High Order Skill)]:
+- Target Objective: <the specific unmet Performance Objective>
+- Cognitive Level: Analyze / Evaluate / Create
+- Failure Analysis: <why the student failed this objective>
+- Suggested Strategy:
+  (a) Strategy 1: <approach or reasoning strategy>
+      - Partial worked example (stop before the final answer):
+        <partial reasoning showing key steps>
+  (b) Strategy 2: <alternative approach>
+      - Teacher's reasoning clarification
+        (why this strategy should be considered):
+        <explanation>
+- Key Attention Points: <what the student should focus on>
+
+[Scaffolding for Task [2] (Low Order Skill)]:
+- Target Objective: <the specific unmet Performance Objective>
+- Cognitive Level: Remember / Understand / Apply
+- Failure Analysis: <why the student failed>
+- Missed Concept/Information: <what the student missed>
+- Brief Explanation: <concise explanation to minimize cognitive load>
+
+(Repeat [Scaffolding for Task [N] ...] sections as needed for each unmet PO)
+
+[Feedback]
+<A single cohesive narrative paragraph integrating ALL unsatisfied POs.
+Describes: (1) what went wrong and why, (2) the fundamental direction for improvement,
+and (3) concrete intermediate verification steps.
+This is directly provided to the student. Do NOT reveal correct answers.>
+
+[Iteration Summary]
+<A concise 3-5 sentence summary of this iteration:
+(1) what the student attempted and how,
+(2) which POs were not met and why,
+(3) what scaffolding guidance was provided.
+This will be passed to the next iteration as context.>
 
 CRITICAL INSTRUCTIONS:
-1. Your response MUST be ONLY valid JSON - no additional text
-2. Do NOT reveal correct answers or complete solutions
-3. Focus on guiding the reasoning process
-4. The "feedback" field is the primary feedback delivered to the student - make it specific, actionable, and educational
+1. Do NOT reveal correct answers or complete solutions
+2. Focus on guiding the reasoning process
+3. The [Feedback] section is the primary feedback delivered to the student - make it specific, actionable, and educational
+4. The [Iteration Summary] must capture BOTH the student's attempt AND the scaffolding provided
 
-Output ONLY the JSON object above.
+Output ONLY the structured text above. Do NOT include JSON formatting.
 """
 
 
@@ -324,13 +249,9 @@ TEACHER_FINAL_SOLUTION_PROMPT = """You are a teacher providing a complete, corre
 [Instructional Analysis]
 {task_analysis}
 
-[Scaffolding History]
-The following scaffolding was provided across {iterations_count} iterations:
-{scaffolding_history}
-
-[Feedback History]
-The following feedback was provided across iterations:
-{feedback_history}
+[Last Iteration Summary]
+The following is a summary of the student's last attempt and the scaffolding provided:
+{last_iteration_summary}
 
 [Student's Persistent Weaknesses]
 Based on the failed attempts, the student consistently struggled with:

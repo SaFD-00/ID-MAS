@@ -6,11 +6,9 @@ Dick & Carey 모델의 수행목표 진술 단계를 구현합니다.
 주요 클래스:
     PerformanceObjectives: 수행목표 진술 에이전트
 
-수행목표 구성 요소 (ABCD 모델):
-    - Target: 목표 대상 (Instructional Goal, Subskill 등)
-    - Behavior: 관찰 가능한 행동
-    - Condition: 행동 수행 조건
-    - Criterion: 성공 기준
+수행목표 구성 요소:
+    - target: 목표 대상 (Instructional Goal, Subskill 등)
+    - performance_objective: 행동(Behavior), 조건(Condition), 기준(Criterion)을 통합한 단일 문장
 
 사용 예시:
     >>> from design_modules.objectives import PerformanceObjectives
@@ -26,7 +24,7 @@ import json
 class PerformanceObjectives:
     """수행목표 진술 에이전트 클래스.
 
-    교수 분석 결과를 기반으로 ABCD 모델의 수행목표를 생성합니다.
+    교수 분석 결과를 기반으로 {target, performance_objective} 형식의 수행목표를 생성합니다.
     Teacher 모델을 사용하여 JSON 형식으로 수행목표를 도출합니다.
 
     Attributes:
@@ -58,7 +56,7 @@ class PerformanceObjectives:
         Returns:
             수행목표 딕셔너리:
                 - performance_objectives (list): 수행목표 리스트
-                    각 항목: {target, Behavior, Condition, Criterion}
+                    각 항목: {target, performance_objective}
 
         Raises:
             RuntimeError: max_retries 횟수 초과 시
@@ -100,7 +98,7 @@ class PerformanceObjectives:
     def validate_objectives(self, objectives: Dict[str, Any]) -> bool:
         """생성된 수행목표의 유효성을 검증합니다.
 
-        수행목표가 ABCD 모델의 필수 필드를 모두 포함하는지 확인합니다.
+        수행목표가 필수 필드(target, performance_objective)를 모두 포함하는지 확인합니다.
 
         Args:
             objectives: 검증할 수행목표 딕셔너리
@@ -112,7 +110,7 @@ class PerformanceObjectives:
             return False
 
         for obj in objectives["performance_objectives"]:
-            required_fields = ["target", "Behavior", "Condition", "Criterion"]
+            required_fields = ["target", "performance_objective"]
             if not all(field in obj for field in required_fields):
                 return False
 

@@ -20,7 +20,7 @@
    - [Case B 예시](#case-b-2회차-이상-성공)
      - [Step 3: Scaffolding Artifact 생성 프롬프트](#case-b-step-3-scaffolding-artifact-생성)
      - [Step 4: Student 재응답 프롬프트](#case-b-step-4-student-재응답)
-     - [Step 5: Reconstruction 프롬프트](#case-b-step-5-reconstruction)
+     - [Step 5: SFT 응답 결정](#case-b-step-5-sft-응답-결정)
    - [Case C 예시](#case-c-최대-반복-후-실패)
      - [Step 5: Final Solution 프롬프트](#case-c-step-5-final-solution)
 4. [Phase 3: Instructional Delivery (SFT)](#4-phase-3-instructional-delivery)
@@ -41,11 +41,11 @@ Phase 1: Instructional Design (1회 실행, 데이터셋 단위)
          ↓
 Phase 2: Adaptive Scaffolding (문제별 반복)
   ├── Step 1: Student 초기 응답
-  ├── Step 2: Teacher PO 평가 → 성공이면 Case A
-  ├── Step 3: Scaffolding Artifact 생성 (HOT/LOT)
-  ├── Step 4: Student 재응답 (Scaffolding Artifact 참조)
+  ├── Step 2: Teacher PO 평가 (평가 전용) → 성공이면 Case A
+  ├── Step 3: Scaffolding Artifact + 서술형 피드백 생성
+  ├── Step 4: Student 재응답 (Teacher 피드백 참조)
   ├── (Step 2~4 반복, 최대 5회)
-  ├── Step 5: Reconstruction (Case B/C)
+  ├── Step 5: Final Solution (Case C만) — 교육적 풀이 평문 텍스트 출력
   └── Step 6: SFT 데이터 생성
          ↓
 Phase 3: Instructional Delivery
@@ -88,7 +88,7 @@ Respond with valid JSON only.
 
 **User Message** (`INSTRUCTIONAL_GOAL_PROMPT`):
 
-> Placeholder: `{sample_count}` → 20, `{train_data}` → `format_samples_for_prompt()` 출력
+> Placeholder: `{sample_count}` → 20, `{train_data}` → `utils/prompt_helpers.py`의 `format_samples_for_prompt()` 출력
 
 ```
 You are given a sample of items representing a specific task domain. These items are used to evaluate the student you are teaching. Your mission is to analyze the entire test set and determine a core instructional requirement that defines the instructional goal.
@@ -147,7 +147,7 @@ Weng earns $12 an hour for babysitting. Yesterday, she just did 50 minutes of ba
 }
 ```
 
-> **`{train_data}` 치환 예시**: `format_samples_for_prompt()` 함수는 각 샘플의 `instruction`(최대 200자)과 `input`(최대 500자)만 추출하여 `### Sample N` 형식으로 포맷합니다. `output` 필드는 학습목표 도출 편향을 방지하기 위해 의도적으로 제외됩니다.
+> **`{train_data}` 치환 예시**: `utils/prompt_helpers.py`의 `format_samples_for_prompt()` 함수는 각 샘플의 `instruction`(최대 200자)과 `input`(최대 500자)만 추출하여 `### Sample N` 형식으로 포맷합니다. `output` 필드는 학습목표 도출 편향을 방지하기 위해 의도적으로 제외됩니다.
 
 ### Step 1: Learning Objective 설정
 
@@ -156,8 +156,6 @@ Instructional Goal을 그대로 Learning Objective로 설정합니다.
 ### Step 2: Instructional Analysis
 
 Learning Objective를 Subskills와 Subtasks의 계층 구조로 분해합니다.
-
-> **`<think>` 블록 참고**: Qwen3-4B는 응답 시 `<think>...</think>` 형태의 thinking trace를 먼저 생성합니다. 이 thinking trace는 모델의 내부 추론 과정이며, Task Analysis의 `raw_output`에 포함됩니다. Enhanced Instruction 생성 시 이 `<think>` 블록이 함께 instruction에 포함되어 학생 모델에 전달됩니다.
 
 **생성 결과 (Task Analysis Tree):**
 ```
@@ -206,16 +204,16 @@ Instructional Goal: [Learning objective statement] (learning outcome)
 
 ### Step 3: Performance Objectives 생성
 
-ABCD 모델 기반으로 각 Subskill에 대한 측정 가능한 수행목표를 생성합니다. 이 PO들이 **Phase 2에서 학생 응답 평가의 기준**이 됩니다.
+행동(Behavior), 조건(Condition), 기준(Criterion)을 하나의 문장으로 통합한 수행목표를 각 Subskill에 대해 생성합니다. 이 PO들이 **Phase 2에서 학생 응답 평가의 기준**이 됩니다.
 
 **생성 결과 (11개 PO 중 일부):**
 
-| # | Target | Behavior | Condition | Criterion |
-|---|--------|----------|-----------|-----------|
-| 1 | Instructional Goal | Solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning | Given a multi-step problem involving arithmetic operations, ratios, and proportional reasoning | Accurately execute all steps and arrive at a mathematically valid solution |
-| 2 | Subskill [1] | Select appropriate arithmetic operations to solve multi-step problems | Given a multi-step problem requiring arithmetic operations | Accurately choose and apply the correct arithmetic operations in sequence |
-| 3 | Subskill [2] | Set up and simplify ratios in real-world scenarios | Given a problem involving ratios | Correctly establish and simplify ratios to their lowest terms |
-| 4 | Subskill [3] | Solve proportional reasoning problems using cross-multiplication | Given a proportional relationship | Correctly apply cross-multiplication and verify the solution's validity |
+| # | Target | Performance Objective |
+|---|--------|----------------------|
+| 1 | Instructional Goal | Solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning, given a multi-step problem involving arithmetic operations, ratios, and proportional reasoning, accurately executing all steps and arriving at a mathematically valid solution |
+| 2 | Subskill 1 | Select appropriate arithmetic operations to solve multi-step problems, given a multi-step problem requiring arithmetic operations, accurately choosing and applying the correct arithmetic operations in sequence |
+| 3 | Subskill 2 | Set up and simplify ratios in real-world scenarios, given a problem involving ratios, correctly establishing and simplifying ratios to their lowest terms |
+| 4 | Subskill 3 | Solve proportional reasoning problems using cross-multiplication, given a proportional relationship, correctly applying cross-multiplication and verifying the solution's validity |
 
 #### 실제 프롬프트
 
@@ -226,8 +224,6 @@ ABCD 모델 기반으로 각 Subskill에 대한 측정 가능한 수행목표를
 ```
 You are an instructional designer specializing in the Dick and Carey instructional design model, and a researcher in LLM learning methodologies.
 Based on the provided Instructional Goal and Instructional Analysis Result, generate a set of Performance Objectives that will serve as the criteria for evaluating the observable performance within the LLM's reasoning process.
-
-Performance objectives should be written using the guidelines provided in Anderson & Krathwohl's Taxonomy for Learning.
 Specifically, they should be created using information from the learning outcomes identified in the Instructional Analysis Results.
 
 [Input Data]
@@ -246,69 +242,29 @@ Instructional Goal: Solve multi-step mathematical problems by applying arithmeti
  │   ├── Evaluate the reasonableness of solutions (Evaluate)
 
 [Instructions]
-- For each Subskill and Subtask in the instructional analysis, you must create at least one Performance Objective.
-- You may create more than one PO per Subskill/Subtask if it involves multiple evaluable aspects. However, each PO must evaluate exactly ONE specific aspect of performance. Do NOT combine multiple evaluation criteria into a single PO.
-- Each PO must directly map to a specific Subskill or Subtask from the analysis. Include the "target" field to clearly indicate which item it corresponds to (e.g., "Subskill [1]", "Subtask [1-1]").
-- Every Performance Objective must include all three components—Behavior, Condition, and Criterion—and each component must be explicitly stated.
-- Behavior: This is a description of LLM's intellectual skill including actions, content, and concepts. Write each PO Behavior as a complete, self-contained statement that can be directly used as objective_content in evaluation. The Behavior must be specific enough to be independently evaluable without requiring additional context.
-- Condition: This is a description of the tools and resources that will be available to the learner when performing the skill. Write the conditions based solely on the data given in the problem or generated during the reasoning process. It should ALWAYS begin with 'Given ~'.
-- Criterion: This is a description of acceptable performance of the skill. The Criterion component must be tailored to the nature of the task: for tasks with correct answers, it must include a clear and measurable standard such as accuracy requirements, acceptable error ranges, or the number of correct responses; whereas for tasks with no single correct answer, it must specify the information or features that must be present for an acceptable response.
-- Furthermore, these criteria must be formulated to evaluate the observable reasoning process within a single problem-solving task.
-- You must not add content that does not appear in the Instructional Analysis Result.
+For each Subskills and Subtasks in the instructional analysis, you must create at least one Performance Objective. You can create multiple performance objectives for subskills or subtasks that have more than one requirement.
+Every Performance Objective must include all three components—Behavior, Condition, and Criterion—and each component must be explicitly stated in one sentence.
+- Behavior: This is a description of LLM's intellectual skill including actions, content, and concepts.
+- Condition: This is a description of the tools and resources that will be available to the learner when performing the skill. Write the conditions based solely on the data given in the problem or generated during the reasoning process. And it should always begin with 'given ~'.
+- Criterion: This is a description of acceptable performance of the skill. The Criterion component must be tailored to the nature of the task: for tasks with correct answers, it must include a clear and measurable standard such as accuracy requirements, acceptable error ranges, or the number of correct responses; whereas for tasks with no single correct answer, it must specify the information or features that must be present for an acceptable response. Furthermore, these criteria must be formulated to evaluate the observable reasoning process within a single problem-solving task.
+Each Performance Objective must correspond directly to a single Subskill and Subtask, and you must not add content that does not appear in the Instructional Analysis Result. Each performance objective must start with an action verb and must not include an explicit subject.
 
-IMPORTANT: The Behavior field of each PO will be used verbatim as the evaluation criterion (objective_content) during the teacher evaluation step. Therefore:
-1. Write Behavior as a clear, complete sentence describing a single observable action.
-2. Maintain consistent writing style across all POs (use the same sentence structure pattern).
-3. Each Behavior must be self-explanatory without needing to read the Condition or Criterion.
-
-[Anderson & Krathwohl's Taxonomy Reference]
-
-Verbs Used by Cognitive Process Dimension (Behavior):
-  - Remember: Recognizing, Recalling
-  - Understand: Interpreting, Exemplifying, Classifying, Summarizing, Inferring, Comparing, Explaining
-  - Apply: Executing, Implementing
-  - Analyze: Differentiating, Organizing, Attributing
-  - Evaluate: Checking, Critiquing
-  - Create: Generating, Planning, Producing
-
-Description of Knowledge Dimensions:
-  - Factual Knowledge: Basic elements that must be mastered to solve subjects or problems in a subject
-    · Terminology: Technical terms, musical symbols, etc.
-    · Specific facts and elements: Key resources, reliable sources of information, etc.
-  - Conceptual Knowledge: Interrelationships between basic elements within a superstructure that allows elements to function in an integrated manner
-    · Classification and categories: Geological timescales, corporate ownership patterns, etc.
-    · Principles and generalizations: The Pythagorean theorem, the law of supply and demand, etc.
-    · Theories, models, and structures: Evolution, parliamentary organizations, etc.
-  - Procedural Knowledge: Methods of performing tasks, methods of inquiry, criteria, algorithms, techniques, and methods for utilizing skills
-    · Subject-specific functions and algorithms: Watercolor painting skills, integer division algorithms, etc.
-    · Subject-specific techniques and methods: Interview techniques, scientific methods, etc.
-    · Criteria for determining when to use appropriate procedures: Criteria for determining when to apply procedures involving Newton's second law, etc.
-  - Metacognitive Knowledge: Awareness of knowledge cognition and knowledge of knowledge and cognition in general
-    · Strategic knowledge: Knowledge of outlining as a means of understanding the structure of textbook units, knowledge of using heuristics, etc.
-    · Cognitive tasks: Knowledge of the types of tests administered by specific teachers, knowledge of the cognitive demands of the task, etc.
-    · Self-knowledge: The knowledge that critiquing papers is a personal strength, but writing papers is a personal weakness, and awareness of one's own level of knowledge
-
-[Output Format]sft 
+[Output Format]
 Your output must be formatted as JSON, following this structure and no other form of explanation or commentary:
+
 {
   "performance_objectives": [
     {
       "target": "Instructional Goal",
-      "Behavior": "...",
-      "Condition": "...",
-      "Criterion": "..."
+      "performance_objective": "A single sentence integrating behavior, condition, and criteria"
     },
     {
-      "target": "Subskill [X]",
-      "Behavior": "...",
-      "Condition": "...",
-      "Criterion": "..."
+      "target": "Subskill X",
+      "performance_objective": "A single sentence integrating behavior, condition, and criteria"
     },
     {
-      "target": "Subtask [X-Y]",
-      "Behavior": "...",
-      "Condition": "...",
-      "Criterion": "..."
+      "target": "Subtask X",
+      "performance_objective": "A single sentence integrating behavior, condition, and criteria"
     }
   ]
 }
@@ -324,24 +280,33 @@ Phase 1의 결과물(Instructional Goal + Task Analysis)을 원본 학습 데이
 
 **`ENHANCED_INSTRUCTION_TEMPLATE`** (LLM 호출 없음, 단순 문자열 치환):
 
+> `{original_instruction}` + `SCAFFOLDING_SYSTEM_PROMPT`를 결합합니다.
 > Placeholder: `{original_instruction}`, `{instructional_goal}`, `{task_analysis}`
 
 ```
 {original_instruction}
 
-## Learning Objective
-Your response should demonstrate: {instructional_goal}
+The purpose of your response is to demonstrate the attainment of the Instructional Goal: {instructional_goal}
 
-## Problem-Solving Guidelines
-Follow the structured approach below to ensure a complete and well-reasoned solution:
+You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
 
+[Instructional Analysis]
 {task_analysis}
 
-## Response Requirements
-1. Explicitly connect each step to the relevant sub-skill or knowledge from the guidelines above
-2. Verify your intermediate results before proceeding to the next step
-3. Present your final answer clearly in the required format
+[Instructions]
+1. Identify which skills and sub-skills from the instructional analysis are relevant to this problem
+2. Plan your problem-solving strategy based on the instructional goal and subskills
+3. Execute each step systematically, demonstrating the required performance behaviors
+4. Ensure your solution describes the full reasoning process using all provided steps and resources
+5. Provide your final answer clearly
+
+[Output Format]
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
+- Step-by-step reasoning: [your detailed solution following the instructional structure]
+- Final answer: "The answer is \boxed{your final answer}"
 ```
+
+> **핵심**: 이 템플릿은 `utils/dataset_enhancer.py`에서 `{original_instruction}\n\n` + `SCAFFOLDING_SYSTEM_PROMPT`로 구성됩니다. Phase 2의 학생 시스템 프롬프트와 동일한 구조를 사용하여 학습 파이프라인과 일관성을 유지합니다.
 
 #### 치환 결과 예시
 
@@ -359,16 +324,11 @@ Solve this mathematical problem step by step. Show your reasoning clearly and us
 Your final answer MUST be within \boxed{}.
 Example: \boxed{42}
 
-## Learning Objective
-Your response should demonstrate: The model will solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning to real-world scenarios.
+The purpose of your response is to demonstrate the attainment of the Instructional Goal: The model will solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning to real-world scenarios.
 
-## Problem-Solving Guidelines
-Follow the structured approach below to ensure a complete and well-reasoned solution:
+You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
 
-<think>
-[Qwen3-4B의 thinking trace — Task Analysis 생성 과정의 내부 추론]
-</think>
-
+[Instructional Analysis]
 ### Instructional Analysis Results
 Instructional Goal: Solve multi-step mathematical problems by applying arithmetic operations,
               ratios, and proportional reasoning to real-world scenarios. (Apply)
@@ -383,13 +343,18 @@ Instructional Goal: Solve multi-step mathematical problems by applying arithmeti
  │   ├── Solve proportions using cross-multiplication (Apply)
  │   ├── Evaluate the reasonableness of solutions (Evaluate)
 
-## Response Requirements
-1. Explicitly connect each step to the relevant sub-skill or knowledge from the guidelines above
-2. Verify your intermediate results before proceeding to the next step
-3. Present your final answer clearly in the required format
-```
+[Instructions]
+1. Identify which skills and sub-skills from the instructional analysis are relevant to this problem
+2. Plan your problem-solving strategy based on the instructional goal and subskills
+3. Execute each step systematically, demonstrating the required performance behaviors
+4. Ensure your solution describes the full reasoning process using all provided steps and resources
+5. Provide your final answer clearly
 
-> **핵심**: Qwen3-4B의 Task Analysis `raw_output`에는 `<think>` 블록이 포함되어 있으며, 이것이 Enhanced Instruction에 그대로 포함됩니다. 학생 모델은 이 Enhanced Instruction을 보고 Task Analysis 구조에 맞춰 체계적으로 풀이를 생성합니다.
+[Output Format]
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
+- Step-by-step reasoning: [your detailed solution following the instructional structure]
+- Final answer: "The answer is \boxed{your final answer}"
+```
 
 ---
 
@@ -402,8 +367,8 @@ Phase 2는 **각 문제별로** 실행됩니다. 교사-학생 반복 상호작�
 | Case | 조건 | SFT 응답 소스 |
 |------|------|--------------|
 | **A** | 1회차에 모든 PO 충족 | Student 원본 응답 그대로 |
-| **B** | 2~5회차에 모든 PO 충족 | Teacher가 대화 히스토리 기반 재구성 |
-| **C** | 5회 반복 후에도 PO 미충족 | Teacher가 정답 기반 교육적 풀이 생성 |
+| **B** | 2~5회차에 모든 PO 충족 | Student의 PO 통과 응답 직접 사용 |
+| **C** | 5회 반복 후에도 PO 미충족 | Teacher가 정답 기반 교육적 풀이 생성 (평문 텍스트) |
 
 ---
 
@@ -428,7 +393,7 @@ The purpose of your response is to demonstrate the attainment of the Instruction
 
 You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
 
-[Instructional Analysis (Learning Structure)]
+[Instructional Analysis]
 ### Instructional Analysis Results
 Instructional Goal: Solve multi-step mathematical problems by applying arithmetic operations,
               ratios, and proportional reasoning to real-world scenarios. (Apply)
@@ -451,12 +416,9 @@ Instructional Goal: Solve multi-step mathematical problems by applying arithmeti
 5. Provide your final answer clearly
 
 [Output Format]
-Problem-solving strategy and flow:
 - Instructional goal alignment: [how this solution demonstrates the instructional goal]
-- Relevant skills applied: [list the relevant skills from instructional analysis]
 - Step-by-step reasoning: [your detailed solution following the instructional structure]
-
-Answer: [your final answer]
+- Final answer: "The answer is \boxed{your final answer}"
 ```
 
 **User Message** = `problem_text` (문제 원문):
@@ -467,25 +429,20 @@ Natalia sold clips to 48 of her friends in April, and then she sold half as many
 ##### Student 응답 결과
 
 ```
-<think>
-Okay, let's solve this problem step by step. First, I need to figure out how many clips Natalia sold in May. The problem says she sold half as many in May as in April. Since she sold 48 clips in April, I should calculate half of 48 for May.
-
-Half of 48 is 24, so she sold 24 clips in May. Now, to find the total number of clips sold over both months, I need to add the clips from April and May together. That would be 48 (April) plus 24 (May).
-
-Adding those together gives 72. Let me check if I applied the arithmetic operations correctly. Yes, I used division to find half of 48 and then addition to sum both amounts. This aligns with the sub-skill of applying arithmetic operations.
-
-I also need to make sure I set up the ratios correctly. The problem mentions selling half as many in May, which is a ratio of 1:2 (May:April). Simplifying that ratio confirms it's 1/2, so my calculation for May's clips is correct.
-
-Finally, evaluating the reasonableness of the solution: selling 48 in April and 24 in May totals 72, which makes sense as half of April's sales are in May. The answer seems logical.
-
-\boxed{72}
+- Instructional goal alignment: This problem requires applying arithmetic operations (division and addition) to a multi-step word problem, demonstrating the instructional goal of solving multi-step mathematical problems.
+- Step-by-step reasoning:
+  Step 1: Identify the number of clips sold in April = 48
+  Step 2: The problem states she sold "half as many" in May, which is a ratio of 1:2 (May:April). Calculate clips sold in May: 48 / 2 = 24
+  Step 3: Calculate the total clips sold: 48 + 24 = 72
+  Evaluating reasonableness: Selling 48 in April and 24 in May totals 72, which makes sense since half of April's sales are in May.
+- Final answer: "The answer is \boxed{72}"
 ```
 
 **추출된 답**: 72 (정답과 일치)
 
 #### Case A Step 2: Teacher PO 평가
 
-Teacher가 Performance Objectives 기준으로 학생 응답을 평가합니다.
+Teacher가 Performance Objectives 기준으로 학생 응답을 **평가만** 수행합니다. 피드백은 생성하지 않습니다.
 
 ##### 실제 프롬프트
 
@@ -496,109 +453,55 @@ Teacher가 Performance Objectives 기준으로 학생 응답을 평가합니다.
 ```
 You are a teacher supporting the learning of a student.
 
-Your role is NOT to provide correct answers, but to generate a reasoning state that guides the student's next response. You must monitor the student's reasoning steps to ensure they meet the established performance objectives.
-
-In cases of non-compliance or error, you must generate tailored, specific feedback to guide the student toward the desired outcome. Your feedback functions as an intermediate thought in a ReAct-style learning loop and must guide the student's next reasoning action.
+Your role is to evaluate the student's response against the established performance objectives. You must monitor the student's reasoning steps to ensure they meet the performance objectives.
 
 [Input Data]
 - Problem: Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?
-- Student response: <think>
-  Okay, let's solve this problem step by step...
+- Student response:
+  - Instructional goal alignment: This problem requires applying arithmetic operations...
   [... 전체 응답 ...]
 - Performance objectives: [11개 PO JSON 전체]
 - Ground truth (FOR REFERENCE ONLY - DO NOT REVEAL): 72
 
 [Instructions]
-1. Assess student performance according to each performance objective.
-2. Use the Criterion defined in each performance objective as the evaluation standard.
-3. DO NOT reveal correct answers or model solutions.
-4. Analyze the student response and determine which performance objectives are satisfied and which are not.
-5. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed.
-6. Avoid vague or abstract evaluations.
-
-For UNSATISFIED performance objectives, provide structured feedback with ALL four components:
-  (a) Error Analysis: Identify EXACTLY what area the student got wrong and WHY, referencing specific parts of their actual response.
-  (b) Improvement Direction: Suggest a CONCRETE direction and strategy for how to correct and improve.
-  (c) Response Comment: Provide a specific comment on the student's previous response process (e.g., "You correctly identified the variables but applied the wrong operation in step 3").
-  (d) Metacognitive Prompt: Ask a question that prompts self-reflection (e.g., "Did you consider using X? Think about why it is needed in this context.").
-
-7. Do not provide final conclusions, correct answers, or complete reasoning paths.
-8. Instead, specify what type of reasoning process, analytical step, or judgment perspective should be explicitly carried out next.
-
-HOT/LOT Differentiation for Feedback Depth:
-- For HOT (High-Order Thinking: Analyze, Evaluate, Create) objectives: Provide MORE detailed feedback, including specific strategies, partial reasoning examples, and guiding frameworks. In early iterations, increase feedback volume with concrete direction.
-- For LOT (Low-Order Thinking: Remember, Understand, Apply) objectives: Provide CONCISE feedback focusing on the key concept or fact that was missed. Keep it brief to minimize cognitive load.
-
-For SATISFIED performance objectives:
-- Provide a brief positive comment acknowledging what the student did well (e.g., "Correctly identified the key variables and applied the formula accurately").
-
-IMPORTANT: When describing student errors or suggesting improvements, use SPECIFIC and CONCRETE vocabulary.
-- BAD: "Your approach needs improvement" / "Think more carefully" / "Review your reasoning"
-- GOOD: "You failed to isolate the variable x by dividing both sides by 3" / "Apply the distributive property to expand (a+b)^2" / "Your step 2 incorrectly assumes linearity when the relationship is quadratic"
-
-CRITICAL: The "objective_content" field MUST contain the EXACT text from the input performance objectives.
-Do NOT generate new descriptions. Copy the Behavior text from the provided Performance Objectives word-for-word.
-Do NOT paraphrase, summarize, or rewrite the objective in any way.
+Evaluate the student model's response according to the following rules.
+1. Assess student performance according to the performance objectives. Use the criterion embedded in each performance objective as the evaluation standard. Do not reveal correct answers or model solutions.
+2. Analyze the student response and determine which performance objectives are satisfied and which are not. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed. Avoid vague or abstract evaluations.
 
 [Output Format - JSON]
 {
   "performance_evaluation": [
     {
-      "objective_content": "MUST be the EXACT text from the performance objectives. Copy the Behavior field verbatim. Do NOT paraphrase, summarize, or rewrite.",
+      "objective_content": "Copy the performance_objective field from performance objectives VERBATIM",
       "is_satisfied": true or false,
-      "reason_for_unmet_objective": "Detailed description of the cause if false; null if true",
-      "feedback": {
-        "error_analysis": "What specific area the student got wrong and why, referencing their actual response (if false; null if true)",
-        "improvement_direction": "Concrete direction and strategy for how to correct and improve (if false; null if true)",
-        "response_comment": "Specific comment on the student's previous response process (if false; positive comment if true)",
-        "metacognitive_prompt": "Question to prompt self-reflection, e.g., 'Did you consider using X? Think about why it is needed.' (if false; null if true)"
-      }
+      "feedback": "If satisfied: specific strengths observed. If NOT satisfied: specific reason not met."
     }
-  ],
-  "overall_assessment": {
-    "objectives_met": "X of Y objectives satisfied",
-    "all_satisfied": true or false,
-    "primary_weakness": "Main area needing improvement if any; null if all satisfied",
-    "recommended_focus": "What the student should focus on next if not all satisfied; null if complete"
-  }
+  ]
 }
 
-CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
-1. Your response MUST be ONLY valid JSON - no additional text before or after
-2. Do NOT include explanations, comments, markdown code blocks, or any text outside the JSON
-3. Do NOT include LaTeX expressions, mathematical notation, or equations outside JSON string values
-4. Ensure ALL brackets { }, [ ], and quotes are properly closed
-5. If you need to include mathematical expressions, place them INSIDE JSON string values with proper escaping
-
-Example of CORRECT response:
-{
-  "performance_evaluation": [...],
-  "overall_assessment": {...}
-}
-
-Example of INCORRECT response (DO NOT DO THIS):
-Here is my evaluation:
-{
-  "performance_evaluation": [...],
-  "overall_assessment": {...}
-}
-Additional notes about the evaluation...
-
-Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
+Output ONLY valid JSON.
 ```
 
 ##### Teacher 평가 결과
 
 ```json
 {
-  "overall_assessment": {
-    "objectives_met": "11 of 11 objectives satisfied",
-    "all_satisfied": true,
-    "primary_weakness": null,
-    "recommended_focus": null
-  }
+  "performance_evaluation": [
+    {
+      "objective_content": "Solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning",
+      "is_satisfied": true,
+      "feedback": "The student correctly applied multi-step arithmetic operations and proportional reasoning to arrive at the solution."
+    },
+    {
+      "objective_content": "Select appropriate arithmetic operations to solve multi-step problems",
+      "is_satisfied": true,
+      "feedback": "The student appropriately selected addition and division operations for each step of the problem."
+    }
+  ]
 }
 ```
+
+> **평가 전용**: 현재 `TEACHER_INTERVENTION_PROMPT`는 `objective_content`, `is_satisfied`, `feedback`만 출력합니다. `overall_assessment`는 포함되지 않습니다.
 
 **모든 PO 충족** → 반복 종료 → **Case A 확정**
 
@@ -610,7 +513,7 @@ Case A는 재구성 불필요. 학생 원본 응답을 그대로 SFT 학습 데�
 {
   "instruction": "[Enhanced Instruction with Task Analysis]",
   "input": "Question: Natalia sold clips to 48 of her friends in April...",
-  "output": "[Student의 원본 응답 그대로 — <think> 블록 포함]",
+  "output": "[Student의 원본 응답 그대로]",
   "metadata": {
     "id": "gsm8k_train_0",
     "sft_case": "A",
@@ -618,8 +521,6 @@ Case A는 재구성 불필요. 학생 원본 응답을 그대로 SFT 학습 데�
   }
 }
 ```
-
-> **참고**: `sft_response`에는 Student의 `<think>` 블록이 포함됩니다. Qwen3-4B는 thinking trace를 자동 생성하므로, SFT 데이터의 output에도 이 패턴이 반영됩니다.
 
 **최종 로그 요약:**
 - `iterations_needed`: 1
@@ -643,24 +544,14 @@ Case A는 재구성 불필요. 학생 원본 응답을 그대로 SFT 학습 데�
 (System Message = `SCAFFOLDING_SYSTEM_PROMPT`, User Message = 위 문제 원문 — Case A Step 1과 동일한 프롬프트 구조)
 
 ```
-<think>
-Okay, let's tackle this problem step by step. First, I need to understand what's being asked. Julie has a 120-page book. She read 12 pages yesterday. Today, she read twice as many as yesterday. So today she read 24 pages. Now, I need to figure out how many pages she has left and then determine how many she should read tomorrow if she wants to read half of the remaining pages.
-
-First, let's calculate the total pages she's read so far. Yesterday: 12 pages. Today: 2 times 12, which is 24. So total read is 12 + 24 = 36 pages.
-
-The book has 120 pages total, so the remaining pages would be 120 - 36. Let me do that subtraction: 120 minus 36 is 84 pages left.
-
-Now, the problem says she wants to read half of the remaining pages tomorrow. So half of 84 is 42. Therefore, she should read 42 pages tomorrow.
-</think>
-
-### Step-by-Step Reasoning
-1. Pages read yesterday: 12
-2. Pages read today: 2 × 12 = 24
-3. Total read: 12 + 24 = 36
-4. Remaining: 120 - 36 = 84
-5. Half of remaining: 84 / 2 = 42
-
-\boxed{42}
+- Instructional goal alignment: This problem requires applying arithmetic operations to calculate remaining pages and then finding half.
+- Step-by-step reasoning:
+  Step 1: Pages read yesterday: 12
+  Step 2: Pages read today: 2 × 12 = 24
+  Step 3: Total read: 12 + 24 = 36
+  Step 4: Remaining: 120 - 36 = 84
+  Step 5: Half of remaining: 84 / 2 = 42
+- Final answer: "The answer is \boxed{42}"
 ```
 
 **추출된 답**: 42 (정답과 일치)
@@ -669,32 +560,33 @@ Now, the problem says she wants to read half of the remaining pages tomorrow. So
 
 ```json
 {
-  "overall_assessment": {
-    "objectives_met": "7 of 8 objectives satisfied",
-    "all_satisfied": false,
-    "primary_weakness": "Subskill [2]: Set up and simplify ratios in real-world scenarios",
-    "recommended_focus": "Practice problems that explicitly require ratio setup and simplification."
-  }
+  "performance_evaluation": [
+    {
+      "objective_content": "Set up and simplify ratios in real-world scenarios",
+      "is_satisfied": false,
+      "feedback": "The student did not explicitly set up or simplify any ratios in the solution."
+    }
+  ]
 }
 ```
 
 **미충족 PO:**
 
-| PO | 미충족 이유 | 피드백 |
-|----|-----------|--------|
-| Set up and simplify ratios | 문제에 ratio가 필요하지 않았지만, PO는 ratio 적용을 기대 | "Did you consider how ratios might be used to describe the relationship between pages read and total pages?" |
+| PO | 미충족 이유 |
+|----|-----------|
+| Set up and simplify ratios | 문제에 ratio가 필요하지 않았지만, PO는 ratio 적용을 기대 |
 
 > **핵심 관찰**: Student는 정답(42)을 도출했으나, ratio 관련 PO를 시연하지 않아 미충족 판정을 받았습니다.
 
 #### Case B Step 3: Scaffolding Artifact 생성
 
-Teacher가 미충족 PO별로 차별화된 Scaffolding을 생성합니다.
+Teacher가 미충족 PO별로 차별화된 Scaffolding과 **서술형 피드백**을 생성합니다.
 
 ##### 실제 프롬프트
 
 **User Message** (`SCAFFOLDING_ARTIFACT_PROMPT`):
 
-> Placeholder: `{problem_text}` → 문제 원문, `{student_response}` → Student의 응답, `{po_evaluation}` → Teacher PO 평가 JSON, `{failed_objectives}` → 미충족 PO 목록, `{task_analysis}` → Task Analysis Tree, `{iteration_number}` → 1, `{max_iterations}` → 5
+> Placeholder: `{problem_text}` → 문제 원문, `{student_response}` → Student의 응답, `{po_evaluation}` → Teacher PO 평가 JSON, `{previous_iteration_summaries}` → 이전 반복 요약 목록, `{instructional_goal}` → Instructional Goal, `{task_analysis}` → Task Analysis Tree
 
 ```
 You are an instructional design expert (Dick & Carey model) creating a Scaffolding Artifact to help a student improve.
@@ -705,9 +597,9 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
 - Problem: Julie is reading a 120-page book...
 - Student's Response: [Student 응답 전체]
 - Performance Objectives Evaluation: [Teacher PO 평가 JSON 전체]
-- Failed Performance Objectives: [미충족 PO 목록]
-- Instructional Analysis: [Task Analysis Tree 전체]
-- Iteration Number: 1 of 5
+
+[Previous Iteration Summaries]
+(No previous iteration summaries. This is the first attempt.)
 
 [Instructions]
 1. **Select scaffolding targets**: Focus on Performance Objectives with high failure rates that are critical for achieving the Instructional Goal.
@@ -721,107 +613,173 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
    For **HOT skills**:
    - Strategy suggestion: Propose an approach or reasoning strategy
    - Partial worked example: Show partial reasoning (stop before the final answer)
-   - Feedback question: Guide thinking without revealing the answer
    - Key attention points: What the student should focus on
 
    For **LOT skills**:
    - Missed concept/information: Explicitly state what the student missed
    - Brief explanation: Provide a concise explanation to minimize cognitive load
 
-4. **Do NOT reveal correct answers** - guide reasoning, don't solve.
+4. **Generate integrated narrative feedback**: Write a single cohesive feedback paragraph...
 
-[Output Format - JSON]
-{
-  "scaffolding_artifacts": [
-    {
-      "target_objective": "The specific unmet Performance Objective",
-      "skill_type": "HOT" or "LOT",
-      "cognitive_level": "Analyze/Evaluate/Create" or "Remember/Understand/Apply",
-      "failure_analysis": "Why the student failed this objective",
-      "scaffolding_content": {
-        "strategy_suggestion": "Suggested approach (for HOT) or null",
-        "partial_example": "Partial worked example showing key reasoning (for HOT) or null",
-        "feedback": "Guiding feedback (for HOT) or null",
-        "missed_concept": "Concept the student missed (for LOT) or null",
-        "brief_explanation": "Concise explanation (for LOT) or null",
-        "key_attention_points": "What to focus on in next attempt"
-      }
-    }
-  ],
-  "scaffolding_summary": "A 3-5 sentence summary synthesizing the key guidance for the student's next attempt. This should be actionable and reference the specific strategies or concepts without revealing answers."
-}
+5. **Do NOT reveal correct answers** - guide reasoning, don't solve.
+
+6. **Generate iteration summary**: Write a concise summary of THIS iteration...
+
+[Output Format - Structured Text]
+
+[Instructional Goal]
+{instructional_goal}
+
+[Instructional Analysis]
+{task_analysis}
+
+[Scaffolding for Task [1] (High Order Skill)]:
+- Target Objective: ...
+- Cognitive Level: ...
+- Failure Analysis: ...
+- Suggested Strategy: ...
+- Key Attention Points: ...
+
+[Feedback]
+<integrated narrative paragraph>
+
+[Iteration Summary]
+<3-5 sentence summary>
 
 CRITICAL INSTRUCTIONS:
-1. Your response MUST be ONLY valid JSON - no additional text
-2. Do NOT reveal correct answers or complete solutions
-3. Focus on guiding the reasoning process
-4. The scaffolding_summary should be directly usable by the student
+1. Do NOT reveal correct answers or complete solutions
+2. Focus on guiding the reasoning process
+3. The [Feedback] section is the primary feedback delivered to the student
+4. The [Iteration Summary] must capture BOTH the student's attempt AND the scaffolding provided
 
-Output ONLY the JSON object above.
+Output ONLY the structured text above. Do NOT include JSON formatting.
 ```
 
 ##### Scaffolding 결과
 
-**HOT Artifact (고차 사고):**
-```json
-{
-  "target_objective": "Set up and simplify ratios in real-world scenarios",
-  "skill_type": "HOT",
-  "cognitive_level": "Analyze",
-  "failure_analysis": "The problem involved proportional reasoning (halving remaining pages) but not ratios, so the subskill of setting up ratios was not directly applicable.",
-  "scaffolding_content": {
-    "strategy_suggestion": "Ask yourself: 'Are there two quantities being compared that could form a ratio?' Look for phrases like 'ratio of...', 'proportional to', or 'in the same proportion'.",
-    "partial_example": "If 12 pages were read out of 120, the ratio of pages read to total pages is 12:120. Simplify this ratio by dividing both numbers by 12: 1:10.",
-    "feedback": "Check if the problem contains a comparison between two quantities. If so, try expressing that relationship as a ratio before solving."
-  }
-}
 ```
+[Instructional Goal]
+The model will solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning to real-world scenarios.
+
+[Instructional Analysis]
+### Instructional Analysis Results
+Instructional Goal: Solve multi-step mathematical problems by applying arithmetic operations,
+              ratios, and proportional reasoning to real-world scenarios. (Apply)
+ ├── Apply arithmetic operations to multi-step problems (Apply)
+ │   ├── Select appropriate arithmetic operations (Understand)
+ │   ├── Perform calculations using selected operations (Apply)
+ ├── Set up and simplify ratios (Apply)
+ │   ├── Identify ratios in real-world scenarios (Understand)
+ │   ├── Simplify ratios to their lowest terms (Apply)
+ ├── Solve proportional reasoning problems (Apply)
+ │   ├── Establish proportional relationships (Understand)
+ │   ├── Solve proportions using cross-multiplication (Apply)
+ │   ├── Evaluate the reasonableness of solutions (Evaluate)
+
+[Scaffolding for Task [1] (High Order Skill)]:
+- Target Objective: Set up and simplify ratios in real-world scenarios
+- Cognitive Level: Analyze
+- Failure Analysis: The problem involved proportional reasoning (halving remaining pages) but the student did not express this as a ratio relationship.
+- Suggested Strategy:
+  (a) Strategy 1: Ask yourself: 'Are there two quantities being compared that could form a ratio?' Look for phrases like 'ratio of...', 'proportional to', or 'in the same proportion'.
+      - Partial worked example (stop before the final answer):
+        If 12 pages were read out of 120, the ratio of pages read to total pages is 12:120. Simplify this ratio by dividing both numbers by 12: 1:10.
+  (b) Strategy 2: Check if the problem contains a comparison between two quantities. If so, try expressing that relationship as a ratio before solving.
+      - Teacher's reasoning clarification
+        (why this strategy should be considered):
+        Expressing relationships as ratios helps verify calculations and demonstrates proportional reasoning skill.
+- Key Attention Points: Look for opportunities to express relationships between quantities as ratios.
+
+[Feedback]
+Your arithmetic calculations are correct and you arrived at the right answer. However, you missed an opportunity to demonstrate ratio skills. The problem involves relationships between quantities (pages read vs. total pages, remaining vs. total) that can be expressed as ratios. In your next attempt, identify these quantity relationships and express them as simplified ratios before proceeding with the calculation. For example, check whether the remaining pages can be compared to the total pages as a ratio, and simplify it to verify your work.
+
+[Iteration Summary]
+The student correctly calculated the total pages read (36), remaining pages (84), and half of remaining (42), arriving at the correct answer. However, the PO "Set up and simplify ratios in real-world scenarios" was not satisfied because the student did not express any ratio relationships. Scaffolding was provided to guide the student to identify quantity comparisons and express them as simplified ratios before solving.
+```
+
+> **핵심 변경**: 출력 형식이 JSON에서 구조화된 마크다운으로 변경되었습니다. `[Feedback]` 섹션은 서술형 단락으로, (1) 오류 분석, (2) 개선 방향, (3) 검증 단계를 통합합니다. 전체 Scaffolding Artifact 텍스트(`_raw_text`)가 학생에게 직접 전달됩니다.
 
 #### Case B Step 4: Student 재응답
 
-Student가 Teacher의 피드백과 Scaffolding Artifact를 참조하여 개선된 응답을 생성합니다.
+Student가 Teacher의 **서술형 피드백**을 참조하여 개선된 응답을 생성합니다.
 
 ##### 실제 프롬프트
 
-**User Message** (`STUDENT_WITH_ARTIFACT_PROMPT`):
+**System Message** (`STUDENT_FEEDBACK_RESPONSE_PROMPT`):
 
-> Placeholder: `{problem_text}` → 문제 원문, `{teacher_feedback}` → Teacher 평가 결과, `{scaffolding_summary}` → Scaffolding 요약, `{scaffolding_artifacts}` → Scaffolding Artifact JSON, `{task_analysis}` → Task Analysis Tree
+> Placeholder: `{dataset_prompt}` → 원본 데이터셋 instruction, `{scaffolding_system_prompt}` → `SCAFFOLDING_SYSTEM_PROMPT` (채워진 상태), `{scaffolding_artifact}` → Scaffolding Artifact 전체 텍스트 (`_raw_text`)
 
 ```
-You are a student learning to solve problems with scaffolding support.
+You are a helpful math assistant.
+Solve this mathematical problem step by step. Show your reasoning clearly and use proper mathematical notation.
 
-Your teacher has evaluated your previous attempt and provided feedback and scaffolding guidance to help you improve. You must carefully use this information to generate a better solution.
+## Response Format
+Your final answer MUST be within \boxed{}.
+Example: \boxed{42}
 
-[Problem]
-Julie is reading a 120-page book. Yesterday, she was able to read 12 pages and today, she read twice as many pages as yesterday. If she wants to read half of the remaining pages tomorrow, how many pages should she read?
+The purpose of your response is to demonstrate the attainment of the Instructional Goal: The model will solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning to real-world scenarios.
 
-[Teacher's Feedback on Your Previous Response]
-[Teacher 평가 JSON — 미충족 PO에 대한 구조화된 피드백 포함]
+You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
 
-[Scaffolding Artifact]
-The following scaffolding information has been prepared to help you:
-To improve ratio application, focus on identifying comparisons between quantities in the problem. If a ratio exists, express it in simplest form before solving...
-
-[Detailed Scaffolding Artifacts]
-[HOT Artifact JSON 전체]
-
-[Instructional Analysis (Learning Structure)]
-[Task Analysis Tree 전체]
+[Instructional Analysis]
+### Instructional Analysis Results
+Instructional Goal: Solve multi-step mathematical problems by applying arithmetic operations,
+              ratios, and proportional reasoning to real-world scenarios. (Apply)
+ ├── Apply arithmetic operations to multi-step problems (Apply)
+ │   ├── Select appropriate arithmetic operations (Understand)
+ │   ├── Perform calculations using selected operations (Apply)
+ [... 전체 Task Analysis ...]
 
 [Instructions]
-1. Carefully read your teacher's feedback to understand what you got wrong and why
-2. Review the Scaffolding Artifact and identify which guidance applies to your mistakes
-3. Apply the strategies, concepts, or explanations from the scaffolding to improve your solution
-4. Show your improved reasoning step by step
-5. Provide your final answer clearly
+1. Identify which skills and sub-skills from the instructional analysis are relevant to this problem
+[... SCAFFOLDING_SYSTEM_PROMPT의 나머지 ...]
 
 [Output Format]
-Improved Reasoning:
-- Applying scaffolding guidance: [explain how you are using the scaffolding]
-- Step-by-step solution: [your detailed improved solution]
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
+- Step-by-step reasoning: [your detailed solution following the instructional structure]
+- Final answer: "The answer is \boxed{your final answer}"
 
-Answer: [your final answer]
+[Scaffolding Artifact]
+Your teacher has evaluated your previous response and designed the following scaffolding to guide your improvement:
+
+[Instructional Goal]
+The model will solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning to real-world scenarios.
+
+[Instructional Analysis]
+### Instructional Analysis Results
+[... Task Analysis Tree ...]
+
+[Scaffolding for Task [1] (High Order Skill)]:
+- Target Objective: Set up and simplify ratios in real-world scenarios
+- Cognitive Level: Analyze
+- Failure Analysis: The problem involved proportional reasoning (halving remaining pages) but the student did not express this as a ratio relationship.
+- Suggested Strategy:
+  (a) Strategy 1: Ask yourself: 'Are there two quantities being compared that could form a ratio?'...
+  (b) Strategy 2: Check if the problem contains a comparison between two quantities...
+- Key Attention Points: Look for opportunities to express relationships between quantities as ratios.
+
+[Feedback]
+Your arithmetic calculations are correct and you arrived at the right answer. However, you missed an opportunity to demonstrate ratio skills...
+
+[Iteration Summary]
+The student correctly calculated the total pages read (36), remaining pages (84), and half of remaining (42)...
+
+[Instructions]
+1. Carefully study the scaffolding artifact above, including the strategies and examples provided
+2. For High Order Skills: follow the suggested strategies and reasoning approaches
+3. For Low Order Skills: review the missed concepts and explanations
+4. Pay special attention to the Key Attention Points and Feedback sections
+5. Address each unsatisfied performance objective systematically
+6. Show your improved thinking step by step
+7. Provide your final answer clearly
 ```
+
+**User Message** = `problem_text` (문제 원문):
+```
+Julie is reading a 120-page book. Yesterday, she was able to read 12 pages and today, she read twice as many pages as yesterday. If she wants to read half of the remaining pages tomorrow, how many pages should she read?
+```
+
+> **핵심 변경**: Student는 `dataset_prompt` + `SCAFFOLDING_SYSTEM_PROMPT` + Teacher의 **전체 Scaffolding Artifact 텍스트**를 참조합니다. 이전에는 서술형 `feedback` 필드만 전달되었으나, 이제 HOT/LOT 스캐폴딩, 전략, 부분 예시, Feedback, Iteration Summary 등 모든 교수적 지원이 학생에게 제공됩니다.
 
 ##### Iteration 2~4 Student 응답 요약
 
@@ -835,153 +793,58 @@ Answer: [your final answer]
 **Iteration 4 — Student 최종 응답:**
 
 ```
-<think>
-... The correct approach is to first simplify the ratio of remaining to total pages (84:120 → 7:10). Then, since she wants to read half of the remaining pages, that's 84 ÷ 2 = 42. But the teacher wanted the ratio step and proportion. So maybe I should show that 7/10 of the total pages is 84, so half of that would be 7/10 * 1/2 = 7/20 of the total. Then 7/20 of 120 is 42.
-</think>
-
-Improved Reasoning:
-To solve this problem, I first calculate the remaining pages Julie needs to read:
-120 total pages - (12 + 24) pages read = **84 pages remaining**.
-
-Next, I define the ratio of remaining pages to total pages:
-84:120 → Simplify by dividing both numbers by 12: **7:10**.
-
-Using proportional reasoning, I set up a proportion to find half of the remaining pages:
-84/120 = x/120 (where x is half of 84)
-Cross-multiplying: 84 × 120 = 120 × x → x = 84
-However, since the question asks for **half of the remaining pages**, I calculate:
-84/2 = **42**
-
-Answer: \boxed{42}
+- Instructional goal alignment: This problem demonstrates multi-step arithmetic, ratio setup, and proportional reasoning.
+- Step-by-step reasoning:
+  Step 1: Calculate pages read today: 2 × 12 = 24
+  Step 2: Total pages read: 12 + 24 = 36
+  Step 3: Remaining pages: 120 - 36 = 84
+  Step 4: Set up the ratio of remaining pages to total pages: 84:120. Simplify by dividing both by 12: 7:10.
+  Step 5: Julie wants to read half of the remaining pages. Using proportional reasoning: 84/2 = 42.
+  Step 6: Verify: 7/10 of the total book is remaining (84 pages). Half of that is 42, which is 7/20 of the total (42/120 = 7/20). This confirms the calculation.
+- Final answer: "The answer is \boxed{42}"
 ```
 
 **Step 2 — Teacher PO 평가 (Iteration 4):**
 ```json
 {
-  "objectives_met": "7 of 7 objectives satisfied",
-  "all_satisfied": true
+  "performance_evaluation": [
+    {
+      "objective_content": "Set up and simplify ratios in real-world scenarios",
+      "is_satisfied": true,
+      "feedback": "The student successfully set up the ratio 3:1 and simplified it to solve the problem."
+    }
+  ]
 }
 ```
 
 **모든 PO 충족** → 반복 종료 → **Case B 확정** (4회차 성공)
 
-#### Case B Step 5: Reconstruction
+#### Case B Step 5: SFT 응답 결정
 
-Teacher가 4회에 걸친 대화 히스토리를 분석하여, Scaffolding 과정에서의 학습 포인트를 통합한 정제된 응답을 생성합니다.
+Case B는 Teacher 재구성이 불필요합니다. Student가 Scaffolding을 참조하여 스스로 모든 PO를 충족한 응답을 생성했으므로, **해당 응답을 SFT 데이터로 직접 사용**합니다.
 
-##### 실제 프롬프트 (1) — 대화 요약
-
-**User Message** (`CONVERSATION_SUMMARIZATION_PROMPT`):
-
-> Placeholder: `{problem_text}` → 문제 원문, `{ground_truth}` → "42", `{conversation_history}` → 4회 반복 전체 대화 히스토리
-
-```
-You are a teacher analyzing a tutoring session where a student struggled with a problem.
-
-[Problem]
-Julie is reading a 120-page book...
-
-[Correct Answer]
-42
-
-[Full Conversation History]
-[Iteration 1~4의 Student 응답 + Teacher 평가 + Scaffolding Artifact 전체]
-
-[Your Task]
-Summarize this tutoring session concisely, focusing on what's important for understanding the student's learning gaps.
-
-Extract and preserve:
-1. The specific mathematical/logical errors in each attempt (not vague descriptions)
-2. How the student's approach changed between iterations
-3. Any recurring misconceptions or patterns
-4. The final answer attempted in each iteration
-
-[Output Format]
-Keep your summary under 1000 characters. Use this structure:
-
-ATTEMPT SUMMARY:
-- Iter 1: [approach] → [specific error] → Answer: [answer]
-- Iter 2: [approach] → [specific error] → Answer: [answer]
-...
-
-KEY PATTERNS:
-- Main weakness: [specific skill/concept gap]
-- Recurring error: [pattern across attempts]
-
-Do NOT include lengthy explanations. Be telegraphic and specific.
+```python
+# nodes.py
+# Case B: 2-5th iteration success - use PO-passing response as-is
+sft_output = response
+sft_case = SFTCase.B.value
 ```
 
-##### 실제 프롬프트 (2) — 성공 재구성
-
-**User Message** (`SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT`):
-
-> Placeholder: `{problem_text}` → 문제 원문, `{ground_truth}` → "42", `{task_analysis}` → Task Analysis Tree, `{iterations_needed}` → 4, `{conversation_summary}` → 위 대화 요약 결과, `{final_response}` → Student 4회차 최종 응답
+**SFT output = Iteration 4의 Student 응답:**
 
 ```
-You are an expert teacher reconstructing a successful learning outcome into clean SFT training data.
-
-[Problem]
-Julie is reading a 120-page book...
-
-[Correct Answer]
-42
-
-[Task Analysis]
-[Task Analysis Tree 전체]
-
-[Scaffolding Process Summary]
-The student succeeded after 4 iterations.
-[대화 요약 결과]
-
-[Final Successful Response]
-[Student 4회차 응답]
-
-[Your Task]
-Reconstruct the student's learning journey into a single, clean response that:
-1. Incorporates the key insights gained through scaffolding
-2. Presents a clear, step-by-step solution
-3. Naturally integrates the guidance that led to success
-4. Is suitable for SFT training (no explicit mention of scaffolding process)
-
-The reconstructed response should be what an ideal student would produce after having learned from this scaffolding experience.
-
-[Output Format - JSON]
-{
-    "reconstructed_response": "A clean, comprehensive solution that incorporates the learning from scaffolding...",
-    "key_learning_points": ["Point 1", "Point 2", "Point 3"],
-    "improvement_summary": "How the student improved through the scaffolding process..."
-}
-
-CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
-1. Your response MUST be ONLY valid JSON - no additional text before or after
-2. Do NOT include explanations, comments, markdown code blocks, or any text outside the JSON
-3. Do NOT include LaTeX expressions, mathematical notation, or equations outside JSON string values
-4. Ensure ALL brackets { }, [ ], and quotes are properly closed
-5. If you need to include mathematical expressions in the reconstructed_response, place them INSIDE the JSON string value with proper escaping (use double backslashes: \\)
-
-Example of CORRECT response:
-{
-  "reconstructed_response": "...",
-  "key_learning_points": [...],
-  "improvement_summary": "..."
-}
-
-Example of INCORRECT response (DO NOT DO THIS):
-Based on the scaffolding process:
-{
-  "reconstructed_response": "...",
-  ...
-}
-$$x = 5$$
-
-Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
+- Instructional goal alignment: This problem demonstrates multi-step arithmetic, ratio setup, and proportional reasoning.
+- Step-by-step reasoning:
+  Step 1: Calculate pages read today: 2 × 12 = 24
+  Step 2: Total pages read: 12 + 24 = 36
+  Step 3: Remaining pages: 120 - 36 = 84
+  Step 4: Set up the ratio of remaining pages to total pages: 84:120. Simplify by dividing both by 12: 7:10.
+  Step 5: Julie wants to read half of the remaining pages. Using proportional reasoning: 84/2 = 42.
+  Step 6: Verify: 7/10 of the total book is remaining (84 pages). Half of that is 42, which is 7/20 of the total (42/120 = 7/20). This confirms the calculation.
+- Final answer: "The answer is \boxed{42}"
 ```
 
-##### Reconstruction 결과
-
-```
-sft_response: "Julie read 12 pages yesterday and 24 pages today, totaling 36 pages. The remaining pages are 120 - 36 = 84. The ratio of remaining pages to total pages is 84:120, which simplifies to 7:10. To find half of the remaining pages, calculate 84 ÷ 2 = 42. Thus, Julie should read 42 pages tomorrow."
-```
+> **설계 의도**: Scaffolding 과정을 거쳐 Student가 자력으로 PO를 충족시킨 응답은, Teacher가 재구성한 응답보다 Student의 실제 학습 수준을 더 정확히 반영합니다. 따라서 별도의 재구성 없이 해당 응답을 직접 SFT 학습 데이터로 활용합니다.
 
 #### 최종 로그 요약
 
@@ -995,20 +858,19 @@ sft_response: "Julie read 12 pages yesterday and 24 pages today, totaling 36 pag
   },
   "skip_details": {
     "step2_performance_objectives_evaluation": { "is_fallback": false, "attempts_needed": 1 },
-    "step3_scaffolding_artifact_generation": { "is_fallback": false, "attempts_needed": 1 },
-    "step5_case_b_reconstruction": { "is_fallback": false }
+    "step3_scaffolding_artifact_generation": { "is_fallback": false, "attempts_needed": 1 }
   }
 }
 ```
 
 **Case B 흐름 요약:**
 ```
-Iteration 1: Student(42✓) → Teacher(7/8 PO) → Scaffolding(1 HOT)
-Iteration 2: Student(42✓) → Teacher(3/4 PO) → Scaffolding(1 LOT)
-Iteration 3: Student(42✓) → Teacher(3/4 PO) → Scaffolding(2 HOT)
+Iteration 1: Student(42✓) → Teacher(7/8 PO) → Scaffolding(1 HOT) + 서술형 피드백
+Iteration 2: Student(42✓) → Teacher(3/4 PO) → Scaffolding(1 LOT) + 서술형 피드백
+Iteration 3: Student(42✓) → Teacher(3/4 PO) → Scaffolding(2 HOT) + 서술형 피드백
 Iteration 4: Student(42✓) → Teacher(7/7 PO ✓) → Case B 확정
      ↓
-Step 5: Teacher가 대화 히스토리 기반 재구성 → SFT 응답 생성
+Case B: Student의 PO 통과 응답(Iteration 4)을 SFT 데이터로 직접 사용
 ```
 
 > **핵심 관찰**: Student는 매 반복에서 정답(42)을 맞췄지만, ratio/proportional reasoning 관련 PO를 시연하지 못해 반복이 필요했습니다. 4회차에서 ratio 84:120→7:10 단순화와 proportion 설정을 명시적으로 포함하여 모든 PO를 충족했습니다.
@@ -1026,21 +888,12 @@ Step 5: Teacher가 대화 히스토리 기반 재구성 → SFT 응답 생성
 **Step 1 — Student 초기 응답:**
 
 ```
-<think>
-Okay, let's see. Albert wants to know how many pizza slices he can eat in a day. He buys 2 large pizzas and 2 small ones. I need to calculate the total number of slices.
-
-First, I should figure out how many slices each type of pizza has. A large pizza has 16 slices, so 2 large pizzas would be 2 times 16. Let me calculate that: 2 * 16 = 32 slices from the large pizzas.
-
-Then, the small pizzas. Each small pizza has 8 slices, and there are 2 of them. So 2 * 8 = 16 slices from the small pizzas.
-
-Now, add the slices from both large and small pizzas together. 32 (large) + 16 (small) = 48 slices total.
-</think>
-
-1. Large pizzas: 2 × 16 = 32 slices
-2. Small pizzas: 2 × 8 = 16 slices
-3. Total: 32 + 16 = 48 slices
-
-\boxed{48}
+- Instructional goal alignment: This problem requires applying arithmetic operations (multiplication and addition) to calculate the total number of pizza slices.
+- Step-by-step reasoning:
+  Step 1: Large pizzas: 2 × 16 = 32 slices
+  Step 2: Small pizzas: 2 × 8 = 16 slices
+  Step 3: Total: 32 + 16 = 48 slices
+- Final answer: "The answer is \boxed{48}"
 ```
 
 **추출된 답**: 48 (정답과 일치!)
@@ -1049,12 +902,23 @@ Now, add the slices from both large and small pizzas together. 32 (large) + 16 (
 
 ```json
 {
-  "overall_assessment": {
-    "objectives_met": "6 of 8 objectives satisfied",
-    "all_satisfied": false,
-    "primary_weakness": "Limited application of ratio and proportional reasoning skills",
-    "recommended_focus": "Practice identifying when ratio and proportional reasoning are needed in different problem contexts"
-  }
+  "performance_evaluation": [
+    {
+      "objective_content": "Identify ratios in real-world scenarios",
+      "is_satisfied": false,
+      "feedback": "The student did not identify or express any ratio relationships in the solution."
+    },
+    {
+      "objective_content": "Simplify ratios to their lowest terms",
+      "is_satisfied": false,
+      "feedback": "No ratios were set up or simplified."
+    },
+    {
+      "objective_content": "Establish proportional relationships",
+      "is_satisfied": false,
+      "feedback": "No proportional relationships were established."
+    }
+  ]
 }
 ```
 
@@ -1065,7 +929,6 @@ Now, add the slices from both large and small pizzas together. 32 (large) + 16 (
 | Identify ratios in real-world scenarios | 문제가 ratio 분석을 필요로 하지 않지만, PO는 해당 기술의 적용을 기대 |
 | Simplify ratios to their lowest terms | 동일 |
 | Establish proportional relationships | 동일 |
-| Solve proportions using cross-multiplication | 동일 |
 | Evaluate the reasonableness of solutions | 풀이에 합리성 검증 미포함 |
 
 #### Iteration 2~5: 반복 실패
@@ -1084,13 +947,13 @@ Now, add the slices from both large and small pizzas together. 32 (large) + 16 (
 
 #### Case C Step 5: Final Solution
 
-Teacher가 Student의 약점을 분석한 뒤, 정답(48)을 기반으로 교육적 풀이를 생성합니다.
+Teacher가 Student의 약점을 분석한 뒤, 정답(48)을 기반으로 교육적 풀이를 **평문 텍스트**로 생성합니다.
 
 ##### 실제 프롬프트
 
 **User Message** (`TEACHER_FINAL_SOLUTION_PROMPT`):
 
-> Placeholder: `{max_iterations}` → 5, `{problem_text}` → 문제 원문, `{ground_truth}` → "48", `{task_analysis}` → Task Analysis Tree, `{iterations_count}` → 5, `{scaffolding_history}` → 5회 반복 Scaffolding 히스토리, `{student_weaknesses}` → 반복 실패 분석 결과
+> Placeholder: `{max_iterations}` → 5, `{problem_text}` → 문제 원문, `{ground_truth}` → "48", `{task_analysis}` → Task Analysis Tree (최대 1500자 제한), `{last_iteration_summary}` → 마지막 iteration의 summary 텍스트, `{student_weaknesses}` → `extract_student_weaknesses()`로 추출한 약점 목록 (최대 5개)
 
 ```
 You are a teacher providing a complete, correct solution after the student failed to solve the problem after 5 attempts.
@@ -1104,9 +967,9 @@ Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas
 [Instructional Analysis]
 [Task Analysis Tree 전체]
 
-[Scaffolding History]
-The following scaffolding was provided across 5 iterations:
-[5회 반복 Scaffolding Artifact + Teacher 평가 히스토리]
+[Last Iteration Summary]
+The following is a summary of the student's last attempt and the scaffolding provided:
+[마지막 iteration의 summary 텍스트]
 
 [Student's Persistent Weaknesses]
 Based on the failed attempts, the student consistently struggled with:
@@ -1123,28 +986,23 @@ Generate a complete, educational solution that:
 
 The solution should be what an expert student would produce - clear, complete, and pedagogically valuable.
 
-[Output Format - JSON]
-{
-  "solution_explanation": "Complete step-by-step solution with clear reasoning. Format:\n[Understanding the Problem]\n...\n[Key Concepts Applied]\n...\n[Step-by-Step Solution]\n...\n[Common Pitfalls Addressed]\n...\nAnswer: [correct answer]",
-  "addressed_weaknesses": [
-    "How weakness 1 was addressed in the solution",
-    "How weakness 2 was addressed in the solution"
-  ],
-  "key_learning_points": [
-    "Key takeaway 1 from this problem",
-    "Key takeaway 2 from this problem",
-    "Key takeaway 3 from this problem"
-  ],
-  "final_answer": "The correct answer"
-}
+[Output Format]
+Write your response as plain text (NOT JSON). Structure your solution clearly and end with the boxed answer.
 
-CRITICAL INSTRUCTIONS:
-1. Your response MUST be ONLY valid JSON - no additional text
-2. The solution_explanation should be comprehensive and educational
-3. Explicitly connect the solution to the student's weaknesses
-4. Ensure all brackets and quotes are properly closed
+Example format:
+[Understanding the Problem]
+Let me analyze this problem step by step...
 
-Output ONLY the JSON object above.
+[Key Concepts Applied]
+The key insight here is...
+
+[Step-by-Step Solution]
+Step 1: ...
+Step 2: ...
+
+The answer is \boxed{correct answer}
+
+Output ONLY the solution as plain text. Do not include any JSON, metadata, or commentary.
 ```
 
 ##### Teacher 최종 풀이 결과
@@ -1157,16 +1015,16 @@ Albert buys 2 large pizzas (16 slices each) and 2 small pizzas (8 slices each). 
 This problem requires arithmetic operations (multiplication and addition) to calculate total slices. Ratios or proportional reasoning are not needed here since the question is about summing quantities, not comparing or scaling them.
 
 [Step-by-Step Solution]
-1. Calculate slices from large pizzas: 2 pizzas * 16 slices/pizza = 32 slices
-2. Calculate slices from small pizzas: 2 pizzas * 8 slices/pizza = 16 slices
-3. Add both totals: 32 slices + 16 slices = 48 slices
+Step 1: Calculate slices from large pizzas: 2 pizzas × 16 slices/pizza = 32 slices
+Step 2: Calculate slices from small pizzas: 2 pizzas × 8 slices/pizza = 16 slices
+Step 3: Add both totals: 32 slices + 16 slices = 48 slices
 
 [Common Pitfalls Addressed]
 - Recognizing that ratios/proportions are not required for this problem
-- Avoiding errors in multiplication (e.g., confusing 16*2 with 8*2)
+- Avoiding errors in multiplication (e.g., confusing 16×2 with 8×2)
 - Ensuring correct addition of totals
 
-Answer: \boxed{48}
+The answer is \boxed{48}
 ```
 
 #### 최종 로그 요약
@@ -1192,13 +1050,13 @@ Answer: \boxed{48}
 
 **Case C 흐름 요약:**
 ```
-Iteration 1: Student(48✓) → Teacher(6/8 PO) → Scaffolding(4 HOT)
-Iteration 2: Student(48✓) → Teacher(7/9 PO) → Scaffolding(4 HOT)
-Iteration 3: Student(48✓) → Teacher(3/4 PO) → Scaffolding(2 LOT)
-Iteration 4: Student(48✓) → Teacher(4/5 PO) → Scaffolding(1 LOT)
+Iteration 1: Student(48✓) → Teacher(6/8 PO) → Scaffolding(4 HOT) + 서술형 피드백
+Iteration 2: Student(48✓) → Teacher(7/9 PO) → Scaffolding(4 HOT) + 서술형 피드백
+Iteration 3: Student(48✓) → Teacher(3/4 PO) → Scaffolding(2 LOT) + 서술형 피드백
+Iteration 4: Student(48✓) → Teacher(4/5 PO) → Scaffolding(1 LOT) + 서술형 피드백
 Iteration 5: Student(48✓) → Teacher(3/6 PO) → 최대 반복 도달
      ↓
-Step 5: Teacher가 정답 기반 교육적 풀이 생성
+Step 5: Teacher가 정답 기반 교육적 풀이 생성 (평문 텍스트)
      → "[Key Concepts Applied]", "[Common Pitfalls Addressed]" 섹션 포함
 ```
 
@@ -1214,9 +1072,9 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 
 ```json
 {
-  "instruction": "[Enhanced Instruction with Task Analysis — <think> 블록 포함]",
+  "instruction": "[Enhanced Instruction with SCAFFOLDING_SYSTEM_PROMPT]",
   "input": "Question: [문제 텍스트]",
-  "output": "[Case별 SFT 응답 — <think> 블록 포함]",
+  "output": "[Case별 SFT 응답]",
   "metadata": {
     "id": "gsm8k_train_XXX",
     "sft_case": "A|B|C",
@@ -1225,17 +1083,15 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 }
 ```
 
-> **`<think>` 블록**: Qwen3-4B는 응답 시 `<think>...</think>` thinking trace를 자동 생성합니다. SFT 데이터의 `output` 필드에도 이 패턴이 그대로 포함되며, Fine-tuning 시 Student 모델이 이 사고 과정을 학습합니다.
-
 ### Case별 SFT 엔트리 예시
 
 #### Case A 엔트리 (gsm8k_train_0)
 
 ```json
 {
-  "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step...\n\n## Learning Objective\nYour response should demonstrate: The model will solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning to real-world scenarios.\n\n## Problem-Solving Guidelines\n...\n<think>\n[Qwen3-4B thinking trace]\n</think>\n### Instructional Analysis Results\n...",
+  "instruction": "You are a helpful math assistant.\nSolve this mathematical problem step by step...\n\nThe purpose of your response is to demonstrate the attainment of the Instructional Goal: The model will solve multi-step mathematical problems by applying arithmetic operations, ratios, and proportional reasoning to real-world scenarios.\n\nYou must adhere to the specific performance procedures...\n\n[Instructional Analysis]\n### Instructional Analysis Results\n...\n\n[Instructions]\n1. Identify which skills...\n...\n\n[Output Format]\n- Instructional goal alignment: ...\n- Step-by-step reasoning: ...\n- Final answer: \"The answer is \\boxed{your final answer}\"",
   "input": "Question: Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?",
-  "output": "<think>\nOkay, let's solve this problem step by step. First, I need to figure out how many clips Natalia sold in May...\n\n\\boxed{72}",
+  "output": "- Instructional goal alignment: This problem requires applying arithmetic operations...\n- Step-by-step reasoning:\n  Step 1: Identify the number of clips sold in April = 48\n  Step 2: Calculate clips sold in May: 48 / 2 = 24\n  Step 3: Calculate total: 48 + 24 = 72\n- Final answer: \"The answer is \\boxed{72}\"",
   "metadata": {
     "id": "gsm8k_train_0",
     "sft_case": "A",
@@ -1244,15 +1100,15 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 }
 ```
 
-> **Case A**: Student 원본 응답(`<think>` 블록 포함)을 그대로 사용. 1회차에 모든 PO를 충족했으므로 추가 가공 없음.
+> **Case A**: Student 원본 응답을 그대로 사용. 1회차에 모든 PO를 충족했으므로 추가 가공 없음.
 
 #### Case B 엔트리 (gsm8k_train_3)
 
 ```json
 {
-  "instruction": "[Enhanced Instruction with Task Analysis — Case A와 동일한 구조]",
+  "instruction": "[Enhanced Instruction with SCAFFOLDING_SYSTEM_PROMPT — Case A와 동일한 구조]",
   "input": "Question: Julie is reading a 120-page book. Yesterday, she was able to read 12 pages and today, she read twice as many pages as yesterday. If she wants to read half of the remaining pages tomorrow, how many pages should she read?",
-  "output": "Julie read 12 pages yesterday and 24 pages today, totaling 36 pages. The remaining pages are 120 - 36 = 84. The ratio of remaining pages to total pages is 84:120, which simplifies to 7:10. To find half of the remaining pages, calculate 84 ÷ 2 = 42. Thus, Julie should read 42 pages tomorrow.",
+  "output": "- Instructional goal alignment: This problem demonstrates multi-step arithmetic, ratio setup, and proportional reasoning.\n- Step-by-step reasoning:\n  Step 1: Calculate pages read today: 2 × 12 = 24\n  Step 2: Total pages read: 12 + 24 = 36\n  Step 3: Remaining pages: 120 - 36 = 84\n  Step 4: Set up the ratio of remaining pages to total pages: 84:120. Simplify by dividing both by 12: 7:10.\n  Step 5: Julie wants to read half of the remaining pages. Using proportional reasoning: 84/2 = 42.\n  Step 6: Verify: 7/10 of the total book is remaining (84 pages). Half of that is 42, which is 7/20 of the total (42/120 = 7/20). This confirms the calculation.\n- Final answer: \"The answer is \\boxed{42}\"",
   "metadata": {
     "id": "gsm8k_train_3",
     "sft_case": "B",
@@ -1261,15 +1117,15 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 }
 ```
 
-> **Case B**: Teacher가 4회 반복의 학습 과정을 통합하여 재구성한 응답. Scaffolding 언급 없이 이상적인 학생 응답 형태로 변환됨.
+> **Case B**: Student가 Scaffolding을 통해 스스로 모든 PO를 충족한 응답(Iteration 4)을 직접 사용. Teacher 재구성 없이 Student의 PO 통과 응답이 SFT 데이터가 됨.
 
 #### Case C 엔트리 (gsm8k_train_6)
 
 ```json
 {
-  "instruction": "[Enhanced Instruction with Task Analysis — Case A와 동일한 구조]",
+  "instruction": "[Enhanced Instruction with SCAFFOLDING_SYSTEM_PROMPT — Case A와 동일한 구조]",
   "input": "Question: Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas and 2 small pizzas. A large pizza has 16 slices and a small pizza has 8 slices. If he eats it all, how many pieces does he eat that day?",
-  "output": "[Understanding the Problem]\nAlbert buys 2 large pizzas (16 slices each) and 2 small pizzas (8 slices each). The problem asks for the total number of slices he eats if he eats all of them.\n\n[Key Concepts Applied]\nThis problem requires arithmetic operations (multiplication and addition) to calculate total slices. Ratios or proportional reasoning are not needed here since the question is about summing quantities, not comparing or scaling them.\n\n[Step-by-Step Solution]\n1. Calculate slices from large pizzas: 2 pizzas * 16 slices/pizza = 32 slices\n2. Calculate slices from small pizzas: 2 pizzas * 8 slices/pizza = 16 slices\n3. Add both totals: 32 slices + 16 slices = 48 slices\n\n[Common Pitfalls Addressed]\n- Recognizing that ratios/proportions are not required for this problem\n- Avoiding errors in multiplication (e.g., confusing 16*2 with 8*2)\n- Ensuring correct addition of totals\n\nAnswer: \\boxed{48}",
+  "output": "[Understanding the Problem]\nAlbert buys 2 large pizzas (16 slices each) and 2 small pizzas (8 slices each). The problem asks for the total number of slices he eats if he eats all of them.\n\n[Key Concepts Applied]\nThis problem requires arithmetic operations (multiplication and addition) to calculate total slices. Ratios or proportional reasoning are not needed here since the question is about summing quantities, not comparing or scaling them.\n\n[Step-by-Step Solution]\nStep 1: Calculate slices from large pizzas: 2 pizzas × 16 slices/pizza = 32 slices\nStep 2: Calculate slices from small pizzas: 2 pizzas × 8 slices/pizza = 16 slices\nStep 3: Add both totals: 32 slices + 16 slices = 48 slices\n\n[Common Pitfalls Addressed]\n- Recognizing that ratios/proportions are not required for this problem\n- Avoiding errors in multiplication\n- Ensuring correct addition of totals\n\nThe answer is \\boxed{48}",
   "metadata": {
     "id": "gsm8k_train_6",
     "sft_case": "C",
@@ -1278,15 +1134,15 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 }
 ```
 
-> **Case C**: Teacher가 교육적 풀이를 생성. `[Key Concepts Applied]`, `[Common Pitfalls Addressed]` 섹션이 포함되어 이 문제에서 ratio/proportion이 불필요함을 명시적으로 설명합니다.
+> **Case C**: Teacher가 교육적 풀이를 평문 텍스트로 생성. `[Key Concepts Applied]`, `[Common Pitfalls Addressed]` 섹션이 포함되어 이 문제에서 ratio/proportion이 불필요함을 명시적으로 설명합니다.
 
 ### Case별 SFT 응답 소스
 
 | Case | SFT `output` 소스 | 특징 |
 |------|-------------------|------|
-| **A** | Student 원본 응답 | 자체 능력으로 정답 도출, `<think>` 블록 포함 |
-| **B** | Teacher 재구성 응답 | Scaffolding 학습 과정을 통합한 정제 응답 |
-| **C** | Teacher 최종 풀이 | 학생 약점을 보완한 교육적 정답 풀이 |
+| **A** | Student 원본 응답 | 자체 능력으로 정답 도출 |
+| **B** | Student의 PO 통과 응답 | Scaffolding을 통해 모든 PO를 충족한 Student 응답 |
+| **C** | Teacher 최종 풀이 (평문 텍스트) | 학생 약점을 보완한 교육적 정답 풀이 |
 
 ### 평가 방법
 
@@ -1333,14 +1189,16 @@ Case C ██████                        11.0%
 
 | 유형 | 대상 인지 수준 | 제공 내용 |
 |------|--------------|----------|
-| **HOT** (High-Order Thinking) | 분석/평가/창조 | `strategy_suggestion`, `partial_example`, `feedback` |
-| **LOT** (Low-Order Thinking) | 기억/이해/적용 | `missed_concept`, `brief_explanation`, `key_attention_points` |
+| **HOT** (High-Order Thinking) | 분석/평가/창조 | `strategy_suggestion`, `partial_example`, `key_attention_points` |
+| **LOT** (Low-Order Thinking) | 기억/이해/적용 | `missed_concept`, `brief_explanation` |
 
-### Scaffolding Artifact
+### Scaffolding Artifact 및 피드백
 
 - 각 iteration에서 생성된 Scaffolding Artifact가 **누적** 저장됩니다
-- Student는 재응답 시 Teacher의 피드백과 Scaffolding Artifact를 참조하여 개선된 응답을 생성합니다
-- `feedback` 필드는 4요소 구조: `error_analysis`, `improvement_direction`, `response_comment`, `metacognitive_prompt`
+- `SCAFFOLDING_ARTIFACT_PROMPT`는 **구조화된 마크다운**으로 출력합니다 (JSON 미사용)
+- 출력은 `[Instructional Goal]`, `[Scaffolding for Task [N]]`, `[Feedback]`, `[Iteration Summary]` 섹션으로 구성됩니다
+- `[Feedback]` 섹션은 (1) 오류 분석, (2) 개선 방향, (3) 검증 단계를 하나의 자연스러운 서술로 통합합니다
+- Student는 재응답 시 **전체 Scaffolding Artifact 텍스트**를 참조합니다 (HOT/LOT 스캐폴딩, 전략, Feedback 등 모든 교수적 지원 포함)
 
 ### Skip/Fallback 처리
 
@@ -1363,12 +1221,10 @@ Case C ██████                        11.0%
 | `INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE` | `prompts/design_prompts.py` | 교수설계 전문가 역할 설정 | Phase 1 / Step 0 | System | — |
 | `INSTRUCTIONAL_GOAL_PROMPT` | `prompts/design_prompts.py` | 데이터셋 분석 → Instructional Goal 도출 | Phase 1 / Step 0 | User | JSON |
 | `INSTRUCTIONAL_ANALYSIS_PROMPT` | `prompts/design_prompts.py` | Learning Objective → Task Analysis Tree 분해 | Phase 1 / Step 2 | User (system=None) | Text (Tree) |
-| `PERFORMANCE_OBJECTIVES_PROMPT` | `prompts/design_prompts.py` | Task Analysis → Performance Objectives 생성 | Phase 1 / Step 3 | User (system=None) | JSON |
-| `ENHANCED_INSTRUCTION_TEMPLATE` | `utils/dataset_enhancer.py` | 원본 instruction + Goal + Analysis 주입 | Phase 1 / Enhanced Data | — (LLM 미호출) | Text |
+| `PERFORMANCE_OBJECTIVES_PROMPT` | `prompts/design_prompts.py` | Task Analysis → Performance Objectives 생성 (통합 문장 형식) | Phase 1 / Step 3 | User (system=None) | JSON |
+| `ENHANCED_INSTRUCTION_TEMPLATE` | `utils/dataset_enhancer.py` | `{original_instruction}` + `SCAFFOLDING_SYSTEM_PROMPT` 결합 | Phase 1 / Enhanced Data | — (LLM 미호출) | Text |
 | `SCAFFOLDING_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Student 문제 해결 시스템 프롬프트 | Phase 2 / Step 1 | System | Text |
-| `TEACHER_INTERVENTION_PROMPT` | `prompts/learning_prompts.py` | Teacher PO 평가 + 4요소 구조화 피드백 (`error_analysis`, `improvement_direction`, `response_comment`, `metacognitive_prompt`) | Phase 2 / Step 2 | User | JSON |
-| `SCAFFOLDING_ARTIFACT_PROMPT` | `prompts/learning_prompts.py` | 미충족 PO별 HOT/LOT Scaffolding 생성 (`feedback` 필드) | Phase 2 / Step 3 | User | JSON |
-| `STUDENT_WITH_ARTIFACT_PROMPT` | `prompts/learning_prompts.py` | Student: Teacher 피드백 + Scaffolding Artifact 참조 재응답 | Phase 2 / Step 4 | User | Text |
-| `CONVERSATION_SUMMARIZATION_PROMPT` | `prompts/learning_prompts.py` | 튜터링 세션 대화 요약 | Phase 2 / Step 5 (Case B) | User | Text |
-| `SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT` | `prompts/learning_prompts.py` | 성공 학습 과정 → SFT 응답 재구성 | Phase 2 / Step 5 (Case B) | User | JSON |
-| `TEACHER_FINAL_SOLUTION_PROMPT` | `prompts/learning_prompts.py` | 최대 반복 실패 후 교육적 풀이 생성 (`[Key Concepts Applied]` 섹션 포함) | Phase 2 / Step 5 (Case C) | User | JSON |
+| `TEACHER_INTERVENTION_PROMPT` | `prompts/learning_prompts.py` | Teacher PO 평가 (평가 전용, 피드백 없음) | Phase 2 / Step 2 | User | JSON |
+| `SCAFFOLDING_ARTIFACT_PROMPT` | `prompts/learning_prompts.py` | 미충족 PO별 HOT/LOT Scaffolding + `[Feedback]` + `[Iteration Summary]` 생성 | Phase 2 / Step 3 | User | Structured Text |
+| `STUDENT_FEEDBACK_RESPONSE_PROMPT` | `prompts/learning_prompts.py` | Student: `dataset_prompt` + `SCAFFOLDING_SYSTEM_PROMPT` + 전체 Scaffolding Artifact 텍스트 기반 재응답 | Phase 2 / Step 4 | System | Text |
+| `TEACHER_FINAL_SOLUTION_PROMPT` | `prompts/learning_prompts.py` | 최대 반복 실패 후 교육적 풀이 생성 (평문 텍스트) | Phase 2 / Step 5 (Case C) | User | Text (평문) |

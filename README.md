@@ -51,12 +51,29 @@ ID-MAS/
 ├── design_modules/              # 교수 설계 단계
 ├── learning_loop/               # Iterative Scaffolding Pipeline
 ├── models/                      # 모델 래퍼
-├── prompts/                     # 프롬프트 템플릿
+├── prompts/                     # 프롬프트 상수 (템플릿)
 ├── utils/                       # 유틸리티
 ├── data/                        # 원본 데이터 (train/data/, eval/data/)
 └── outputs/                     # 학습 결과물
     └── {domain}/train/{teacher}/{student}/
 ```
+
+### 주요 CLI 옵션
+
+| 옵션 | 설명 | 기본값 |
+|------|------|--------|
+| `--mode` | 실행 모드 (`train` / `eval`) | 필수 |
+| `--domain` | 도메인 (`math` / `logical` / `commonsense`) | 필수 |
+| `--train-dataset` | 학습 데이터셋 (train 모드) | — |
+| `--eval-dataset` | 평가 데이터셋 (eval 모드) | — |
+| `--method` | 평가 방법 (`baseline` / `sft` / `sft_id-mas`) | — |
+| `--student-model` | Student 모델 | `Qwen/Qwen3-1.7B` |
+| `--teacher-model` | Teacher 모델 | `gpt-5.2` |
+| `--run-design` | 설계 단계 강제 재실행 (train 전용) | `False` |
+| `--resume` | 체크포인트에서 이어서 학습 (train 전용) | `True` |
+| `--eval-resume` | 기존 결과에서 이어서 평가 (eval 전용) | `True` |
+
+> 상세 사용법은 [사용 가이드](USAGE.md) 참조
 
 ## 문서
 

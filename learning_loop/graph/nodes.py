@@ -134,15 +134,6 @@ def process_question_scaffolding(
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
         iterations = result.get("iterative_scaffolding", {}).get("iterations_needed", 0)
         print(f"  -> Case B: Iterative Scaffolding succeeded! (PO satisfied at iteration {iterations})")
-
-        # Check if Case B reconstruction used fallback (Step 5)
-        skip_details = result.get("skip_details", {})
-        step5_fallback = skip_details.get("step5_case_b_reconstruction", {}).get("is_fallback")
-        if step5_fallback:
-            updates["step5_skip_count"] = state.get("step5_skip_count", 0) + 1
-            updates["step5_case_b_skip_count"] = state.get("step5_case_b_skip_count", 0) + 1
-            updates["case_b_fallback_count"] = state.get("case_b_fallback_count", 0) + 1
-            print(f"     [Warning] Step 5 (Case B reconstruction) skipped - using fallback response")
     elif sft_case == SFTCase.C.value:
         updates["case_c_count"] = state.get("case_c_count", 0) + 1
         print(f"  -> Case C: Reconstruction after 5 failed attempts")
@@ -165,12 +156,6 @@ def process_question_scaffolding(
         updates["step2_skip_count"] = state.get("step2_skip_count", 0) + 1
         updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1
         print(f"     [Warning] Step 2 (PO evaluation) skipped - using fallback")
-
-    # Step 5 summarization skips
-    if skip_details.get("step5_summarization", {}).get("is_fallback"):
-        updates["step5_summarization_skip_count"] = state.get("step5_summarization_skip_count", 0) + 1
-        updates["summarization_fallback_count"] = state.get("summarization_fallback_count", 0) + 1
-        print(f"     [Warning] Step 5 (conversation summarization) skipped - using fallback")
 
     # Step 3 (Scaffolding) skips
     if skip_details.get("step3_scaffolding_artifact_generation", {}).get("is_fallback"):
@@ -272,6 +257,7 @@ def _process_iterative_scaffolding(
     iterations = []
     scaffolding_artifacts = []  # Cumulative Scaffolding Artifacts
     feedback_history = []  # Cumulative feedback history
+    iteration_summaries = []  # Cumulative iteration summaries (response + scaffolding)
     is_correct = False
     all_satisfied = False
     predicted = None
@@ -295,10 +281,10 @@ def _process_iterative_scaffolding(
                 instructional_goal=instructional_goal,
             )
         else:
-            # Step 4: Student responds using teacher feedback (from scaffolding artifact)
+            # Step 4: Student responds using teacher scaffolding artifact
             response = student_model.respond_to_feedback(
                 problem_text=question["problem_text"],
-                feedback=last_feedback,
+                scaffolding_text=last_feedback,
                 task_analysis=task_analysis,
                 instructional_goal=instructional_goal,
                 dataset_prompt=question.get("instruction", ""),
@@ -389,7 +375,7 @@ def _process_iterative_scaffolding(
         # PO not satisfied - continue scaffolding
         print(f"    -> PO not satisfied on iteration {iteration}. Generating scaffolding artifact...")
 
-        # Step 3 (NEW): Generate Scaffolding Artifact (HOT/LOT)
+        # Step 3: Generate Scaffolding Artifact (HOT/LOT) with previous iteration summaries
         scaffolding_artifact = teacher_model.generate_scaffolding_artifact(
             problem_text=question["problem_text"],
             student_response=response,
@@ -397,6 +383,8 @@ def _process_iterative_scaffolding(
             iteration_number=iteration,
             task_analysis=task_analysis,
             max_iterations=max_iterations,
+            previous_iteration_summaries=iteration_summaries,
+            instructional_goal=instructional_goal,
         )
 
         # Count HOT/LOT scaffolding
@@ -442,11 +430,19 @@ def _process_iterative_scaffolding(
                     )
 
         # Accumulate scaffolding artifacts
+        iteration_summary = scaffolding_artifact.get("iteration_summary", "")
         scaffolding_artifacts.append({
             "iteration": iteration,
             "artifacts": scaffolding_artifact.get("scaffolding_artifacts", []),
-            "summary": scaffolding_artifact.get("scaffolding_summary", ""),
+            "summary": iteration_summary,
         })
+
+        # Accumulate iteration summaries (response + scaffolding)
+        if iteration_summary:
+            iteration_summaries.append({
+                "iteration": iteration,
+                "summary": iteration_summary,
+            })
 
         # Accumulate feedback history
         current_feedback = scaffolding_artifact.get("feedback", "")
@@ -474,70 +470,21 @@ def _process_iterative_scaffolding(
             "timestamp": datetime.now().isoformat(),
         })
 
-        # Store for next iteration: feedback from scaffolding artifact (not evaluation)
-        last_feedback = scaffolding_artifact.get("feedback", "Review your previous response and try to address the unsatisfied objectives.")
+        # Store for next iteration: full scaffolding artifact text (or fallback to feedback)
+        last_feedback = scaffolding_artifact.get("_raw_text", scaffolding_artifact.get("feedback", "Review your previous response and try to address the unsatisfied objectives."))
         previous_response = response  # 다음 iteration을 위해 현재 응답 저장
 
     # Build result
     if all_satisfied:
         iterations_needed = len(iterations)
 
-        reconstruction = None
         if iterations_needed == 1:
             # Case A: 1st iteration success - use student response as-is
             sft_output = response
             sft_case = SFTCase.A.value
         else:
-            # Case B: 2-5th iteration success - reconstruct scaffolding process
-            reconstruction = teacher_model.reconstruct_successful_scaffolding(
-                problem_text=question["problem_text"],
-                ground_truth=question["output"],
-                task_analysis=task_analysis,
-                conversation_history=conversation_history,
-                final_response=response,
-                iterations_needed=iterations_needed,
-                feedback_history=feedback_history,
-            )
-
-            # Check for Case B reconstruction fallback (Step 5)
-            skip_metadata = reconstruction.get("_failure_metadata")
-            if skip_metadata:
-                step5_meta = skip_metadata.get("step5_case_b_reconstruction")
-                if step5_meta:
-                    skip_details["step5_case_b_reconstruction"] = step5_meta
-                step5_sum = skip_metadata.get("step5_summarization")
-                if step5_sum:
-                    skip_details["step5_summarization"] = step5_sum
-
-                # Skip on Case B reconstruction fallback
-                if step5_meta and step5_meta.get("is_fallback"):
-                    print(f"    [SKIP] Step 5 (Case B reconstruction) fallback detected. Skipping question {question['id']}")
-                    return QuestionResult(
-                        id=question["id"],
-                        instruction=question.get("instruction", ""),
-                        input=question["input"],
-                        output=question["output"],
-                        _problem_text=question["problem_text"],
-                        initial_response=response,
-                        predicted_answer=predicted,
-                        scaffolding_correct=False,
-                        sft_case=None,
-                        is_skipped=True,
-                        skip_reason="step5_reconstruction_fallback",
-                        skip_stage="step5_reconstruction",
-                        skip_details=skip_details if skip_details else None,
-                        iterative_scaffolding={
-                            "success": True,
-                            "iterations_needed": iterations_needed,
-                            "conversation_history": conversation_history,
-                            "iterations": iterations,
-                        },
-                        scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
-                        hot_count=hot_count if hot_count > 0 else None,
-                        lot_count=lot_count if lot_count > 0 else None,
-                    )
-
-            sft_output = reconstruction.get("reconstructed_response", response)
+            # Case B: 2-5th iteration success - use PO-passing response as-is
+            sft_output = response
             sft_case = SFTCase.B.value
 
         # Extract artifact references from student response (if available)
@@ -574,15 +521,19 @@ def _process_iterative_scaffolding(
         # Extract student weaknesses from conversation history
         student_weaknesses = teacher_model.extract_student_weaknesses(conversation_history)
 
-        # Generate final solution with feedback history
+        # Get last iteration summary
+        last_iteration_summary = ""
+        if iteration_summaries:
+            last_iteration_summary = iteration_summaries[-1].get("summary", "")
+
+        # Generate final solution with last iteration summary
         final_solution = teacher_model.generate_final_solution(
             problem_text=question["problem_text"],
             ground_truth=question["output"],
             task_analysis=task_analysis,
-            scaffolding_history=scaffolding_artifacts,
             student_weaknesses=student_weaknesses,
             max_iterations=max_iterations,
-            feedback_history=feedback_history,
+            last_iteration_summary=last_iteration_summary,
         )
 
         reconstructed_response = final_solution.get("solution_explanation", "")

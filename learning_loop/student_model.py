@@ -129,19 +129,19 @@ class StudentModel:
     def respond_to_feedback(
         self,
         problem_text: str,
-        feedback: str,
+        scaffolding_text: str,
         task_analysis: str,
         instructional_goal: str = "",
         dataset_prompt: str = ""
     ) -> str:
-        """교사의 피드백에 응답하여 개선된 풀이를 생성합니다.
+        """교사의 scaffolding artifact를 참조하여 개선된 풀이를 생성합니다.
 
-        SCAFFOLDING_SYSTEM_PROMPT + feedback을 system message에 통합하고
-        problem_text만 user message로 전달합니다.
+        SCAFFOLDING_SYSTEM_PROMPT + scaffolding artifact를 system message에
+        통합하고 problem_text만 user message로 전달합니다.
 
         Args:
             problem_text: 문제 텍스트
-            feedback: 교사의 서술형 피드백 문자열 (SCAFFOLDING_ARTIFACT에서 생성)
+            scaffolding_text: 교사의 전체 scaffolding artifact 텍스트
             task_analysis: 과제 분석 결과
             instructional_goal: 학습 목표. 기본값: ""
             dataset_prompt: 데이터셋별 시스템 프롬프트. 기본값: ""
@@ -155,7 +155,7 @@ class StudentModel:
                 instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
                 task_analysis=task_analysis
             ),
-            feedback=feedback
+            scaffolding_artifact=scaffolding_text
         )
 
         response = self.model.generate(

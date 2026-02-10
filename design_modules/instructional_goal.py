@@ -25,10 +25,8 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from models.teacher_wrapper import TeacherModelWrapper
-from prompts.design_prompts import (
-    get_instructional_goal_prompt,
-    INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE
-)
+from prompts.design_prompts import INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE
+from utils.prompt_helpers import get_instructional_goal_prompt
 
 
 class InstructionalGoalGenerator:
