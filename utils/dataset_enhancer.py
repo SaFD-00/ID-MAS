@@ -12,23 +12,14 @@ from config.config import create_teacher_config, get_model_short_name
 from config.domains import DATASET_TO_DOMAIN, TRAINING_DATASETS
 from design_modules.instructional_goal import InstructionalGoalGenerator
 from design_modules.analysis import InstructionalAnalysis
+from prompts.learning_prompts import SCAFFOLDING_SYSTEM_PROMPT
 
 
 # Enhanced instruction template for high-quality SFT training data
+# SCAFFOLDING_SYSTEM_PROMPT 기반으로 학습 파이프라인과 일관된 instruction 생성
 ENHANCED_INSTRUCTION_TEMPLATE = """{original_instruction}
 
-## Learning Objective
-Your response should demonstrate: {instructional_goal}
-
-## Problem-Solving Guidelines
-Follow the structured approach below to ensure a complete and well-reasoned solution:
-
-{task_analysis}
-
-## Response Requirements
-1. Explicitly connect each step to the relevant sub-skill or knowledge from the guidelines above
-2. Verify your intermediate results before proceeding to the next step
-3. Present your final answer clearly in the required format"""
+""" + SCAFFOLDING_SYSTEM_PROMPT
 
 
 class DataEnhancer:
@@ -169,19 +160,13 @@ class DataEnhancer:
         return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train.json"
 
     def _get_output_path(self, domain: str, dataset: str) -> Path:
-        """출력 파일 경로를 반환합니다."""
-        if self.model_suffix:
-            teacher_suffix = self.model_suffix
-        elif self.teacher_config:
-            model_name = self.teacher_config.get("model", "unknown")
-            teacher_suffix = get_model_short_name(model_name)
-        else:
-            teacher_suffix = "default"
+        """출력 파일 경로를 반환합니다.
 
-        if self.student_suffix:
-            return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train_ID-MAS_{teacher_suffix}_{self.student_suffix}.json"
-        else:
-            return PROJECT_ROOT / "data" / domain / "train" / "data" / f"{dataset}_train_ID-MAS_{teacher_suffix}.json"
+        출력 경로: outputs/{domain}/train/{student_short}/data/{dataset}_train_ID-MAS.json
+        """
+        student_short = self.student_suffix or "default"
+        output_dir = PROJECT_ROOT / "outputs" / domain / "train" / student_short / "data"
+        return output_dir / f"{dataset}_train_ID-MAS.json"
 
     def _load_json(self, path: Path) -> List[Dict]:
         """JSON 파일을 로드합니다."""

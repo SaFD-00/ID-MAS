@@ -140,6 +140,7 @@ def get_domain_data_dirs(
         - model_dir: 모델별 출력 디렉토리
         - raw_data_dir: 원본 데이터 디렉토리
         - design_dir: 설계 결과 디렉토리 (train 모드만)
+        - enhanced_data_dir: Enhanced training data 디렉토리 (train 모드만)
 
     Raises:
         ValueError: 알 수 없는 도메인인 경우
@@ -159,6 +160,7 @@ def get_domain_data_dirs(
             "model_dir": model_dir,
             "raw_data_dir": DATA_DIR / domain / "train" / "data",
             "design_dir": OUTPUT_DIR / domain / "train" / teacher_short / "instructional-design",
+            "enhanced_data_dir": OUTPUT_DIR / domain / "train" / model_short / "data",
         }
     else:  # eval 모드
         model_dir = OUTPUT_DIR / domain / "eval" / model_short

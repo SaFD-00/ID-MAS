@@ -1,11 +1,11 @@
 """학생 모델 (Student Model, Ms) 모듈.
 
 Iterative Scaffolding Pipeline에서 학생 역할을 담당합니다.
-문제에 대한 응답을 생성하고 스캐폴딩을 참조하여 개선합니다.
+문제에 대한 응답을 생성하고 교사 피드백을 반영하여 개선합니다.
 
 파이프라인 담당 단계:
     - Step 1 (Initial Response): 초기 응답 생성
-    - Step 4 (Re-response): 스캐폴딩 참조 후 재응답
+    - Step 4 (Re-response): 교사 피드백 기반 재응답
 
 전체 파이프라인 흐름:
     Step 1: 초기 응답 (Student) - 이 모듈
@@ -26,26 +26,20 @@ Iterative Scaffolding Pipeline에서 학생 역할을 담당합니다.
 from models.student_wrapper import StudentModelWrapper
 from prompts.learning_prompts import (
     SCAFFOLDING_SYSTEM_PROMPT,
-    ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT,
-    STUDENT_WITH_HINT_PROMPT,
     STUDENT_FEEDBACK_RESPONSE_PROMPT,
-    # New Scaffolding Artifact prompt
-    STUDENT_WITH_ARTIFACT_PROMPT,
 )
 from typing import Dict, Any, Optional, List
-import json
 
 
 class StudentModel:
     """학생 모델 에이전트 클래스.
 
     Iterative Scaffolding Pipeline에서 문제에 대한 응답을 생성합니다.
-    스캐폴딩 아티팩트를 참조하여 개선된 응답을 생성할 수 있습니다.
+    SCAFFOLDING_SYSTEM_PROMPT를 중심으로 일관된 system message를 사용합니다.
 
     주요 기능:
         - 초기 응답 생성 (Task Analysis 기반)
-        - 스캐폴딩 아티팩트 참조 응답 생성
-        - DB 참조 정보 추출
+        - 교사 피드백 기반 재응답 생성
 
     Attributes:
         model: Student 모델 래퍼
@@ -135,202 +129,41 @@ class StudentModel:
     def respond_to_feedback(
         self,
         problem_text: str,
-        teacher_evaluation: Dict[str, Any],
-        previous_response: str,
-        task_analysis: str
+        feedback: str,
+        task_analysis: str,
+        instructional_goal: str = "",
+        dataset_prompt: str = ""
     ) -> str:
         """교사의 피드백에 응답하여 개선된 풀이를 생성합니다.
 
+        SCAFFOLDING_SYSTEM_PROMPT + feedback을 system message에 통합하고
+        problem_text만 user message로 전달합니다.
+
         Args:
             problem_text: 문제 텍스트
-            teacher_evaluation: 교사의 PO 평가 및 피드백
-            previous_response: 이전 응답
+            feedback: 교사의 서술형 피드백 문자열 (SCAFFOLDING_ARTIFACT에서 생성)
             task_analysis: 과제 분석 결과
+            instructional_goal: 학습 목표. 기본값: ""
+            dataset_prompt: 데이터셋별 시스템 프롬프트. 기본값: ""
 
         Returns:
             개선된 응답 텍스트
         """
-        # Format teacher evaluation for the prompt
-        teacher_eval_str = json.dumps(teacher_evaluation, ensure_ascii=False, indent=2)
-
-        prompt = STUDENT_FEEDBACK_RESPONSE_PROMPT.format(
-            problem_text=problem_text,
-            previous_response=previous_response[:1500],  # Truncate if too long
-            teacher_evaluation=teacher_eval_str,
-            task_analysis=task_analysis[:1500]
+        system_message = STUDENT_FEEDBACK_RESPONSE_PROMPT.format(
+            dataset_prompt=dataset_prompt,
+            scaffolding_system_prompt=SCAFFOLDING_SYSTEM_PROMPT.format(
+                instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
+                task_analysis=task_analysis
+            ),
+            feedback=feedback
         )
 
         response = self.model.generate(
-            prompt=prompt,
-            system_message="You are a student learning from teacher feedback. Carefully address the feedback questions and improve your solution."
-        )
-
-        return response
-
-    # =========================================================================
-    # Iterative Scaffolding Methods
-    # =========================================================================
-
-    def generate_response_with_hint(
-        self,
-        problem_text: str,
-        teacher_hint: str,
-        conversation_history: Optional[List[Dict]] = None,
-        task_analysis: Optional[str] = None
-    ) -> str:
-        """교사 힌트를 참고하여 응답을 생성합니다.
-
-        Args:
-            problem_text: 문제 텍스트
-            teacher_hint: 교사가 제공한 힌트
-            conversation_history: 이전 대화 기록. 기본값: None
-            task_analysis: 과제 분석 결과. 기본값: None
-
-        Returns:
-            생성된 응답 텍스트
-        """
-        # Build system message
-        if task_analysis:
-            system_message = ITERATIVE_SCAFFOLDING_SYSTEM_PROMPT.format(
-                task_analysis=task_analysis[:1500]
-            )
-        else:
-            system_message = "You are a student learning to solve problems with teacher guidance. Show your thinking step by step and provide your final answer clearly."
-
-        # Build the prompt
-        prompt = STUDENT_WITH_HINT_PROMPT.format(
-            problem_text=problem_text,
-            teacher_hint=teacher_hint
-        )
-
-        # Include conversation context if available
-        if conversation_history:
-            context_str = self._format_previous_attempts(conversation_history)
-            if context_str:
-                prompt = f"[Previous Attempts]\n{context_str}\n\n{prompt}"
-
-        response = self.model.generate(
-            prompt=prompt,
+            prompt=problem_text,
             system_message=system_message
         )
 
         return response
-
-    def _format_previous_attempts(self, history: List[Dict]) -> str:
-        """이전 시도를 컨텍스트용 문자열로 변환합니다.
-
-        Args:
-            history: 대화 기록
-
-        Returns:
-            포맷된 이전 시도 문자열
-        """
-        if not history:
-            return ""
-
-        formatted = []
-        for entry in history:
-            if entry.get("role") == "student":
-                response = entry.get("response", "")
-                iteration = entry.get("iteration", "?")
-                # Truncate long responses
-                if len(response) > 500:
-                    response = response[:500] + "..."
-                formatted.append(f"[My Attempt {iteration}]\n{response}")
-
-        return "\n\n".join(formatted)
-
-    # =========================================================================
-    # Scaffolding Artifact Methods
-    # =========================================================================
-
-    def respond_with_scaffolding_artifact(
-        self,
-        problem_text: str,
-        teacher_feedback: str,
-        scaffolding_artifact: Dict[str, Any],
-        task_analysis: str
-    ) -> str:
-        """Scaffolding Artifact와 교사 피드백을 참조하여 개선된 응답을 생성합니다.
-
-        Teacher가 생성한 피드백과 Scaffolding Artifact를 참조하여
-        개선된 풀이를 생성합니다.
-
-        Args:
-            problem_text: 문제 텍스트
-            teacher_feedback: 교사의 피드백 (evaluation에서 추출)
-            scaffolding_artifact: Scaffolding Artifact (artifacts + summary)
-            task_analysis: 과제 분석 결과
-
-        Returns:
-            개선된 응답 텍스트
-        """
-        # Format scaffolding artifacts for the prompt
-        artifacts_str = self._format_scaffolding_artifacts(
-            scaffolding_artifact.get("scaffolding_artifacts", [])
-        )
-        scaffolding_summary = scaffolding_artifact.get("scaffolding_summary", "")
-
-        prompt = STUDENT_WITH_ARTIFACT_PROMPT.format(
-            problem_text=problem_text,
-            teacher_feedback=teacher_feedback,
-            scaffolding_summary=scaffolding_summary,
-            scaffolding_artifacts=artifacts_str,
-            task_analysis=task_analysis[:1500]
-        )
-
-        response = self.model.generate(
-            prompt=prompt,
-            system_message="You are a student learning from teacher feedback and scaffolding guidance. Apply the provided feedback and scaffolding to improve your solution."
-        )
-
-        return response
-
-    def _format_scaffolding_artifacts(self, artifacts: List[Dict]) -> str:
-        """Scaffolding artifacts를 읽기 쉬운 형식으로 변환합니다.
-
-        Args:
-            artifacts: Scaffolding artifact 리스트
-
-        Returns:
-            포맷된 스캐폴딩 문자열
-        """
-        if not artifacts:
-            return "(No detailed artifacts available)"
-
-        formatted = []
-        for i, artifact in enumerate(artifacts, 1):
-            skill_type = artifact.get("skill_type", "Unknown")
-            target = artifact.get("target_objective", "Unknown objective")
-            cognitive_level = artifact.get("cognitive_level", "")
-            failure_analysis = artifact.get("failure_analysis", "")
-            content = artifact.get("scaffolding_content", {})
-
-            formatted.append(f"\n=== Artifact {i} ({skill_type} - {cognitive_level}) ===")
-            formatted.append(f"Target Objective: {target}")
-
-            if failure_analysis:
-                formatted.append(f"Your Issue: {failure_analysis}")
-
-            if skill_type == "HOT":
-                # High-Order Thinking scaffolding
-                if content.get("strategy_suggestion"):
-                    formatted.append(f"Suggested Strategy: {content['strategy_suggestion']}")
-                if content.get("partial_example"):
-                    formatted.append(f"Partial Example: {content['partial_example']}")
-                if content.get("feedback"):
-                    formatted.append(f"Guiding Feedback: {content['feedback']}")
-            else:
-                # Low-Order Thinking scaffolding
-                if content.get("missed_concept"):
-                    formatted.append(f"Missed Concept: {content['missed_concept']}")
-                if content.get("brief_explanation"):
-                    formatted.append(f"Explanation: {content['brief_explanation']}")
-
-            if content.get("key_attention_points"):
-                formatted.append(f"Key Points to Remember: {content['key_attention_points']}")
-
-        return "\n".join(formatted)
 
     def extract_db_references(self, response: str) -> List[str]:
         """학생 응답에서 Artifact 참조 정보를 추출합니다.

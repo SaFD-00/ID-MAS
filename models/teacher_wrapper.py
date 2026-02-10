@@ -590,20 +590,3 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
 
             raise Exception(error_msg)
 
-    @property
-    def is_api_model(self) -> bool:
-        """API 모델 사용 여부를 반환합니다.
-
-        Returns:
-            OpenAI API를 사용하면 True, 로컬 모델이면 False
-        """
-        return self._use_api
-
-    @property
-    def is_local_model(self) -> bool:
-        """로컬 모델 사용 여부를 반환합니다.
-
-        Returns:
-            로컬 vLLM 모델이면 True, API 모델이면 False
-        """
-        return not self._use_api

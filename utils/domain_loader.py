@@ -226,15 +226,14 @@ class DomainLoader(BaseDatasetLoader):
     def load_enhanced_training_data(
         self,
         dataset: str,
-        teacher_suffix: str,
-        student_suffix: str,
+        enhanced_data_dir: Path,
         limit: Optional[int] = None,
         shuffle: bool = False
     ) -> List[QuestionData]:
         """Instructional Goal과 Task Analysis가 포함된 향상된 학습 데이터를 로드합니다.
 
         향상된 데이터 파일의 명명 패턴:
-            {dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json
+            {dataset}_train_ID-MAS.json
 
         이 파일들은 다음을 포함하는 instruction 필드를 가집니다:
             - 원본 instruction
@@ -243,10 +242,8 @@ class DomainLoader(BaseDatasetLoader):
 
         Args:
             dataset: 학습 데이터셋 이름 (예: "gsm8k", "math", "reclor", "arc_c")
-            teacher_suffix: 향상된 데이터 생성 시 사용한 Teacher 모델 접미사
-                (예: "Qwen3-32B", "gpt-5.2")
-            student_suffix: 학습용 Student 모델 접미사
-                (예: "Qwen3-4B", "Qwen3-1.7B")
+            enhanced_data_dir: Enhanced data 디렉토리 경로
+                (예: outputs/{domain}/train/{student_short}/data/)
             limit: 로드할 최대 질문 수
             shuffle: 데이터 셔플 여부 (기본값: False)
 
@@ -261,8 +258,7 @@ class DomainLoader(BaseDatasetLoader):
             >>> loader = DomainLoader("math")
             >>> data = loader.load_enhanced_training_data(
             ...     dataset="gsm8k",
-            ...     teacher_suffix="Qwen3-32B",
-            ...     student_suffix="Qwen3-4B",
+            ...     enhanced_data_dir=Path("outputs/math/train/Qwen3-4B/data"),
             ...     limit=100
             ... )
         """
@@ -276,13 +272,13 @@ class DomainLoader(BaseDatasetLoader):
             )
 
         # Enhanced data filename pattern
-        filename = f"{dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
-        file_path = self.data_dir / "train" / "data" / filename
+        filename = f"{dataset}_train_ID-MAS.json"
+        file_path = enhanced_data_dir / filename
 
         if not file_path.exists():
             raise FileNotFoundError(
                 f"Enhanced training file not found: {file_path}\n"
-                f"Run 'python scripts/enhance_data.py --domain {self.domain} --dataset {dataset}' first."
+                f"Run design phase first to generate enhanced data."
             )
 
         questions = self._load_json_file(file_path, dataset, "train")
@@ -303,35 +299,35 @@ class DomainLoader(BaseDatasetLoader):
     def get_available_enhanced_data(self, dataset: str = None) -> List[Dict[str, str]]:
         """이 도메인에서 사용 가능한 향상된 데이터 파일 목록을 반환합니다.
 
+        outputs/{domain}/train/{student_short}/data/ 디렉토리에서 탐색합니다.
+
         Args:
             dataset: 데이터셋 이름으로 필터링 (선택사항)
 
         Returns:
-            'dataset', 'teacher_suffix', 'student_suffix', 'path' 키를 가진 딕셔너리 리스트
+            'dataset', 'student_suffix', 'path' 키를 가진 딕셔너리 리스트
         """
-        data_dir = self.data_dir / "train" / "data"
-        if not data_dir.exists():
+        from config.domains import OUTPUT_DIR
+
+        train_dir = OUTPUT_DIR / self.domain / "train"
+        if not train_dir.exists():
             return []
 
         results = []
-        pattern = "*_train_ID-MAS_*_*.json"
-
-        for file_path in data_dir.glob(pattern):
-            # Parse filename: {dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json
-            name = file_path.stem  # Remove .json
-            parts = name.split("_train_ID-MAS_")
-            if len(parts) == 2:
-                ds_name = parts[0]
-                suffix_parts = parts[1].split("_", 1)  # Split teacher_student
-                if len(suffix_parts) == 2:
-                    teacher_suffix, student_suffix = suffix_parts
-                    if dataset is None or ds_name.lower() == dataset.lower():
-                        results.append({
-                            "dataset": ds_name,
-                            "teacher_suffix": teacher_suffix,
-                            "student_suffix": student_suffix,
-                            "path": str(file_path)
-                        })
+        for model_dir in train_dir.iterdir():
+            if not model_dir.is_dir():
+                continue
+            data_dir = model_dir / "data"
+            if not data_dir.exists():
+                continue
+            for file_path in data_dir.glob("*_train_ID-MAS.json"):
+                ds_name = file_path.stem.replace("_train_ID-MAS", "")
+                if dataset is None or ds_name.lower() == dataset.lower():
+                    results.append({
+                        "dataset": ds_name,
+                        "student_suffix": model_dir.name,
+                        "path": str(file_path)
+                    })
 
         return results
 
@@ -523,39 +519,6 @@ class DomainLoader(BaseDatasetLoader):
         answer_type = self._get_dataset_answer_type(dataset_name)
 
         return answer, answer_type
-
-    def _infer_answer_type(self, answer: str, dataset_name: str) -> AnswerType:
-        """답변 내용과 데이터셋 이름에서 답변 타입을 추론합니다.
-
-        Args:
-            answer: 추출된 답변 문자열
-            dataset_name: 데이터셋 이름
-
-        Returns:
-            AnswerType 열거형 값
-        """
-        # MCQ: single letter A-E or 1-5
-        if answer.upper() in ['A', 'B', 'C', 'D', 'E', '1', '2', '3', '4', '5']:
-            return AnswerType.MCQ
-
-        # MATH dataset uses LaTeX
-        if dataset_name == "math":
-            return AnswerType.LATEX
-
-        # Try numeric
-        try:
-            # Handle various numeric formats
-            cleaned = answer.replace(',', '').replace(' ', '')
-            # Remove units if present
-            numeric_match = re.match(r'^-?[\d.]+', cleaned)
-            if numeric_match:
-                float(numeric_match.group())
-                return AnswerType.NUMERIC
-        except (ValueError, AttributeError):
-            pass
-
-        # Default based on domain
-        return self.config["default_answer_type"]
 
     def _extract_choices(self, question_text: str) -> Optional[List[str]]:
         """질문 텍스트에서 객관식 선택지를 추출합니다.

@@ -10,8 +10,6 @@
     sft: SFT 파인튜닝 모델 매핑
     domains: 도메인 및 데이터셋 설정
     paths: 디렉토리 경로 헬퍼
-    dataset_config: 데이터셋별 상세 설정
-
 사용 예시:
     >>> from config import create_teacher_config, get_model_short_name
     >>> teacher_config = create_teacher_config("gpt-5.2")
@@ -62,7 +60,6 @@ from config.paths import get_design_output_dir
 
 # 하위 호환성을 위한 레거시 별칭
 DESIGN_MODEL_CONFIG = create_teacher_config(DEFAULT_TEACHER_MODEL)
-STUDENT_MODEL_CONFIG = get_student_model_config(DEFAULT_STUDENT_MODEL)
 
 __all__ = [
     # API
@@ -85,5 +82,5 @@ __all__ = [
     'get_design_output_dir', 'get_domain_data_dirs',
 
     # 레거시
-    'DESIGN_MODEL_CONFIG', 'STUDENT_MODEL_CONFIG',
+    'DESIGN_MODEL_CONFIG',
 ]

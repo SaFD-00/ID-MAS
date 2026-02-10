@@ -87,19 +87,6 @@ class ModelCache:
         return cls._cache[cache_key]
 
     @classmethod
-    def is_loaded(cls, model_name: str, device: str = "cuda") -> bool:
-        """모델이 캐시에 로드되어 있는지 확인합니다.
-
-        Args:
-            model_name: 확인할 모델명
-            device: 디바이스 ("cuda" 또는 "cpu")
-
-        Returns:
-            캐시에 로드되어 있으면 True, 아니면 False
-        """
-        return (model_name, device) in cls._cache
-
-    @classmethod
     def get_loaded_models(cls) -> list:
         """현재 캐시에 로드된 모델 목록을 반환합니다.
 
@@ -108,38 +95,3 @@ class ModelCache:
         """
         return list(cls._cache.keys())
 
-    @classmethod
-    def clear(cls, model_name: Optional[str] = None, device: Optional[str] = None):
-        """캐시를 초기화합니다.
-
-        Args:
-            model_name: 삭제할 모델명. None이면 모든 모델 대상.
-            device: 삭제할 디바이스. None이면 모든 디바이스 대상.
-        """
-        if model_name is None and device is None:
-            cls._cache.clear()
-            print("[ModelCache] All cached models cleared")
-        else:
-            keys_to_delete = []
-            for key in cls._cache:
-                if model_name is not None and key[0] != model_name:
-                    continue
-                if device is not None and key[1] != device:
-                    continue
-                keys_to_delete.append(key)
-
-            for key in keys_to_delete:
-                del cls._cache[key]
-                print(f"[ModelCache] Cleared: {key[0]} on {key[1]}")
-
-    @classmethod
-    def memory_usage(cls) -> Dict[str, str]:
-        """캐시된 모델의 메모리 사용량을 반환합니다.
-
-        Returns:
-            {model_name@device: "loaded"} 형태의 딕셔너리
-        """
-        usage = {}
-        for (model_name, device), data in cls._cache.items():
-            usage[f"{model_name}@{device}"] = "loaded"
-        return usage

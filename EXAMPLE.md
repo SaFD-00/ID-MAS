@@ -288,7 +288,7 @@ Description of Knowledge Dimensions:
     · Cognitive tasks: Knowledge of the types of tests administered by specific teachers, knowledge of the cognitive demands of the task, etc.
     · Self-knowledge: The knowledge that critiquing papers is a personal strength, but writing papers is a personal weakness, and awareness of one's own level of knowledge
 
-[Output Format]
+[Output Format]sft 
 Your output must be formatted as JSON, following this structure and no other form of explanation or commentary:
 {
   "performance_objectives": [

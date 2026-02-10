@@ -146,6 +146,7 @@ class IDMASPipeline:
         self.model_dir = self.model_dirs["model_dir"]
         self.raw_data_dir = self.model_dirs["raw_data_dir"]
         self.design_dir = self.model_dirs["design_dir"]
+        self.enhanced_data_dir = self.model_dirs["enhanced_data_dir"]
 
         # 파이프라인용 학생/교사 모델 초기화
         self.student_model = StudentModel(model_name=self.student_model_name)
@@ -373,9 +374,8 @@ class IDMASPipeline:
             enhanced_data.append(new_item)
 
         # 4. 파일 저장
-        teacher_suffix = get_model_short_name(self.teacher_model_name)
-        student_suffix = get_model_short_name(self.student_model_name)
-        output_path = self.raw_data_dir / f"{self.train_dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
+        self.enhanced_data_dir.mkdir(parents=True, exist_ok=True)
+        output_path = self.enhanced_data_dir / f"{self.train_dataset}_train_ID-MAS.json"
 
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(enhanced_data, f, ensure_ascii=False, indent=2)
@@ -419,16 +419,11 @@ class IDMASPipeline:
             - sft_data_path: SFT 데이터 저장 경로
         """
         # Enhanced 학습 데이터 로드
-        teacher_suffix = get_model_short_name(self.teacher_model_name)
-        student_suffix = get_model_short_name(self.student_model_name)
-
         print(f"\n[Enhanced Data] Loading enhanced training data...")
-        print(f"  Teacher suffix: {teacher_suffix}")
-        print(f"  Student suffix: {student_suffix}")
+        print(f"  Enhanced data dir: {self.enhanced_data_dir}")
         questions = self.loader.load_enhanced_training_data(
             dataset=self.train_dataset,
-            teacher_suffix=teacher_suffix,
-            student_suffix=student_suffix,
+            enhanced_data_dir=self.enhanced_data_dir,
             limit=num_questions,
             shuffle=False
         )
@@ -842,9 +837,7 @@ def run_train_mode(args):
         )
 
     # 2. Enhanced Data 확인 및 생성
-    teacher_suffix = get_model_short_name(pipeline.teacher_model_name)
-    student_suffix = get_model_short_name(pipeline.student_model_name)
-    enhanced_path = pipeline.raw_data_dir / f"{pipeline.train_dataset}_train_ID-MAS_{teacher_suffix}_{student_suffix}.json"
+    enhanced_path = pipeline.enhanced_data_dir / f"{pipeline.train_dataset}_train_ID-MAS.json"
 
     if enhanced_path.exists() and args.resume:
         print(f"\n[Enhanced Data] Using existing enhanced data: {enhanced_path.name}")

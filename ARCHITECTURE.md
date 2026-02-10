@@ -64,7 +64,7 @@ Design Result JSON ({domain}_{dataset}_design.json)
     ↓
 [Enhanced Data Generation] ──────────────── dataset_enhancer.py
     ↓
-Enhanced Training Data ({dataset}_train_ID-MAS_{teacher}_{student}.json)
+Enhanced Training Data (outputs/{domain}/train/{student}/data/{dataset}_train_ID-MAS.json)
 ```
 
 ### Step 0: Instructional Goal Generation
@@ -123,7 +123,7 @@ ABCD 모델 기반 수행목표를 생성합니다. Phase 2에서 학생 응답 
 
 - **모듈**: `utils/dataset_enhancer.py` → `DataEnhancer`, `ENHANCED_INSTRUCTION_TEMPLATE`
 - **입력**: `{dataset}_train.json` (원본) + Design Result
-- **출력**: `{dataset}_train_ID-MAS_{teacher}_{student}.json`
+- **출력**: `outputs/{domain}/train/{student}/data/{dataset}_train_ID-MAS.json`
 - **변환**: `instruction` 필드만 enhanced instruction으로 교체, `input`/`output`/`metadata` 유지
 
 ### 설계 결과 저장
@@ -637,7 +637,6 @@ data/                                          # 원본 데이터
 │   ├── train/data/                            # 학습용 원본 데이터
 │   │   ├── gsm8k_train.json
 │   │   ├── gsm8k_samples.json                 # Instructional Goal용 샘플
-│   │   ├── gsm8k_train_ID-MAS_*.json          # Enhanced 학습 데이터
 │   │   ├── math_train.json
 │   │   └── math_samples.json
 │   │
@@ -670,15 +669,19 @@ data/                                          # 원본 데이터
 outputs/                                       # 학습 결과물
 ├── math/
 │   ├── train/
-│   │   └── {Teacher-Model}/                   # Teacher 모델별
-│   │       ├── instructional-design/
-│   │       │   ├── math_gsm8k_design.json
-│   │       │   └── math_math_design.json
-│   │       │
-│   │       └── {Student-Model}/               # Student 모델별
-│   │           ├── gsm8k_train_id-mas_{model}.json      # SFT 데이터
-│   │           ├── gsm8k_train_id-mas_{model}_logs.json  # 학습 로그
-│   │           └── gsm8k_train_summary_{model}.json      # 학습 통계
+│   │   ├── {Teacher-Model}/                   # Teacher 모델별
+│   │   │   ├── instructional-design/
+│   │   │   │   ├── math_gsm8k_design.json
+│   │   │   │   └── math_math_design.json
+│   │   │   │
+│   │   │   └── {Student-Model}/               # Student 모델별
+│   │   │       ├── gsm8k_train_id-mas_{model}.json      # SFT 데이터
+│   │   │       ├── gsm8k_train_id-mas_{model}_logs.json  # 학습 로그
+│   │   │       └── gsm8k_train_summary_{model}.json      # 학습 통계
+│   │   │
+│   │   └── {Student-Model}/                   # Student 모델별 Enhanced Data
+│   │       └── data/
+│   │           └── {dataset}_train_ID-MAS.json  # Enhanced 학습 데이터
 │   │
 │   └── eval/
 │       └── {Student-Model}/                   # 평가 결과

@@ -5,7 +5,7 @@ Iterative Scaffolding Pipeline에서 교사 역할을 담당합니다.
 
 파이프라인 담당 단계:
     - Step 2 (Evaluation): Performance Objectives 기반 평가
-    - Step 3 (Scaffolding): HOT/LOT 스캐폴딩 아티팩트 생성
+    - Step 3 (Scaffolding): HOT/LOT 스캐폴딩 아티팩트 + 서술형 피드백 생성
     - Step 5 (Reconstruction): 성공 응답 재구성 또는 최종 솔루션 생성
 
 전체 파이프라인 흐름:
@@ -26,13 +26,9 @@ Iterative Scaffolding Pipeline에서 교사 역할을 담당합니다.
 """
 from models.teacher_wrapper import TeacherModelWrapper
 from prompts.learning_prompts import (
-    INITIAL_HINT_PROMPT,
-    PROGRESSIVE_HINT_PROMPT,
-    SUMMARY_RECONSTRUCTION_PROMPT,
     TEACHER_INTERVENTION_PROMPT,
     CONVERSATION_SUMMARIZATION_PROMPT,
     SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT,
-    # New Scaffolding Artifact prompts
     SCAFFOLDING_ARTIFACT_PROMPT,
     TEACHER_FINAL_SOLUTION_PROMPT,
 )
@@ -47,10 +43,10 @@ class TeacherModel:
     적절한 스캐폴딩을 제공합니다.
 
     주요 기능:
-        - Performance Objectives 기반 평가 (ReAct-style)
-        - HOT/LOT 구분 스캐폴딩 아티팩트 생성
-        - 성공 응답 재구성 (Case B)
-        - 최종 솔루션 생성 (Case C)
+        - Performance Objectives 기반 평가 (평가 전용)
+        - HOT/LOT 구분 스캐폴딩 아티팩트 + 서술형 피드백 생성
+        - 성공 응답 재구성 (Case B, 평문)
+        - 최종 솔루션 생성 (Case C, 평문)
 
     Attributes:
         llm: Teacher 모델 래퍼
@@ -69,18 +65,21 @@ class TeacherModel:
         student_response: str,
         performance_objectives: List[Dict],
         problem_text: str,
-        ground_truth: str
+        ground_truth: str,
+        iteration_number: int = 1,
+        previous_response: str = None,
     ) -> Dict[str, Any]:
         """학생 응답을 Performance Objectives 기준으로 평가합니다.
 
-        ReAct-style 평가를 수행하고 미충족 목표에 대해
-        피드백 질문을 생성합니다.
+        평가 전용 — 피드백은 SCAFFOLDING_ARTIFACT_PROMPT에서 생성합니다.
 
         Args:
             student_response: 학생의 응답
             performance_objectives: Performance Objectives 리스트
             problem_text: 문제 텍스트
             ground_truth: 정답 (교사 참고용, 학생에게 비공개)
+            iteration_number: 현재 반복 횟수. 기본값: 1
+            previous_response: 이전 iteration의 학생 응답. 기본값: None
 
         Returns:
             평가 결과 딕셔너리:
@@ -88,19 +87,17 @@ class TeacherModel:
                     - objective_content: PO 내용
                     - is_satisfied: 충족 여부
                     - reason_for_unmet_objective: 미충족 사유
-                    - feedback: 구조화된 피드백
-                - overall_assessment (dict): 전체 평가 요약
-                    - objectives_met: 충족 비율 (예: "3 of 5")
-                    - all_satisfied: 전체 충족 여부
-                    - primary_weakness: 주요 약점
-                    - recommended_focus: 권장 집중 영역
+                - all_satisfied (bool): 전체 PO 충족 여부
                 - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         prompt = TEACHER_INTERVENTION_PROMPT.format(
             problem_text=problem_text,
             student_response=student_response,
             performance_objectives=json.dumps(performance_objectives, ensure_ascii=False, indent=2),
-            ground_truth=ground_truth
+            ground_truth=ground_truth,
+            iteration_number=iteration_number,
+            prev_iteration_number=max(1, iteration_number - 1),
+            previous_response=previous_response if previous_response else "(This is the first attempt. No previous response.)",
         )
 
         # 최대 3회 재시도
@@ -111,20 +108,16 @@ class TeacherModel:
             try:
                 result = self.llm.generate_json(prompt)
 
-                # overall_assessment 타입 검증 - 잘못되면 예외 발생시켜 재시도
-                if 'overall_assessment' in result and not isinstance(result['overall_assessment'], dict):
-                    raise ValueError(f"overall_assessment must be dict, got {type(result['overall_assessment']).__name__}")
-
                 # Ensure required fields exist
                 if 'performance_evaluation' not in result:
                     result['performance_evaluation'] = []
-                if 'overall_assessment' not in result:
-                    result['overall_assessment'] = {
-                        "objectives_met": "0 of 0",
-                        "all_satisfied": False,
-                        "primary_weakness": "Unable to evaluate",
-                        "recommended_focus": "Review the problem"
-                    }
+
+                # performance_evaluation에서 all_satisfied 계산
+                pe = result.get('performance_evaluation', [])
+                result['all_satisfied'] = all(
+                    po.get('is_satisfied', False) for po in pe
+                ) if pe else False
+
                 # 성공 시 failure metadata 추가 (step2 = PO Evaluation)
                 result['_failure_metadata'] = {
                     "step2_performance_objectives_evaluation": {
@@ -143,12 +136,7 @@ class TeacherModel:
         # 모든 재시도 실패 시 fallback 반환 (step2 = PO Evaluation)
         return {
             "performance_evaluation": [],
-            "overall_assessment": {
-                "objectives_met": "0 of 0",
-                "all_satisfied": False,
-                "primary_weakness": "Evaluation failed",
-                "recommended_focus": "Try again"
-            },
+            "all_satisfied": False,
             "_failure_metadata": {
                 "step2_performance_objectives_evaluation": {
                     "is_fallback": True,
@@ -163,103 +151,6 @@ class TeacherModel:
     # Iterative Scaffolding Methods
     # =========================================================================
 
-    def generate_initial_hint(
-        self,
-        problem_text: str,
-        task_analysis: str,
-        ground_truth: str
-    ) -> Tuple[str, Optional[Dict]]:
-        """첫 번째 힌트를 생성합니다.
-
-        학생이 문제를 풀기 전에 방향을 제시합니다.
-        정답을 직접 알려주지 않으면서 올바른 접근법을 안내합니다.
-
-        Args:
-            problem_text: 문제 텍스트
-            task_analysis: 과제 분석 결과
-            ground_truth: 정답 (교사 참고용)
-
-        Returns:
-            튜플 (hint_text, failure_metadata):
-                - hint_text: 생성된 힌트 텍스트
-                - failure_metadata: 실패 시 메타데이터, 성공 시 None
-        """
-        prompt = INITIAL_HINT_PROMPT.format(
-            problem_text=problem_text,
-            task_analysis=task_analysis[:2000],
-            ground_truth=ground_truth
-        )
-
-        try:
-            response = self.llm.generate(prompt)
-            return response, None
-        except Exception as e:
-            print(f"  Warning: Failed to generate initial hint: {e}")
-            fallback_hint = "Let's start by carefully reading the problem and identifying what information is given and what we need to find."
-            failure_metadata = {
-                "is_fallback": True,
-                "failure_reason": "generation_failed",
-                "last_error": str(e),
-                "stage": "initial_hint"
-            }
-            return fallback_hint, failure_metadata
-
-    def generate_progressive_hint(
-        self,
-        problem_text: str,
-        task_analysis: str,
-        conversation_history: List[Dict],
-        last_response: str,
-        iteration_number: int,
-        ground_truth: str,
-        max_iterations: int = 5
-    ) -> Tuple[str, Optional[Dict]]:
-        """점진적 힌트를 생성합니다.
-
-        이전 시도를 분석하고 더 구체적인 힌트를 제공합니다.
-        iteration이 증가할수록 더 상세한 가이드를 제공합니다.
-
-        Args:
-            problem_text: 문제 텍스트
-            task_analysis: 과제 분석 결과
-            conversation_history: 이전 대화 기록
-            last_response: 학생의 마지막 응답
-            iteration_number: 현재 반복 횟수 (2-5)
-            ground_truth: 정답 (교사 참고용)
-            max_iterations: 최대 반복 횟수. 기본값: 5
-
-        Returns:
-            튜플 (hint_text, failure_metadata):
-                - hint_text: 생성된 힌트 텍스트
-                - failure_metadata: 실패 시 메타데이터, 성공 시 None
-        """
-        formatted_history = self._format_conversation_history(conversation_history)
-
-        prompt = PROGRESSIVE_HINT_PROMPT.format(
-            problem_text=problem_text,
-            task_analysis=task_analysis[:1500],
-            conversation_history=formatted_history,
-            last_response=last_response[:1500],
-            iteration_number=iteration_number,
-            max_iterations=max_iterations,
-            ground_truth=ground_truth
-        )
-
-        try:
-            response = self.llm.generate(prompt)
-            return response, None
-        except Exception as e:
-            print(f"  Warning: Failed to generate progressive hint: {e}")
-            fallback_hint = f"Look at your previous answer. There seems to be an error. Let me help you: Review step by step and check if the calculation is correct."
-            failure_metadata = {
-                "is_fallback": True,
-                "failure_reason": "generation_failed",
-                "last_error": str(e),
-                "iteration": iteration_number,
-                "stage": "progressive_hint"
-            }
-            return fallback_hint, failure_metadata
-
     def reconstruct_successful_scaffolding(
         self,
         problem_text: str,
@@ -267,7 +158,8 @@ class TeacherModel:
         task_analysis: str,
         conversation_history: List[Dict],
         final_response: str,
-        iterations_needed: int
+        iterations_needed: int,
+        feedback_history: List[Dict] = None,
     ) -> Dict[str, Any]:
         """Case B: 스캐폴딩 성공 후 SFT 데이터용 응답을 재구성합니다.
 
@@ -276,6 +168,8 @@ class TeacherModel:
             2. 최종 성공 응답을 기반으로 정리된 응답 재구성
             3. 교사 가이드의 핵심을 자연스럽게 통합
 
+        출력 형식: 평문 텍스트 (JSON 아님)
+
         Args:
             problem_text: 문제 텍스트
             ground_truth: 정답
@@ -283,12 +177,11 @@ class TeacherModel:
             conversation_history: 전체 대화 기록
             final_response: 최종 성공한 학생 응답
             iterations_needed: 성공까지 걸린 반복 횟수
+            feedback_history: 전체 iteration의 feedback 히스토리. 기본값: None
 
         Returns:
             재구성 결과 딕셔너리:
-                - reconstructed_response: SFT 데이터로 사용할 재구성된 응답
-                - key_learning_points: 스캐폴딩에서 얻은 핵심 학습 포인트
-                - improvement_summary: 학생 개선 과정 요약
+                - reconstructed_response: SFT 데이터로 사용할 재구성된 응답 (평문)
                 - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         # AI 기반 대화 히스토리 축약
@@ -298,12 +191,16 @@ class TeacherModel:
             conversation_history=conversation_history
         )
 
+        # Feedback 히스토리 포맷팅
+        feedback_history_str = self._format_feedback_history(feedback_history) if feedback_history else "(No feedback history available)"
+
         prompt = SUCCESSFUL_SCAFFOLDING_RECONSTRUCTION_PROMPT.format(
             problem_text=problem_text,
             ground_truth=ground_truth,
             task_analysis=task_analysis[:1500],
             iterations_needed=iterations_needed,
             conversation_summary=conversation_summary,
+            feedback_history=feedback_history_str,
             final_response=final_response
         )
 
@@ -313,15 +210,12 @@ class TeacherModel:
 
         for attempt in range(1, max_retries + 1):
             try:
-                # max_tokens를 4096으로 제한 (컨텍스트 초과 방지)
-                result = self.llm.generate_json(prompt, max_tokens=4096)
-                # Ensure required fields exist
-                if 'reconstructed_response' not in result:
-                    result['reconstructed_response'] = final_response
-                if 'key_learning_points' not in result:
-                    result['key_learning_points'] = ["Successfully solved through iterative refinement"]
-                if 'improvement_summary' not in result:
-                    result['improvement_summary'] = f"Improved through {iterations_needed} iterations of scaffolding"
+                # 평문 출력 (generate_json → generate)
+                plain_text_response = self.llm.generate(prompt, max_tokens=4096)
+
+                result = {
+                    "reconstructed_response": plain_text_response,
+                }
                 # 성공 시 메타데이터 저장 (step5 = Reconstruction, Case B)
                 result['_failure_metadata'] = {
                     "step5_case_b_reconstruction": {
@@ -344,8 +238,6 @@ class TeacherModel:
         # 모든 재시도 실패 시 fallback 반환 (step5 = Reconstruction, Case B)
         fallback_result = {
             "reconstructed_response": final_response,
-            "key_learning_points": ["Successfully solved through iterative scaffolding"],
-            "improvement_summary": f"Student succeeded after {iterations_needed} iterations with teacher guidance",
             "_failure_metadata": {
                 "step5_case_b_reconstruction": {
                     "is_fallback": True,
@@ -353,112 +245,6 @@ class TeacherModel:
                     "last_error": errors if errors else ["Unknown error"],
                     "max_retries_exceeded": max_retries,
                     "case": "B"
-                }
-            }
-        }
-        # Summarization failure가 있으면 추가
-        if summarization_failure:
-            fallback_result['_failure_metadata']['step5_summarization'] = summarization_failure
-        return fallback_result
-
-    def summarize_and_reconstruct(
-        self,
-        problem_text: str,
-        ground_truth: str,
-        task_analysis: str,
-        conversation_history: List[Dict]
-    ) -> Dict[str, Any]:
-        """Case C: 최대 시도 후 요약 및 정답을 재구성합니다.
-
-        학생이 max_iterations 시도 후에도 정답을 맞추지 못한 경우:
-            1. 대화를 요약하여 학생의 약점 분석
-            2. 정답 솔루션을 재구성 (학생 약점 보완 포함)
-            3. 학습 포인트 도출
-
-        Args:
-            problem_text: 문제 텍스트
-            ground_truth: 정답
-            task_analysis: 과제 분석 결과
-            conversation_history: 전체 대화 기록
-
-        Returns:
-            재구성 결과 딕셔너리:
-                - summary: 대화 요약
-                - student_weaknesses: 학생 약점 목록
-                - reconstructed_response: 재구성된 정답 응답
-                - learning_points: 학습 포인트 목록
-                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
-        """
-        # AI 기반 대화 히스토리 축약 (JSON 파싱 오류 방지)
-        # Teacher 모델이 중요한 학습 포인트를 파악하여 축약
-        summarized_history, summarization_failure = self.summarize_conversation_with_ai(
-            problem_text=problem_text,
-            ground_truth=ground_truth,
-            conversation_history=conversation_history
-        )
-
-        prompt = SUMMARY_RECONSTRUCTION_PROMPT.format(
-            problem_text=problem_text,
-            ground_truth=ground_truth,
-            task_analysis=task_analysis[:1500],
-            conversation_history=summarized_history
-        )
-
-        # 최대 3회 재시도
-        max_retries = 3
-        errors = []  # 모든 에러를 배열로 수집
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                # max_tokens를 4096으로 제한 (컨텍스트 초과 방지)
-                result = self.llm.generate_json(prompt, max_tokens=4096)
-                # Ensure required fields exist
-                if 'summary' not in result:
-                    result['summary'] = "Student struggled with this problem after multiple attempts."
-                if 'student_weaknesses' not in result:
-                    result['student_weaknesses'] = ["Could not identify the correct approach"]
-                if 'reconstructed_response' not in result:
-                    result['reconstructed_response'] = f"Let me solve this correctly.\n\nAnswer: {ground_truth}"
-                if 'learning_points' not in result:
-                    result['learning_points'] = ["Review the fundamental concepts"]
-                # 성공 시 메타데이터 저장 (step5 = summarize_and_reconstruct, Case C)
-                result['_failure_metadata'] = {
-                    "step5_summarize_and_reconstruct": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "case": "C"
-                    }
-                }
-                # Summarization failure가 있으면 추가
-                if summarization_failure:
-                    result['_failure_metadata']['step5_summarization'] = summarization_failure
-                return result
-            except Exception as e:
-                errors.append(str(e))
-                if attempt < max_retries:
-                    print(f"  Warning: Attempt {attempt}/{max_retries} failed: {e}. Retrying...")
-                else:
-                    print(f"  Warning: All {max_retries} attempts failed. Last error: {e}")
-
-        # 모든 재시도 실패 시 fallback 반환 (step5 = summarize_and_reconstruct, Case C)
-        fallback_result = {
-            "summary": "Student needed multiple attempts but could not solve the problem.",
-            "student_weaknesses": ["Fundamental understanding of the problem"],
-            "reconstructed_response": f"""[Understanding the problem]
-Let me break down this problem carefully.
-
-[Step-by-step solution]
-Following the correct approach:
-
-Answer: {ground_truth}""",
-            "learning_points": ["Review the problem-solving approach", "Practice similar problems"],
-            "_failure_metadata": {
-                "step5_summarize_and_reconstruct": {
-                    "is_fallback": True,
-                    "failure_reason": "reconstruction_failed",
-                    "last_error": errors if errors else ["Unknown error"],
-                    "max_retries_exceeded": max_retries,
-                    "case": "C"
                 }
             }
         }
@@ -566,11 +352,11 @@ Answer: {ground_truth}""",
         task_analysis: str,
         max_iterations: int = 5
     ) -> Dict[str, Any]:
-        """Scaffolding Artifact를 생성합니다.
+        """Scaffolding Artifact와 서술형 피드백을 생성합니다.
 
         미충족 PO에 대해 HOT(High-Order Thinking)/LOT(Low-Order Thinking)를
-        구분하여 교수적 스캐폴딩을 설계합니다. 이 스캐폴딩은 학생이
-        다음 시도에서 참조하는 DB로 사용됩니다.
+        구분하여 교수적 스캐폴딩을 설계합니다. 추가로 학생에게 전달할
+        통합 서술형 feedback을 생성합니다.
 
         Args:
             problem_text: 문제 텍스트
@@ -583,11 +369,7 @@ Answer: {ground_truth}""",
         Returns:
             스캐폴딩 결과 딕셔너리:
                 - scaffolding_artifacts (list): 스캐폴딩 아티팩트 목록
-                    - target_objective: 대상 목표
-                    - skill_type: "HOT" 또는 "LOT"
-                    - cognitive_level: 인지 수준
-                    - failure_analysis: 실패 분석
-                    - scaffolding_content: 스캐폴딩 내용
+                - feedback (str): 학생에게 전달할 통합 서술형 피드백
                 - scaffolding_summary: 3-5문장 요약
                 - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
@@ -618,6 +400,8 @@ Answer: {ground_truth}""",
                 # Ensure required fields exist
                 if 'scaffolding_artifacts' not in result:
                     result['scaffolding_artifacts'] = []
+                if 'feedback' not in result:
+                    result['feedback'] = "Review your previous response and try to address the unsatisfied objectives."
                 if 'scaffolding_summary' not in result:
                     result['scaffolding_summary'] = "Review your previous response and try again with more careful reasoning."
 
@@ -648,7 +432,7 @@ Answer: {ground_truth}""",
                 "scaffolding_content": {
                     "strategy_suggestion": None,
                     "partial_example": None,
-                    "feedback": failed_po.get("feedback", "What key concept might you be missing?"),
+                    "feedback": "What key concept might you be missing?",
                     "missed_concept": "Review the problem requirements carefully",
                     "brief_explanation": "Focus on the specific criteria mentioned in the problem",
                     "key_attention_points": "Pay attention to what the question is actually asking"
@@ -657,6 +441,7 @@ Answer: {ground_truth}""",
 
         return {
             "scaffolding_artifacts": fallback_artifacts,
+            "feedback": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
             "scaffolding_summary": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
             "_failure_metadata": {
                 "step3_scaffolding_artifact_generation": {
@@ -675,12 +460,15 @@ Answer: {ground_truth}""",
         task_analysis: str,
         scaffolding_history: List[Dict],
         student_weaknesses: List[str],
-        max_iterations: int = 5
+        max_iterations: int = 5,
+        feedback_history: List[Dict] = None,
     ) -> Dict[str, Any]:
         """Case C: 최종 정답 풀이를 생성합니다.
 
         학생이 max_iterations 시도 후에도 실패한 경우,
         학생의 약점을 반영한 교육적 정답 풀이를 생성합니다.
+
+        출력 형식: 평문 텍스트 (JSON 아님)
 
         Args:
             problem_text: 문제 텍스트
@@ -689,24 +477,24 @@ Answer: {ground_truth}""",
             scaffolding_history: 누적된 스캐폴딩 히스토리
             student_weaknesses: 학생의 약점 목록
             max_iterations: 최대 반복 횟수. 기본값: 5
+            feedback_history: 전체 iteration의 feedback 히스토리. 기본값: None
 
         Returns:
             최종 솔루션 딕셔너리:
-                - solution_explanation: 완전한 풀이 설명
-                - addressed_weaknesses: 다룬 약점 목록
-                - key_learning_points: 핵심 학습 포인트
-                - final_answer: 최종 정답
+                - solution_explanation: 완전한 풀이 설명 (평문)
                 - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         # Format scaffolding history
         history_str = self._format_scaffolding_history(scaffolding_history)
         weaknesses_str = "\n".join(f"- {w}" for w in student_weaknesses) if student_weaknesses else "- Unable to identify specific weaknesses"
+        feedback_history_str = self._format_feedback_history(feedback_history) if feedback_history else "(No feedback history available)"
 
         prompt = TEACHER_FINAL_SOLUTION_PROMPT.format(
             problem_text=problem_text,
             ground_truth=ground_truth,
             task_analysis=task_analysis[:1500],
             scaffolding_history=history_str,
+            feedback_history=feedback_history_str,
             student_weaknesses=weaknesses_str,
             iterations_count=len(scaffolding_history),
             max_iterations=max_iterations
@@ -718,17 +506,12 @@ Answer: {ground_truth}""",
 
         for attempt in range(1, max_retries + 1):
             try:
-                result = self.llm.generate_json(prompt, max_tokens=4096)
+                # 평문 출력 (generate_json → generate)
+                plain_text_response = self.llm.generate(prompt, max_tokens=4096)
 
-                # Ensure required fields exist
-                if 'solution_explanation' not in result:
-                    result['solution_explanation'] = f"The correct approach leads to: {ground_truth}"
-                if 'addressed_weaknesses' not in result:
-                    result['addressed_weaknesses'] = student_weaknesses[:3] if student_weaknesses else []
-                if 'key_learning_points' not in result:
-                    result['key_learning_points'] = ["Review the problem-solving approach"]
-                if 'final_answer' not in result:
-                    result['final_answer'] = ground_truth
+                result = {
+                    "solution_explanation": plain_text_response,
+                }
 
                 # Add success metadata (step5 = Reconstruction, Case C)
                 result['_failure_metadata'] = {
@@ -755,15 +538,7 @@ Let me solve this problem step by step.
 [Step-by-Step Solution]
 Following the correct approach:
 
-[Final Answer]
-Answer: {ground_truth}""",
-            "addressed_weaknesses": student_weaknesses[:3] if student_weaknesses else ["Fundamental problem-solving approach"],
-            "key_learning_points": [
-                "Review the problem requirements carefully",
-                "Apply systematic reasoning",
-                "Verify each step before proceeding"
-            ],
-            "final_answer": ground_truth,
+The answer is \\boxed{{{ground_truth}}}""",
             "_failure_metadata": {
                 "step5_case_c_final_solution": {
                     "is_fallback": True,
@@ -803,6 +578,28 @@ Answer: {ground_truth}""",
                 formatted.append(f"  Artifact {i} ({skill_type}): {target}")
 
         return "\n".join(formatted)
+
+    def _format_feedback_history(self, feedback_list: List[Dict]) -> str:
+        """전체 iteration의 feedback을 포맷팅합니다.
+
+        Args:
+            feedback_list: feedback 히스토리 리스트. 각 항목은
+                {"iteration": int, "feedback": str} 형식.
+
+        Returns:
+            포맷된 feedback 히스토리 문자열
+        """
+        if not feedback_list:
+            return "(No feedback history)"
+
+        formatted = []
+        for entry in feedback_list:
+            iteration = entry.get("iteration", "?")
+            feedback = entry.get("feedback", "")
+            if feedback:
+                formatted.append(f"[Iteration {iteration} Feedback]\n{feedback}")
+
+        return "\n\n".join(formatted) if formatted else "(No feedback history)"
 
     def extract_student_weaknesses(
         self,
@@ -870,11 +667,3 @@ if __name__ == "__main__":
         ground_truth=ground_truth
     )
     print(json.dumps(evaluation, indent=2, ensure_ascii=False))
-
-    print("\n=== Initial Hint ===")
-    hint = teacher.generate_initial_hint(
-        problem_text=problem,
-        task_analysis=task_analysis,
-        ground_truth=ground_truth
-    )
-    print(hint)

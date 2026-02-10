@@ -34,6 +34,7 @@ from learning_loop.graph.state import (
     SFTCase,
     get_statistics,
 )
+from prompts.learning_prompts import SCAFFOLDING_SYSTEM_PROMPT
 
 
 # ==================== Scaffolding ====================
@@ -232,75 +233,6 @@ def _process_single_shot(
     )
 
 
-def _extract_teacher_feedback(evaluation: Dict[str, Any]) -> str:
-    """교사 평가에서 학생에게 전달할 피드백을 추출합니다.
-
-    performance_evaluation의 각 PO별 feedback을 구조화하여
-    학생이 이해하기 쉬운 텍스트로 변환합니다.
-
-    Args:
-        evaluation: 교사의 PO 평가 결과
-
-    Returns:
-        포맷된 피드백 문자열
-    """
-    if not evaluation:
-        return "(No feedback available)"
-
-    pe = evaluation.get("performance_evaluation", [])
-    if not pe:
-        return "(No feedback available)"
-
-    feedback_parts = []
-    for po in pe:
-        objective = po.get("objective_content", "Unknown objective")
-        is_satisfied = po.get("is_satisfied", True)
-        feedback = po.get("feedback", {})
-
-        if is_satisfied:
-            # Satisfied: show positive comment
-            if isinstance(feedback, dict):
-                comment = feedback.get("response_comment") or feedback.get("positive_comment", "")
-            elif isinstance(feedback, str):
-                comment = feedback
-            else:
-                comment = ""
-            if comment:
-                feedback_parts.append(f"[Objective: {objective}]\n- Status: Satisfied\n- Comment: {comment}")
-        else:
-            # Unsatisfied: show structured feedback
-            reason = po.get("reason_for_unmet_objective", "")
-            if isinstance(feedback, dict):
-                error_analysis = feedback.get("error_analysis", "")
-                improvement = feedback.get("improvement_direction", "")
-                comment = feedback.get("response_comment", "")
-                metacognitive = feedback.get("metacognitive_prompt", "")
-                feedback_text = f"[Objective: {objective}]\n- Status: Not Satisfied"
-                if reason:
-                    feedback_text += f"\n- Issue: {reason}"
-                if error_analysis:
-                    feedback_text += f"\n- Error Analysis: {error_analysis}"
-                if improvement:
-                    feedback_text += f"\n- How to Improve: {improvement}"
-                if comment:
-                    feedback_text += f"\n- Comment: {comment}"
-                if metacognitive:
-                    feedback_text += f"\n- Think About: {metacognitive}"
-                feedback_parts.append(feedback_text)
-            elif isinstance(feedback, str) and feedback:
-                feedback_parts.append(f"[Objective: {objective}]\n- Status: Not Satisfied\n- Feedback: {feedback}")
-            else:
-                feedback_parts.append(f"[Objective: {objective}]\n- Status: Not Satisfied\n- Issue: {reason}")
-
-    overall = evaluation.get("overall_assessment", {})
-    if isinstance(overall, dict):
-        focus = overall.get("recommended_focus")
-        if focus:
-            feedback_parts.append(f"\n[Recommended Focus]\n{focus}")
-
-    return "\n\n".join(feedback_parts) if feedback_parts else "(No feedback available)"
-
-
 def _process_iterative_scaffolding(
     question: Dict[str, Any],
     task_analysis: str,
@@ -338,7 +270,8 @@ def _process_iterative_scaffolding(
     """
     conversation_history = []
     iterations = []
-    scaffolding_artifacts = []  # NEW: Cumulative Scaffolding Artifacts
+    scaffolding_artifacts = []  # Cumulative Scaffolding Artifacts
+    feedback_history = []  # Cumulative feedback history
     is_correct = False
     all_satisfied = False
     predicted = None
@@ -349,8 +282,8 @@ def _process_iterative_scaffolding(
     hot_count = 0  # HOT scaffolding count
     lot_count = 0  # LOT scaffolding count
 
-    last_teacher_feedback = None
-    last_scaffolding_artifact = None
+    last_feedback = None  # scaffolding_artifact에서 추출한 서술형 feedback
+    previous_response = None  # 이전 iteration의 학생 응답 추적
 
     for iteration in range(1, max_iterations + 1):
         # Step 1: Student generates response
@@ -362,12 +295,13 @@ def _process_iterative_scaffolding(
                 instructional_goal=instructional_goal,
             )
         else:
-            # Step 4 (NEW): Student responds using teacher feedback + Scaffolding Artifact
-            response = student_model.respond_with_scaffolding_artifact(
+            # Step 4: Student responds using teacher feedback (from scaffolding artifact)
+            response = student_model.respond_to_feedback(
                 problem_text=question["problem_text"],
-                teacher_feedback=last_teacher_feedback,
-                scaffolding_artifact=last_scaffolding_artifact,
+                feedback=last_feedback,
                 task_analysis=task_analysis,
+                instructional_goal=instructional_goal,
+                dataset_prompt=question.get("instruction", ""),
             )
 
         conversation_history.append({
@@ -387,13 +321,10 @@ def _process_iterative_scaffolding(
                 performance_objectives=performance_objectives,
                 problem_text=question["problem_text"],
                 ground_truth=question["output"],
+                iteration_number=iteration,
+                previous_response=previous_response,
             )
-            overall = evaluation.get("overall_assessment", {})
-            if isinstance(overall, dict):
-                all_satisfied = overall.get("all_satisfied", False)
-            else:
-                print(f"  Warning: overall_assessment is not dict: {type(overall)}")
-                all_satisfied = False
+            all_satisfied = evaluation.get("all_satisfied", False)
 
             # Collect evaluation skip metadata (Step 2)
             if evaluation and evaluation.get("_failure_metadata"):
@@ -517,6 +448,14 @@ def _process_iterative_scaffolding(
             "summary": scaffolding_artifact.get("scaffolding_summary", ""),
         })
 
+        # Accumulate feedback history
+        current_feedback = scaffolding_artifact.get("feedback", "")
+        if current_feedback:
+            feedback_history.append({
+                "iteration": iteration,
+                "feedback": current_feedback,
+            })
+
         conversation_history.append({
             "role": "teacher",
             "evaluation": evaluation,
@@ -535,9 +474,9 @@ def _process_iterative_scaffolding(
             "timestamp": datetime.now().isoformat(),
         })
 
-        # Store for next iteration: extract feedback from evaluation for student
-        last_teacher_feedback = _extract_teacher_feedback(evaluation)
-        last_scaffolding_artifact = scaffolding_artifact
+        # Store for next iteration: feedback from scaffolding artifact (not evaluation)
+        last_feedback = scaffolding_artifact.get("feedback", "Review your previous response and try to address the unsatisfied objectives.")
+        previous_response = response  # 다음 iteration을 위해 현재 응답 저장
 
     # Build result
     if all_satisfied:
@@ -557,6 +496,7 @@ def _process_iterative_scaffolding(
                 conversation_history=conversation_history,
                 final_response=response,
                 iterations_needed=iterations_needed,
+                feedback_history=feedback_history,
             )
 
             # Check for Case B reconstruction fallback (Step 5)
@@ -634,7 +574,7 @@ def _process_iterative_scaffolding(
         # Extract student weaknesses from conversation history
         student_weaknesses = teacher_model.extract_student_weaknesses(conversation_history)
 
-        # NEW: Use generate_final_solution instead of summarize_and_reconstruct
+        # Generate final solution with feedback history
         final_solution = teacher_model.generate_final_solution(
             problem_text=question["problem_text"],
             ground_truth=question["output"],
@@ -642,6 +582,7 @@ def _process_iterative_scaffolding(
             scaffolding_history=scaffolding_artifacts,
             student_weaknesses=student_weaknesses,
             max_iterations=max_iterations,
+            feedback_history=feedback_history,
         )
 
         reconstructed_response = final_solution.get("solution_explanation", "")
@@ -705,11 +646,6 @@ def _process_iterative_scaffolding(
                 "last_correct_response": last_correct_response,
             },
             scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
-            reconstruction={
-                "addressed_weaknesses": final_solution.get("addressed_weaknesses", []),
-                "key_learning_points": final_solution.get("key_learning_points", []),
-                "final_answer": final_solution.get("final_answer", ""),
-            },
             hot_count=hot_count if hot_count > 0 else None,
             lot_count=lot_count if lot_count > 0 else None,
             skip_details=skip_details if skip_details else None,
@@ -791,14 +727,17 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     """
     sft_data = []
 
+    instructional_goal = state.get("instructional_goal", "")
+    task_analysis = state.get("task_analysis", "")
+
     # Scaffolding results: Case A, Case B, and Case C
     for result in state.get("scaffolding_results", []):
-        # NEW: Skip fallback cases (is_skipped=True)
+        # Skip fallback cases (is_skipped=True)
         if result.get("is_skipped", False):
             continue
 
         if result.get("sft_case") in (SFTCase.A.value, SFTCase.B.value, SFTCase.C.value):
-            entry = _create_sft_entry(result)
+            entry = _create_sft_entry(result, instructional_goal, task_analysis)
             if entry:
                 sft_data.append(entry)
 
@@ -810,11 +749,20 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     }
 
 
-def _create_sft_entry(result: QuestionResult) -> Optional[Dict[str, Any]]:
+def _create_sft_entry(
+    result: QuestionResult,
+    instructional_goal: str = "",
+    task_analysis: str = "",
+) -> Optional[Dict[str, Any]]:
     """케이스에 따라 단일 SFT 엔트리를 생성합니다.
+
+    instruction은 enhanced data에서 가져온 값을 우선 사용하고,
+    없을 경우 SCAFFOLDING_SYSTEM_PROMPT 기반으로 생성합니다.
 
     Args:
         result: QuestionResult 객체
+        instructional_goal: 학습 목표 (fallback instruction 생성용)
+        task_analysis: 과제 분석 결과 (fallback instruction 생성용)
 
     Returns:
         SFT 엔트리 딕셔너리 또는 None (출력이 없는 경우)
@@ -829,14 +777,15 @@ def _create_sft_entry(result: QuestionResult) -> Optional[Dict[str, Any]]:
     if not output:
         return None
 
+    # Enhanced data에서 가져온 instruction 우선 사용
     instruction = result.get("instruction", "")
     if not instruction:
-        if case == SFTCase.A.value:
-            instruction = "Solve the following problem."
-        elif case == SFTCase.B.value:
-            instruction = "Solve the following problem with teacher guidance."
-        elif case == SFTCase.C.value:
-            instruction = "Solve the following problem, learning from common mistakes."
+        # Fallback: SCAFFOLDING_SYSTEM_PROMPT 기반 instruction 생성
+        if instructional_goal and task_analysis:
+            instruction = SCAFFOLDING_SYSTEM_PROMPT.format(
+                instructional_goal=instructional_goal,
+                task_analysis=task_analysis
+            )
         else:
             instruction = "Solve the following problem step by step."
 
