@@ -596,8 +596,7 @@ BaseModelWrapper (추상 클래스)
 
 | 파일 | 역할 |
 |------|------|
-| `instructional_goal_prompts.py` | Instructional Goal 생성 프롬프트 |
-| `design_prompts.py` | Instructional Analysis, Performance Objectives 프롬프트 |
+| `design_prompts.py` | Instructional Goal, Instructional Analysis, Performance Objectives 프롬프트 |
 | `learning_prompts.py` | Scaffolding, PO Evaluation, Reconstruction 프롬프트 |
 
 **주요 프롬프트 상수 (`learning_prompts.py`):**

@@ -262,7 +262,31 @@ IMPORTANT: The Behavior field of each PO will be used verbatim as the evaluation
 3. Each Behavior must be self-explanatory without needing to read the Condition or Criterion.
 
 [Anderson & Krathwohl's Taxonomy Reference]
-[... Taxonomy 참조 내용 ...]
+
+Verbs Used by Cognitive Process Dimension (Behavior):
+  - Remember: Recognizing, Recalling
+  - Understand: Interpreting, Exemplifying, Classifying, Summarizing, Inferring, Comparing, Explaining
+  - Apply: Executing, Implementing
+  - Analyze: Differentiating, Organizing, Attributing
+  - Evaluate: Checking, Critiquing
+  - Create: Generating, Planning, Producing
+
+Description of Knowledge Dimensions:
+  - Factual Knowledge: Basic elements that must be mastered to solve subjects or problems in a subject
+    · Terminology: Technical terms, musical symbols, etc.
+    · Specific facts and elements: Key resources, reliable sources of information, etc.
+  - Conceptual Knowledge: Interrelationships between basic elements within a superstructure that allows elements to function in an integrated manner
+    · Classification and categories: Geological timescales, corporate ownership patterns, etc.
+    · Principles and generalizations: The Pythagorean theorem, the law of supply and demand, etc.
+    · Theories, models, and structures: Evolution, parliamentary organizations, etc.
+  - Procedural Knowledge: Methods of performing tasks, methods of inquiry, criteria, algorithms, techniques, and methods for utilizing skills
+    · Subject-specific functions and algorithms: Watercolor painting skills, integer division algorithms, etc.
+    · Subject-specific techniques and methods: Interview techniques, scientific methods, etc.
+    · Criteria for determining when to use appropriate procedures: Criteria for determining when to apply procedures involving Newton's second law, etc.
+  - Metacognitive Knowledge: Awareness of knowledge cognition and knowledge of knowledge and cognition in general
+    · Strategic knowledge: Knowledge of outlining as a means of understanding the structure of textbook units, knowledge of using heuristics, etc.
+    · Cognitive tasks: Knowledge of the types of tests administered by specific teachers, knowledge of the cognitive demands of the task, etc.
+    · Self-knowledge: The knowledge that critiquing papers is a personal strength, but writing papers is a personal weakness, and awareness of one's own level of knowledge
 
 [Output Format]
 Your output must be formatted as JSON, following this structure and no other form of explanation or commentary:
@@ -495,22 +519,26 @@ In cases of non-compliance or error, you must generate tailored, specific feedba
 For UNSATISFIED performance objectives, provide structured feedback with ALL four components:
   (a) Error Analysis: Identify EXACTLY what area the student got wrong and WHY, referencing specific parts of their actual response.
   (b) Improvement Direction: Suggest a CONCRETE direction and strategy for how to correct and improve.
-  (c) Response Comment: Provide a specific comment on the student's previous response process.
-  (d) Metacognitive Prompt: Ask a question that prompts self-reflection.
+  (c) Response Comment: Provide a specific comment on the student's previous response process (e.g., "You correctly identified the variables but applied the wrong operation in step 3").
+  (d) Metacognitive Prompt: Ask a question that prompts self-reflection (e.g., "Did you consider using X? Think about why it is needed in this context.").
+
+7. Do not provide final conclusions, correct answers, or complete reasoning paths.
+8. Instead, specify what type of reasoning process, analytical step, or judgment perspective should be explicitly carried out next.
 
 HOT/LOT Differentiation for Feedback Depth:
-- For HOT (High-Order Thinking: Analyze, Evaluate, Create) objectives: Provide MORE detailed feedback.
-- For LOT (Low-Order Thinking: Remember, Understand, Apply) objectives: Provide CONCISE feedback.
+- For HOT (High-Order Thinking: Analyze, Evaluate, Create) objectives: Provide MORE detailed feedback, including specific strategies, partial reasoning examples, and guiding frameworks. In early iterations, increase feedback volume with concrete direction.
+- For LOT (Low-Order Thinking: Remember, Understand, Apply) objectives: Provide CONCISE feedback focusing on the key concept or fact that was missed. Keep it brief to minimize cognitive load.
 
 For SATISFIED performance objectives:
-- Provide a brief positive comment acknowledging what the student did well.
+- Provide a brief positive comment acknowledging what the student did well (e.g., "Correctly identified the key variables and applied the formula accurately").
 
 IMPORTANT: When describing student errors or suggesting improvements, use SPECIFIC and CONCRETE vocabulary.
-- BAD: "Your approach needs improvement" / "Think more carefully"
-- GOOD: "You failed to isolate the variable x by dividing both sides by 3" / "Apply the distributive property to expand (a+b)^2"
+- BAD: "Your approach needs improvement" / "Think more carefully" / "Review your reasoning"
+- GOOD: "You failed to isolate the variable x by dividing both sides by 3" / "Apply the distributive property to expand (a+b)^2" / "Your step 2 incorrectly assumes linearity when the relationship is quadratic"
 
 CRITICAL: The "objective_content" field MUST contain the EXACT text from the input performance objectives.
 Do NOT generate new descriptions. Copy the Behavior text from the provided Performance Objectives word-for-word.
+Do NOT paraphrase, summarize, or rewrite the objective in any way.
 
 [Output Format - JSON]
 {
@@ -535,7 +563,28 @@ Do NOT generate new descriptions. Copy the Behavior text from the provided Perfo
   }
 }
 
-Output ONLY the JSON object above.
+CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
+1. Your response MUST be ONLY valid JSON - no additional text before or after
+2. Do NOT include explanations, comments, markdown code blocks, or any text outside the JSON
+3. Do NOT include LaTeX expressions, mathematical notation, or equations outside JSON string values
+4. Ensure ALL brackets { }, [ ], and quotes are properly closed
+5. If you need to include mathematical expressions, place them INSIDE JSON string values with proper escaping
+
+Example of CORRECT response:
+{
+  "performance_evaluation": [...],
+  "overall_assessment": {...}
+}
+
+Example of INCORRECT response (DO NOT DO THIS):
+Here is my evaluation:
+{
+  "performance_evaluation": [...],
+  "overall_assessment": {...}
+}
+Additional notes about the evaluation...
+
+Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 ```
 
 ##### Teacher 평가 결과
@@ -687,7 +736,7 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
     {
       "target_objective": "The specific unmet Performance Objective",
       "skill_type": "HOT" or "LOT",
-      "cognitive_level": "...",
+      "cognitive_level": "Analyze/Evaluate/Create" or "Remember/Understand/Apply",
       "failure_analysis": "Why the student failed this objective",
       "scaffolding_content": {
         "strategy_suggestion": "Suggested approach (for HOT) or null",
@@ -841,6 +890,12 @@ Julie is reading a 120-page book...
 [Your Task]
 Summarize this tutoring session concisely, focusing on what's important for understanding the student's learning gaps.
 
+Extract and preserve:
+1. The specific mathematical/logical errors in each attempt (not vague descriptions)
+2. How the student's approach changed between iterations
+3. Any recurring misconceptions or patterns
+4. The final answer attempted in each iteration
+
 [Output Format]
 Keep your summary under 1000 characters. Use this structure:
 
@@ -896,6 +951,28 @@ The reconstructed response should be what an ideal student would produce after h
     "key_learning_points": ["Point 1", "Point 2", "Point 3"],
     "improvement_summary": "How the student improved through the scaffolding process..."
 }
+
+CRITICAL INSTRUCTIONS FOR JSON OUTPUT:
+1. Your response MUST be ONLY valid JSON - no additional text before or after
+2. Do NOT include explanations, comments, markdown code blocks, or any text outside the JSON
+3. Do NOT include LaTeX expressions, mathematical notation, or equations outside JSON string values
+4. Ensure ALL brackets { }, [ ], and quotes are properly closed
+5. If you need to include mathematical expressions in the reconstructed_response, place them INSIDE the JSON string value with proper escaping (use double backslashes: \\)
+
+Example of CORRECT response:
+{
+  "reconstructed_response": "...",
+  "key_learning_points": [...],
+  "improvement_summary": "..."
+}
+
+Example of INCORRECT response (DO NOT DO THIS):
+Based on the scaffolding process:
+{
+  "reconstructed_response": "...",
+  ...
+}
+$$x = 5$$
 
 Output ONLY the JSON object above. Do not include any additional text, explanation, or commentary outside the JSON structure.
 ```
@@ -1283,8 +1360,8 @@ Case C ██████                        11.0%
 
 | 상수명 | 소스 파일 | 용도 | Phase/Step | 메시지 역할 | 출력 형식 |
 |--------|----------|------|-----------|------------|----------|
-| `INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE` | `prompts/instructional_goal_prompts.py` | 교수설계 전문가 역할 설정 | Phase 1 / Step 0 | System | — |
-| `INSTRUCTIONAL_GOAL_PROMPT` | `prompts/instructional_goal_prompts.py` | 데이터셋 분석 → Instructional Goal 도출 | Phase 1 / Step 0 | User | JSON |
+| `INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE` | `prompts/design_prompts.py` | 교수설계 전문가 역할 설정 | Phase 1 / Step 0 | System | — |
+| `INSTRUCTIONAL_GOAL_PROMPT` | `prompts/design_prompts.py` | 데이터셋 분석 → Instructional Goal 도출 | Phase 1 / Step 0 | User | JSON |
 | `INSTRUCTIONAL_ANALYSIS_PROMPT` | `prompts/design_prompts.py` | Learning Objective → Task Analysis Tree 분해 | Phase 1 / Step 2 | User (system=None) | Text (Tree) |
 | `PERFORMANCE_OBJECTIVES_PROMPT` | `prompts/design_prompts.py` | Task Analysis → Performance Objectives 생성 | Phase 1 / Step 3 | User (system=None) | JSON |
 | `ENHANCED_INSTRUCTION_TEMPLATE` | `utils/dataset_enhancer.py` | 원본 instruction + Goal + Analysis 주입 | Phase 1 / Enhanced Data | — (LLM 미호출) | Text |
