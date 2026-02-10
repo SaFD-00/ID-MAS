@@ -88,10 +88,11 @@ class LocalModelMixin:
             temperature=temperature,
         )
 
-        # vLLM chat API (chat template 자동 적용)
+        # vLLM chat API (chat template 자동 적용, thinking 비활성화)
         outputs = self.llm.chat(
             messages=[messages],
             sampling_params=sampling_params,
+            chat_template_kwargs={"enable_thinking": False},
         )
 
         return outputs[0].outputs[0].text.strip()
