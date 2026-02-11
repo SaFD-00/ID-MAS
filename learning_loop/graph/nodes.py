@@ -115,6 +115,13 @@ def process_question_scaffolding(
             updates["step3_skip_count"] = state.get("step3_skip_count", 0) + 1
             updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1
 
+        # Step 5 (Reconstruction) skips
+        if skip_details.get("step5_case_c_final_solution", {}).get("is_fallback"):
+            updates["step5_skip_count"] = state.get("step5_skip_count", 0) + 1
+            updates["step5_case_c_skip_count"] = state.get("step5_case_c_skip_count", 0) + 1
+            updates["case_c_fallback_count"] = state.get("case_c_fallback_count", 0) + 1
+            updates["final_solution_fallback_count"] = state.get("final_solution_fallback_count", 0) + 1
+
         return updates
 
     # Build state updates

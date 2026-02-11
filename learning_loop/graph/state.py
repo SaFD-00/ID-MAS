@@ -663,9 +663,24 @@ def load_checkpoint_from_logs(
                     elif skill_type == "LOT":
                         checkpoint_data["lot_scaffolding_count"] += 1
 
-            # NEW: Count skipped questions
+            # Count skipped questions and their step-based skip details
             if result.get("is_skipped", False):
                 checkpoint_data["skipped_count"] += 1
+
+                # Handle skip_details format (from is_skipped=True results)
+                skip_details = result.get("skip_details", {})
+                if skip_details:
+                    if skip_details.get("step2_performance_objectives_evaluation", {}).get("is_fallback"):
+                        checkpoint_data["step2_skip_count"] += 1
+                        checkpoint_data["evaluation_fallback_count"] += 1
+                    if skip_details.get("step3_scaffolding_artifact_generation", {}).get("is_fallback"):
+                        checkpoint_data["step3_skip_count"] += 1
+                        checkpoint_data["scaffolding_artifact_fallback_count"] += 1
+                    if skip_details.get("step5_case_c_final_solution", {}).get("is_fallback"):
+                        checkpoint_data["step5_skip_count"] += 1
+                        checkpoint_data["step5_case_c_skip_count"] += 1
+                        checkpoint_data["case_c_fallback_count"] += 1
+                        checkpoint_data["final_solution_fallback_count"] += 1
 
     return checkpoint_data, processed_ids
 

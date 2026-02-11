@@ -449,7 +449,7 @@ CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
 ## 기타
 
 ```bash
-## [1] Qwen3-1.7B
+## [1] Student Model: Qwen3-1.7B / Teacher Model: Qwen3-1.7B
 CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B
@@ -466,7 +466,7 @@ CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B
 
-## [2] Qwen3-4B
+## [2] Student Model: Qwen3-4B / Teacher Model: Qwen3-4B
 CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-4B
@@ -483,7 +483,7 @@ CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-4B
 
-## [3] Qwen3-8B
+## [3] Student Model: Qwen3-8B / Teacher Model: Qwen3-8B
 CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-8B
@@ -500,7 +500,7 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-8B
 
-## [4] Qwen3-32B
+## [4] Student Model: Qwen3-32B / Teacher Model: Qwen3-32B
 CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B
