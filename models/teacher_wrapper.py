@@ -482,11 +482,15 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
         )
 
         try:
-            return json.loads(response_text)
+            result = json.loads(response_text)
+            result['_raw_response'] = response_text
+            return result
         except json.JSONDecodeError:
             try:
                 fixed_text = _fix_json_escapes(response_text)
-                return json.loads(fixed_text)
+                result = json.loads(fixed_text)
+                result['_raw_response'] = response_text  # 수정 전 원본 저장
+                return result
             except json.JSONDecodeError as e:
                 raise Exception(f"JSON 파싱 오류: {str(e)}\n응답: {response_text}")
 
@@ -515,7 +519,9 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
 
         response_text = self._generate_with_local_model(json_prompt, system_message)
 
-        return self._extract_json(response_text)
+        result = self._extract_json(response_text)
+        result['_raw_response'] = response_text  # 파싱 전 원본 저장
+        return result
 
     def _extract_json(self, text: str) -> Dict[str, Any]:
         """텍스트에서 JSON을 추출합니다.

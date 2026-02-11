@@ -105,6 +105,8 @@ class TeacherModel:
         for attempt in range(1, max_retries + 1):
             try:
                 result = self.llm.generate_json(prompt)
+                # _raw_response는 generate_json에서 자동 포함됨 (Task 1)
+                result['_input_prompt'] = prompt
 
                 # Ensure required fields exist
                 if 'performance_evaluation' not in result:
@@ -135,6 +137,7 @@ class TeacherModel:
         return {
             "performance_evaluation": [],
             "all_satisfied": False,
+            "_input_prompt": prompt,
             "_failure_metadata": {
                 "step2_performance_objectives_evaluation": {
                     "is_fallback": True,
@@ -209,6 +212,7 @@ class TeacherModel:
             try:
                 raw_text = self.llm.generate(prompt)
                 result = self._parse_scaffolding_text(raw_text)
+                result['_input_prompt'] = prompt
 
                 # Ensure required fields exist
                 if 'scaffolding_artifacts' not in result:
@@ -256,6 +260,7 @@ class TeacherModel:
             "scaffolding_artifacts": fallback_artifacts,
             "feedback": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
             "iteration_summary": "Student's response did not meet the performance objectives. Basic scaffolding was provided to guide improvement.",
+            "_input_prompt": prompt,
             "_failure_metadata": {
                 "step3_scaffolding_artifact_generation": {
                     "is_fallback": True,
@@ -418,6 +423,8 @@ class TeacherModel:
 
                 result = {
                     "solution_explanation": plain_text_response,
+                    "_input_prompt": prompt,
+                    "_raw_output": plain_text_response,
                 }
 
                 # Add success metadata (step5 = Reconstruction, Case C)
@@ -446,6 +453,7 @@ Let me solve this problem step by step.
 Following the correct approach:
 
 The answer is \\boxed{{{ground_truth}}}""",
+            "_input_prompt": prompt,
             "_failure_metadata": {
                 "step5_case_c_final_solution": {
                     "is_fallback": True,

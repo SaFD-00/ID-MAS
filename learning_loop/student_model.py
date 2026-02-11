@@ -165,6 +165,34 @@ class StudentModel:
 
         return response
 
+    def get_initial_system_message(
+        self,
+        instructional_goal: str = "",
+        task_analysis: str = "",
+    ) -> str:
+        """Step 1의 system message를 반환합니다 (로깅용)."""
+        return SCAFFOLDING_SYSTEM_PROMPT.format(
+            instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
+            task_analysis=task_analysis
+        )
+
+    def get_feedback_system_message(
+        self,
+        scaffolding_text: str,
+        task_analysis: str,
+        instructional_goal: str = "",
+        dataset_prompt: str = "",
+    ) -> str:
+        """Step 4의 system message를 반환합니다 (로깅용)."""
+        return STUDENT_FEEDBACK_RESPONSE_PROMPT.format(
+            dataset_prompt=dataset_prompt,
+            scaffolding_system_prompt=SCAFFOLDING_SYSTEM_PROMPT.format(
+                instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
+                task_analysis=task_analysis
+            ),
+            scaffolding_artifact=scaffolding_text
+        )
+
     def extract_db_references(self, response: str) -> List[str]:
         """학생 응답에서 Artifact 참조 정보를 추출합니다.
 

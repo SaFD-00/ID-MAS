@@ -473,7 +473,7 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
             "case_b": case_b,  # Success on attempts 2-5
             "case_c": case_c,  # Reconstructed after 5 failures
             "success_total": case_a + case_b,
-            "success_rate": (case_a + case_b) / processed if processed > 0 else 0,
+            "success_rate": (case_a + case_b) / (processed - skipped) if (processed - skipped) > 0 else 0,
         },
         "scaffolding_artifacts": {
             "hot_count": hot_count,  # High-Order Thinking scaffolding
@@ -482,6 +482,7 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
         },
         # Step-based skip statistics
         "skip": {
+            "total": skipped,
             "step1_initial_response": {
                 "count": step1_skip,
                 "rate": step1_skip / processed if processed > 0 else 0,
@@ -654,14 +655,16 @@ def load_checkpoint_from_logs(
                     checkpoint_data["final_solution_fallback_count"] += 1
 
             # Count HOT/LOT scaffolding from scaffolding_artifacts
-            scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
-            for artifact_entry in scaffolding_artifacts_data:
-                for artifact in artifact_entry.get("artifacts", []):
-                    skill_type = artifact.get("skill_type", "")
-                    if skill_type == "HOT":
-                        checkpoint_data["hot_scaffolding_count"] += 1
-                    elif skill_type == "LOT":
-                        checkpoint_data["lot_scaffolding_count"] += 1
+            # skip된 결과는 HOT/LOT 카운팅에서 제외
+            if not result.get("is_skipped", False):
+                scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
+                for artifact_entry in scaffolding_artifacts_data:
+                    for artifact in artifact_entry.get("artifacts", []):
+                        skill_type = artifact.get("skill_type", "")
+                        if skill_type == "HOT":
+                            checkpoint_data["hot_scaffolding_count"] += 1
+                        elif skill_type == "LOT":
+                            checkpoint_data["lot_scaffolding_count"] += 1
 
             # Count skipped questions and their step-based skip details
             if result.get("is_skipped", False):

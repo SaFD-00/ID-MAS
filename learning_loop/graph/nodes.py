@@ -287,6 +287,13 @@ def _process_iterative_scaffolding(
                 task_analysis=task_analysis,
                 instructional_goal=instructional_goal,
             )
+            student_input = {
+                "system_message": student_model.get_initial_system_message(
+                    instructional_goal=instructional_goal,
+                    task_analysis=task_analysis,
+                ),
+                "user_message": question["problem_text"],
+            }
         else:
             # Step 4: Student responds using teacher scaffolding artifact
             response = student_model.respond_to_feedback(
@@ -296,11 +303,21 @@ def _process_iterative_scaffolding(
                 instructional_goal=instructional_goal,
                 dataset_prompt=question.get("instruction", ""),
             )
+            student_input = {
+                "system_message": student_model.get_feedback_system_message(
+                    scaffolding_text=last_feedback,
+                    task_analysis=task_analysis,
+                    instructional_goal=instructional_goal,
+                    dataset_prompt=question.get("instruction", ""),
+                ),
+                "user_message": question["problem_text"],
+            }
 
         conversation_history.append({
             "role": "student",
             "response": response,
             "iteration": iteration,
+            "_input_prompt": student_input,
         })
 
         # Check answer correctness
@@ -432,8 +449,8 @@ def _process_iterative_scaffolding(
                             "iterations": iterations,
                         },
                         scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
-                        hot_count=hot_count if hot_count > 0 else None,
-                        lot_count=lot_count if lot_count > 0 else None,
+                        hot_count=None,  # skip이므로 통계에 반영하지 않음
+                        lot_count=None,  # skip이므로 통계에 반영하지 않음
                     )
 
         # Accumulate scaffolding artifacts
@@ -579,8 +596,8 @@ def _process_iterative_scaffolding(
                             "last_correct_response": last_correct_response,
                         },
                         scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
-                        hot_count=hot_count if hot_count > 0 else None,
-                        lot_count=lot_count if lot_count > 0 else None,
+                        hot_count=None,  # skip이므로 통계에 반영하지 않음
+                        lot_count=None,  # skip이므로 통계에 반영하지 않음
                     )
 
         return QuestionResult(
@@ -761,13 +778,20 @@ def _create_sft_entry(
 
 
 def _filter_internal_fields(result: Dict[str, Any]) -> Dict[str, Any]:
-    """로깅용으로 내부 필드(_로 시작)를 제거합니다.
+    """로깅용으로 top-level 내부 필드(_로 시작)를 제거합니다.
+
+    정책:
+        - top-level `_` prefix 필드만 제거 (_problem_text 등)
+        - nested 구조 내부의 `_` prefix 필드는 보존됨
+          (conversation_history 내부의 _input_prompt, _raw_text,
+           _failure_metadata, _raw_response 등)
+        - 이는 의도된 동작: nested 데이터는 디버깅/분석에 필요
 
     Args:
         result: 원본 결과 딕셔너리
 
     Returns:
-        내부 필드가 제거된 딕셔너리
+        top-level 내부 필드가 제거된 딕셔너리
     """
     return {k: v for k, v in result.items() if not k.startswith("_")}
 
