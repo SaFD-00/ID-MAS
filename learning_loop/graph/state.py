@@ -127,16 +127,14 @@ class QuestionResultRequired(TypedDict):
 
     Attributes:
         id: 문제 고유 ID
-        instruction: 지시문
-        input: 문제 텍스트
+        instruction: 지시문 (데이터셋별 instruction)
+        input: 문제 텍스트 (순수 input)
         output: 정답 (ground truth)
-        _problem_text: 내부 처리용 문제 텍스트 (로그 저장 시 제거)
     """
     id: str
     instruction: str
     input: str
     output: str
-    _problem_text: str
 
 
 class QuestionResult(QuestionResultRequired, total=False):

@@ -56,7 +56,7 @@ from config import (
     get_design_output_dir
 )
 from models.model_cache import ModelCache
-from utils.dataset_enhancer import DataEnhancer, ENHANCED_INSTRUCTION_TEMPLATE
+from utils.dataset_enhancer import DataEnhancer
 
 
 class IDMASPipeline:
@@ -305,14 +305,14 @@ class IDMASPipeline:
     def generate_enhanced_data(self, design_result: Dict) -> Path:
         """설계 결과 기반 Enhanced Training Data를 생성합니다.
 
-        원본 학습 데이터의 instruction을 Instructional Goal과 Task Analysis가
-        포함된 enhanced instruction으로 교체합니다.
+        원본 학습 데이터의 instruction은 그대로 유지하고,
+        metadata에 Instructional Goal과 Task Analysis를 추가합니다.
 
         출력 필드:
-        - instruction: 강화된 지시문 (원본 + 학습목표 + 과제분석)
+        - instruction: 원본 유지
         - input: 원본 유지
         - output: 원본 유지
-        - metadata: 원본 유지
+        - metadata: 원본 + instructional_goal, task_analysis 추가
 
         Args:
             design_result: run_design_phase()에서 반환된 설계 결과
@@ -350,25 +350,19 @@ class IDMASPipeline:
             data = json.load(f)
         print(f"\n[Step 3] Loaded {len(data)} records from {source_path.name}")
 
-        # 3. Enhanced instruction으로 교체
+        # 3. instruction은 원본 유지, metadata에 설계 정보 추가
         print(f"\n[Step 4] Enhancing instructions...")
         enhanced_data = []
         for item in data:
-            original_instruction = item.get("instruction", "")
-
-            # Enhanced instruction 템플릿 적용
-            enhanced_instruction = ENHANCED_INSTRUCTION_TEMPLATE.format(
-                original_instruction=original_instruction,
-                instructional_goal=instructional_goal,
-                task_analysis=task_analysis
-            )
-
-            # 4개 필드만 유지
             new_item = {
-                "instruction": enhanced_instruction,
+                "instruction": item.get("instruction", ""),
                 "input": item.get("input", ""),
                 "output": item.get("output", ""),
-                "metadata": item.get("metadata", {})
+                "metadata": {
+                    **item.get("metadata", {}),
+                    "instructional_goal": instructional_goal,
+                    "task_analysis": task_analysis,
+                }
             }
 
             enhanced_data.append(new_item)
@@ -437,7 +431,6 @@ class IDMASPipeline:
                 'instruction': q.metadata.get('instruction', ''),
                 'input': q.question,
                 'output': q.metadata.get('full_output', q.ground_truth_formatted),
-                'problem_text': self.loader.format_question_as_prompt(q),
             })
 
         # LangGraph 파이프라인 실행
@@ -653,8 +646,9 @@ class IDMASEvaluator:
 
             print(f"\n[Eval] Question {i+1}/{len(questions)}")
 
-            # 프롬프트 생성
-            problem_text = self.loader.format_question_as_prompt(question)
+            # 프롬프트 생성 (instruction → system_message, input → user_message)
+            instruction = question.metadata.get('instruction', '')
+            problem_input = question.question
 
             print(f"Question: {question.question[:100]}...")
             ground_truth_clean = re.sub(r'\\boxed\{([^}]+)\}', r'\1', question.ground_truth)
@@ -663,7 +657,8 @@ class IDMASEvaluator:
             # 학생 모델 응답 생성
             print("\n[Student] Generating response...")
             student_response = self.student_model.generate_initial_response(
-                problem_text=problem_text
+                problem_text=problem_input,
+                system_message=instruction if instruction else None
             )
 
             print(f"\nStudent Response:\n{student_response[:500]}...")

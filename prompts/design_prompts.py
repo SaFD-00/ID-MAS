@@ -3,11 +3,18 @@
 이 모듈은 Dick & Carey 교수설계 모델의 각 단계에서 사용하는 프롬프트 템플릿을 정의합니다.
 LLM을 통해 교수설계 산출물(학습목표, 교수분석, 수행목표)을 자동 생성하는 데 활용됩니다.
 
-프롬프트 상수:
-    INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE: LLM 시스템 메시지 (Step 0)
-    INSTRUCTIONAL_GOAL_PROMPT: 학습목표 생성 프롬프트 (Step 0)
-    INSTRUCTIONAL_ANALYSIS_PROMPT: 교수분석 생성 프롬프트 (2단계)
-    PERFORMANCE_OBJECTIVES_PROMPT: 수행목표 진술 생성 프롬프트 (4단계)
+프롬프트 상수 (system/user 분리):
+    학습목표 (Step 0):
+        - INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE: 시스템 메시지 (역할 정의)
+        - INSTRUCTIONAL_GOAL_PROMPT: 사용자 프롬프트 (입력 데이터 + 지시)
+
+    교수분석 (2단계):
+        - INSTRUCTIONAL_ANALYSIS_SYSTEM_PROMPT: 시스템 메시지 (역할 정의)
+        - INSTRUCTIONAL_ANALYSIS_USER_PROMPT: 사용자 프롬프트 (입력 데이터 + 지시)
+
+    수행목표 (4단계):
+        - PERFORMANCE_OBJECTIVES_SYSTEM_PROMPT: 시스템 메시지 (역할 정의)
+        - PERFORMANCE_OBJECTIVES_USER_PROMPT: 사용자 프롬프트 (입력 데이터 + 지시)
 
 Note:
     프롬프트 내용은 LLM이 이해하기 쉽도록 영어로 작성되어 있습니다.
@@ -36,10 +43,10 @@ Respond with valid JSON only."""
 INSTRUCTIONAL_GOAL_PROMPT = """You are given a sample of items representing a specific task domain. These items are used to evaluate the student you are teaching. Your mission is to analyze the entire test set and determine a core instructional requirement that defines the instructional goal.
 
 ## Instructions
-1. **Analyze the input test items** to identify the ultimate action the model must demonstrate to provide appropriate answers. Focus on observable and transferable results.
-2. **Identify the highest cognitive level** required by the specific nature of the given data, based on the framework of Bloom's Taxonomy.
-3. **Avoid describing individual test items** or listing sub-skills, learning steps, or evaluation criteria.
-4. **Focus exclusively on deriving a single, comprehensive Instructional Goal** that encapsulates the core requirement across the entire set.
+1. Analyze the input test items to identify the ultimate action the model must demonstrate to provide appropriate answers. Focus on observable and transferable results.
+2. Identify the highest cognitive level required by the specific nature of the given data, based on the framework of Bloom's Taxonomy.
+3. Avoid describing individual test items or listing sub-skills, learning steps, or evaluation criteria.
+4. Focus exclusively on deriving a single, comprehensive Instructional Goal that encapsulates the core requirement across the entire set.
 
 
 ## Output Requirements
@@ -78,17 +85,17 @@ Below are {sample_count} representative samples from the dataset:
 
 
 # ==============================================================================
-# 2단계: 교수분석 (Instructional Analysis)
+# 2단계: 교수분석 (Instructional Analysis) — system/user 분리
 # ------------------------------------------------------------------------------
 # Dick & Carey 모델의 2단계로, 학습목표를 달성하기 위한
 # 하위 기능(Subskills)과 과제(Subtasks)의 위계적 구조를 분석합니다.
 # Anderson & Krathwohl의 개정된 Bloom 분류체계를 기반으로 합니다.
+# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
 # ==============================================================================
 
-INSTRUCTIONAL_ANALYSIS_PROMPT = """
-You are an instructional design expert. Perform the Instructional Analysis step of the Dick & Carey model for the learning objective provided below.
+INSTRUCTIONAL_ANALYSIS_SYSTEM_PROMPT = """You are an instructional design expert. Perform the Instructional Analysis step of the Dick & Carey model for the learning objective provided below."""
 
-[Learning objective]: {learning_objective}
+INSTRUCTIONAL_ANALYSIS_USER_PROMPT = """[Learning objective]: {learning_objective}
 
 [Instructions]
 Perform the Instructional Analysis and construct a hierarchical structure in the form of: Instructional Goal → Subskills → Subtasks.
@@ -110,19 +117,19 @@ Instructional Goal: [Learning objective statement] (learning outcome)
 
 
 # ==============================================================================
-# 4단계: 수행목표 진술 (Performance Objectives)
+# 4단계: 수행목표 진술 (Performance Objectives) — system/user 분리
 # ------------------------------------------------------------------------------
 # Dick & Carey 모델의 4단계로, 교수분석 결과를 바탕으로
 # 학습자가 달성해야 할 구체적인 수행목표를 진술합니다.
 # 각 수행목표는 행동(Behavior), 조건(Condition), 기준(Criterion)을 하나의 문장으로 통합합니다.
+# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
 # ==============================================================================
 
-PERFORMANCE_OBJECTIVES_PROMPT = """
-You are an instructional designer specializing in the Dick and Carey instructional design model, and a researcher in LLM learning methodologies.
+PERFORMANCE_OBJECTIVES_SYSTEM_PROMPT = """You are an instructional designer specializing in the Dick and Carey instructional design model, and a researcher in LLM learning methodologies.
 Based on the provided Instructional Goal and Instructional Analysis Result, generate a set of Performance Objectives that will serve as the criteria for evaluating the observable performance within the LLM's reasoning process.
-Specifically, they should be created using information from the learning outcomes identified in the Instructional Analysis Results.
+Specifically, they should be created using information from the learning outcomes identified in the Instructional Analysis Results."""
 
-[Input Data]
+PERFORMANCE_OBJECTIVES_USER_PROMPT = """[Input Data]
 Instructional Analysis Result: {instructional_analysis}
 
 [Instructions]

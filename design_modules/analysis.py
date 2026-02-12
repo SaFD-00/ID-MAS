@@ -17,7 +17,7 @@
     >>> result = analyzer.analyze("학습 목표 텍스트")
 """
 from models.teacher_wrapper import TeacherModelWrapper
-from prompts.design_prompts import INSTRUCTIONAL_ANALYSIS_PROMPT
+from prompts.design_prompts import INSTRUCTIONAL_ANALYSIS_SYSTEM_PROMPT, INSTRUCTIONAL_ANALYSIS_USER_PROMPT
 from typing import Dict, Any
 import json
 
@@ -65,12 +65,13 @@ class InstructionalAnalysis:
 
         for attempt in range(1, max_retries + 1):
             try:
-                prompt = INSTRUCTIONAL_ANALYSIS_PROMPT.format(
+                system_message = INSTRUCTIONAL_ANALYSIS_SYSTEM_PROMPT
+                user_prompt = INSTRUCTIONAL_ANALYSIS_USER_PROMPT.format(
                     learning_objective=learning_objective
                 )
 
                 # LLM으로 분석 수행
-                result_text = self.llm.generate(prompt)
+                result_text = self.llm.generate(user_prompt, system_message=system_message)
 
                 if not result_text or not result_text.strip():
                     raise ValueError("Empty response from LLM")

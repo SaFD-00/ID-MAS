@@ -16,7 +16,7 @@ Dick & Carey 모델의 수행목표 진술 단계를 구현합니다.
     >>> result = obj_gen.generate_objectives(analysis_result)
 """
 from models.teacher_wrapper import TeacherModelWrapper
-from prompts.design_prompts import PERFORMANCE_OBJECTIVES_PROMPT
+from prompts.design_prompts import PERFORMANCE_OBJECTIVES_SYSTEM_PROMPT, PERFORMANCE_OBJECTIVES_USER_PROMPT
 from typing import Dict, Any, List
 import json
 
@@ -65,12 +65,13 @@ class PerformanceObjectives:
 
         for attempt in range(1, max_retries + 1):
             try:
-                prompt = PERFORMANCE_OBJECTIVES_PROMPT.format(
+                system_message = PERFORMANCE_OBJECTIVES_SYSTEM_PROMPT
+                user_prompt = PERFORMANCE_OBJECTIVES_USER_PROMPT.format(
                     instructional_analysis=instructional_analysis
                 )
 
                 # LLM으로 JSON 형식으로 생성
-                result = self.llm.generate_json(prompt)
+                result = self.llm.generate_json(user_prompt, system_message=system_message)
 
                 if not result:
                     raise ValueError("Empty response from LLM")

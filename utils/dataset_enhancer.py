@@ -12,14 +12,6 @@ from config.config import create_teacher_config, get_model_short_name
 from config.domains import DATASET_TO_DOMAIN, TRAINING_DATASETS
 from design_modules.instructional_goal import InstructionalGoalGenerator
 from design_modules.analysis import InstructionalAnalysis
-from prompts.learning_prompts import SCAFFOLDING_SYSTEM_PROMPT
-
-
-# Enhanced instruction template for high-quality SFT training data
-# SCAFFOLDING_SYSTEM_PROMPT 기반으로 학습 파이프라인과 일관된 instruction 생성
-ENHANCED_INSTRUCTION_TEMPLATE = """{original_instruction}
-
-""" + SCAFFOLDING_SYSTEM_PROMPT
 
 
 class DataEnhancer:
@@ -119,10 +111,11 @@ class DataEnhancer:
         instructional_goal: str,
         task_analysis: str
     ) -> List[Dict]:
-        """데이터에 학습목표와 과제분석이 포함된 enhanced instruction을 적용합니다.
+        """데이터에 학습목표와 과제분석 메타데이터를 추가합니다.
 
-        instruction 필드에 enhanced instruction을 직접 적용하여
-        SFT 학습 시 향상된 프롬프트가 사용되도록 합니다.
+        instruction 필드는 원본 그대로 유지하고,
+        instructional_goal과 task_analysis는 metadata에 저장합니다.
+        SCAFFOLDING_SYSTEM_PROMPT와의 결합은 학습 파이프라인에서 동적으로 수행됩니다.
 
         Args:
             data: 원본 데이터 리스트
@@ -130,25 +123,19 @@ class DataEnhancer:
             task_analysis: 과제 분석
 
         Returns:
-            향상된 instruction이 적용된 데이터 리스트
+            메타데이터가 추가된 데이터 리스트
         """
         enhanced = []
         for item in data:
-            original_instruction = item.get("instruction", "")
-
-            # Enhanced instruction 생성
-            enhanced_instruction = ENHANCED_INSTRUCTION_TEMPLATE.format(
-                original_instruction=original_instruction,
-                instructional_goal=instructional_goal,
-                task_analysis=task_analysis
-            )
-
-            # 깔끔한 구조로 새 아이템 생성
             new_item = {
-                "instruction": enhanced_instruction,
+                "instruction": item.get("instruction", ""),
                 "input": item.get("input", ""),
                 "output": item.get("output", ""),
-                "metadata": item.get("metadata", {})
+                "metadata": {
+                    **item.get("metadata", {}),
+                    "instructional_goal": instructional_goal,
+                    "task_analysis": task_analysis,
+                }
             }
 
             enhanced.append(new_item)

@@ -203,9 +203,10 @@ def _process_single_shot(
         QuestionResult 객체
     """
     response = student_model.generate_initial_response_with_scaffolding(
-        problem_text=question["problem_text"],
+        problem_text=question["input"],
         task_analysis=task_analysis,
         instructional_goal=instructional_goal,
+        dataset_prompt=question.get("instruction", ""),
     )
 
     predicted = answer_extractor.extract(response)
@@ -216,7 +217,6 @@ def _process_single_shot(
         instruction=question.get("instruction", ""),
         input=question["input"],
         output=question["output"],
-        _problem_text=question["problem_text"],  # 내부 처리용
         initial_response=response,
         predicted_answer=predicted,
         scaffolding_correct=is_correct,
@@ -283,21 +283,23 @@ def _process_iterative_scaffolding(
         if iteration == 1:
             # Initial response with scaffolding system prompt
             response = student_model.generate_initial_response_with_scaffolding(
-                problem_text=question["problem_text"],
+                problem_text=question["input"],
                 task_analysis=task_analysis,
                 instructional_goal=instructional_goal,
+                dataset_prompt=question.get("instruction", ""),
             )
             student_input = {
                 "system_message": student_model.get_initial_system_message(
                     instructional_goal=instructional_goal,
                     task_analysis=task_analysis,
+                    dataset_prompt=question.get("instruction", ""),
                 ),
-                "user_message": question["problem_text"],
+                "user_message": question["input"],
             }
         else:
             # Step 4: Student responds using teacher scaffolding artifact
             response = student_model.respond_to_feedback(
-                problem_text=question["problem_text"],
+                problem_text=question["input"],
                 scaffolding_text=last_feedback,
                 task_analysis=task_analysis,
                 instructional_goal=instructional_goal,
@@ -310,7 +312,7 @@ def _process_iterative_scaffolding(
                     instructional_goal=instructional_goal,
                     dataset_prompt=question.get("instruction", ""),
                 ),
-                "user_message": question["problem_text"],
+                "user_message": question["input"],
             }
 
         conversation_history.append({
@@ -329,7 +331,7 @@ def _process_iterative_scaffolding(
             evaluation = teacher_model.evaluate_with_performance_objectives(
                 student_response=response,
                 performance_objectives=performance_objectives,
-                problem_text=question["problem_text"],
+                problem_text=question["input"],
                 ground_truth=question["output"],
                 iteration_number=iteration,
                 previous_response=previous_response,
@@ -350,8 +352,7 @@ def _process_iterative_scaffolding(
                             instruction=question.get("instruction", ""),
                             input=question["input"],
                             output=question["output"],
-                            _problem_text=question["problem_text"],
-                            initial_response=response,
+                                            initial_response=response,
                             predicted_answer=predicted,
                             scaffolding_correct=False,
                             sft_case=None,
@@ -401,13 +402,13 @@ def _process_iterative_scaffolding(
 
         # Step 3: Generate Scaffolding Artifact (HOT/LOT) with previous iteration summaries
         scaffolding_artifact = teacher_model.generate_scaffolding_artifact(
-            problem_text=question["problem_text"],
+            problem_text=question["input"],
             student_response=response,
             po_evaluation=evaluation,
             iteration_number=iteration,
             task_analysis=task_analysis,
             max_iterations=max_iterations,
-            previous_iteration_summaries=iteration_summaries,
+            previous_iteration_summaries=iteration_summaries[-1:] if iteration_summaries else [],
             instructional_goal=instructional_goal,
         )
 
@@ -433,8 +434,7 @@ def _process_iterative_scaffolding(
                         instruction=question.get("instruction", ""),
                         input=question["input"],
                         output=question["output"],
-                        _problem_text=question["problem_text"],
-                        initial_response=response,
+                                    initial_response=response,
                         predicted_answer=predicted,
                         scaffolding_correct=False,
                         sft_case=None,
@@ -501,15 +501,43 @@ def _process_iterative_scaffolding(
     # Build result
     if all_satisfied:
         iterations_needed = len(iterations)
+        sft_case = SFTCase.A.value if iterations_needed == 1 else SFTCase.B.value
 
-        if iterations_needed == 1:
-            # Case A: 1st iteration success - use student response as-is
-            sft_output = response
-            sft_case = SFTCase.A.value
+        # Step 5a: Teacher generates positive feedback for Self-Refinement
+        positive_feedback_result = teacher_model.generate_positive_feedback(
+            problem_text=question["input"],
+            student_response=response,
+            po_evaluation=evaluation,
+        )
+        positive_feedback_text = positive_feedback_result.get("feedback_text", "")
+
+        # Collect positive feedback metadata
+        if positive_feedback_result.get("_failure_metadata"):
+            step5a_meta = positive_feedback_result["_failure_metadata"].get("step5a_positive_feedback")
+            if step5a_meta:
+                skip_details["step5a_positive_feedback"] = step5a_meta
+
+        # Step 5b: Student self-refines response using positive feedback
+        if positive_feedback_text:
+            sft_output = student_model.self_refine_response(
+                problem_text=question["input"],
+                positive_feedback=positive_feedback_text,
+                task_analysis=task_analysis,
+                instructional_goal=instructional_goal,
+            )
+            print(f"    -> Self-Refinement completed (Case {sft_case})")
         else:
-            # Case B: 2-5th iteration success - use PO-passing response as-is
             sft_output = response
-            sft_case = SFTCase.B.value
+            print(f"    -> Self-Refinement skipped (no feedback), using original response (Case {sft_case})")
+
+        # Record self-refinement in conversation history
+        conversation_history.append({
+            "role": "self_refinement",
+            "positive_feedback": positive_feedback_result,
+            "refined_response": sft_output,
+            "original_response": response,
+            "iteration": iterations_needed,
+        })
 
         # Extract artifact references from student response (if available)
         artifact_references = student_model.extract_db_references(response) if iterations_needed > 1 else []
@@ -519,7 +547,6 @@ def _process_iterative_scaffolding(
             instruction=question.get("instruction", ""),
             input=question["input"],
             output=question["output"],
-            _problem_text=question["problem_text"],
             initial_response=response,
             predicted_answer=predicted,
             scaffolding_correct=True,
@@ -530,6 +557,11 @@ def _process_iterative_scaffolding(
                 "iterations_needed": iterations_needed,
                 "conversation_history": conversation_history,
                 "iterations": iterations,
+                "self_refinement": {
+                    "positive_feedback": positive_feedback_result,
+                    "original_response": response,
+                    "refined_response": sft_output,
+                },
             },
             scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
             artifact_references=artifact_references if artifact_references else None,
@@ -552,7 +584,7 @@ def _process_iterative_scaffolding(
 
         # Generate final solution with last iteration summary
         final_solution = teacher_model.generate_final_solution(
-            problem_text=question["problem_text"],
+            problem_text=question["input"],
             ground_truth=question["output"],
             task_analysis=task_analysis,
             student_weaknesses=student_weaknesses,
@@ -577,8 +609,7 @@ def _process_iterative_scaffolding(
                         instruction=question.get("instruction", ""),
                         input=question["input"],
                         output=question["output"],
-                        _problem_text=question["problem_text"],
-                        initial_response=response,
+                                    initial_response=response,
                         predicted_answer=predicted,
                         scaffolding_correct=False,
                         sft_case=None,
@@ -605,7 +636,6 @@ def _process_iterative_scaffolding(
             instruction=question.get("instruction", ""),
             input=question["input"],
             output=question["output"],
-            _problem_text=question["problem_text"],
             initial_response=reconstructed_response,
             predicted_answer=predicted,
             scaffolding_correct=False,
@@ -731,8 +761,8 @@ def _create_sft_entry(
 ) -> Optional[Dict[str, Any]]:
     """케이스에 따라 단일 SFT 엔트리를 생성합니다.
 
-    instruction은 enhanced data에서 가져온 값을 우선 사용하고,
-    없을 경우 SCAFFOLDING_SYSTEM_PROMPT 기반으로 생성합니다.
+    instruction은 원본 instruction + SCAFFOLDING_SYSTEM_PROMPT를
+    동적으로 결합하여 생성합니다.
 
     Args:
         result: QuestionResult 객체
@@ -752,17 +782,21 @@ def _create_sft_entry(
     if not output:
         return None
 
-    # Enhanced data에서 가져온 instruction 우선 사용
-    instruction = result.get("instruction", "")
-    if not instruction:
-        # Fallback: SCAFFOLDING_SYSTEM_PROMPT 기반 instruction 생성
-        if instructional_goal and task_analysis:
-            instruction = SCAFFOLDING_SYSTEM_PROMPT.format(
-                instructional_goal=instructional_goal,
-                task_analysis=task_analysis
-            )
+    # Dynamic instruction combination: original + SCAFFOLDING_SYSTEM_PROMPT
+    original_instruction = result.get("instruction", "")
+    if instructional_goal and task_analysis:
+        scaffolding_prompt = SCAFFOLDING_SYSTEM_PROMPT.format(
+            instructional_goal=instructional_goal,
+            task_analysis=task_analysis
+        )
+        if original_instruction:
+            instruction = f"{original_instruction}\n\n{scaffolding_prompt}"
         else:
-            instruction = "Solve the following problem step by step."
+            instruction = scaffolding_prompt
+    elif original_instruction:
+        instruction = original_instruction
+    else:
+        instruction = "Solve the following problem step by step."
 
     question_text = result["input"]
     return {
@@ -781,7 +815,7 @@ def _filter_internal_fields(result: Dict[str, Any]) -> Dict[str, Any]:
     """로깅용으로 top-level 내부 필드(_로 시작)를 제거합니다.
 
     정책:
-        - top-level `_` prefix 필드만 제거 (_problem_text 등)
+        - top-level `_` prefix 필드만 제거
         - nested 구조 내부의 `_` prefix 필드는 보존됨
           (conversation_history 내부의 _input_prompt, _raw_text,
            _failure_metadata, _raw_response 등)

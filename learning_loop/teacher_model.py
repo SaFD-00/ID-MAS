@@ -26,9 +26,14 @@ Iterative Scaffolding Pipeline에서 교사 역할을 담당합니다.
 """
 from models.teacher_wrapper import TeacherModelWrapper
 from prompts.learning_prompts import (
-    TEACHER_INTERVENTION_PROMPT,
-    SCAFFOLDING_ARTIFACT_PROMPT,
-    TEACHER_FINAL_SOLUTION_PROMPT,
+    TEACHER_INTERVENTION_SYSTEM_PROMPT,
+    TEACHER_INTERVENTION_USER_PROMPT,
+    SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT,
+    SCAFFOLDING_ARTIFACT_USER_PROMPT,
+    TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT,
+    TEACHER_FINAL_SOLUTION_USER_PROMPT,
+    TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT,
+    TEACHER_POSITIVE_FEEDBACK_USER_PROMPT,
 )
 from typing import Dict, Any, List
 import json
@@ -43,7 +48,7 @@ class TeacherModel:
     주요 기능:
         - Performance Objectives 기반 평가 (평가 전용)
         - HOT/LOT 구분 스캐폴딩 아티팩트 + 서술형 피드백 생성
-        - 성공 응답 재구성 (Case B, 평문)
+        - 긍정 피드백 생성 (Case A/B Self-Refinement용)
         - 최종 솔루션 생성 (Case C, 평문)
 
     Attributes:
@@ -88,14 +93,12 @@ class TeacherModel:
                 - all_satisfied (bool): 전체 PO 충족 여부
                 - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
-        prompt = TEACHER_INTERVENTION_PROMPT.format(
+        system_message = TEACHER_INTERVENTION_SYSTEM_PROMPT
+        user_prompt = TEACHER_INTERVENTION_USER_PROMPT.format(
             problem_text=problem_text,
             student_response=student_response,
             performance_objectives=json.dumps(performance_objectives, ensure_ascii=False, indent=2),
             ground_truth=ground_truth,
-            iteration_number=iteration_number,
-            prev_iteration_number=max(1, iteration_number - 1),
-            previous_response=previous_response if previous_response else "(This is the first attempt. No previous response.)",
         )
 
         # 최대 3회 재시도
@@ -104,9 +107,12 @@ class TeacherModel:
 
         for attempt in range(1, max_retries + 1):
             try:
-                result = self.llm.generate_json(prompt)
+                result = self.llm.generate_json(user_prompt, system_message=system_message)
                 # _raw_response는 generate_json에서 자동 포함됨 (Task 1)
-                result['_input_prompt'] = prompt
+                result['_input_prompt'] = {
+                    "system_message": system_message,
+                    "user_message": user_prompt,
+                }
 
                 # Ensure required fields exist
                 if 'performance_evaluation' not in result:
@@ -137,7 +143,10 @@ class TeacherModel:
         return {
             "performance_evaluation": [],
             "all_satisfied": False,
-            "_input_prompt": prompt,
+            "_input_prompt": {
+                "system_message": system_message,
+                "user_message": user_prompt,
+            },
             "_failure_metadata": {
                 "step2_performance_objectives_evaluation": {
                     "is_fallback": True,
@@ -195,7 +204,8 @@ class TeacherModel:
 
         previous_summaries_str = self._format_iteration_summaries(previous_iteration_summaries)
 
-        prompt = SCAFFOLDING_ARTIFACT_PROMPT.format(
+        system_message = SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT
+        user_prompt = SCAFFOLDING_ARTIFACT_USER_PROMPT.format(
             problem_text=problem_text,
             student_response=student_response[:2000],
             po_evaluation=json.dumps(po_evaluation, ensure_ascii=False, indent=2),
@@ -210,9 +220,12 @@ class TeacherModel:
 
         for attempt in range(1, max_retries + 1):
             try:
-                raw_text = self.llm.generate(prompt)
+                raw_text = self.llm.generate(user_prompt, system_message=system_message)
                 result = self._parse_scaffolding_text(raw_text)
-                result['_input_prompt'] = prompt
+                result['_input_prompt'] = {
+                    "system_message": system_message,
+                    "user_message": user_prompt,
+                }
 
                 # Ensure required fields exist
                 if 'scaffolding_artifacts' not in result:
@@ -260,7 +273,10 @@ class TeacherModel:
             "scaffolding_artifacts": fallback_artifacts,
             "feedback": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
             "iteration_summary": "Student's response did not meet the performance objectives. Basic scaffolding was provided to guide improvement.",
-            "_input_prompt": prompt,
+            "_input_prompt": {
+                "system_message": system_message,
+                "user_message": user_prompt,
+            },
             "_failure_metadata": {
                 "step3_scaffolding_artifact_generation": {
                     "is_fallback": True,
@@ -269,6 +285,84 @@ class TeacherModel:
                     "max_retries_exceeded": max_retries
                 }
             }
+        }
+
+    def generate_positive_feedback(
+        self,
+        problem_text: str,
+        student_response: str,
+        po_evaluation: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Case A/B: 모든 PO를 충족한 학생에게 긍정 피드백을 생성합니다.
+
+        학생의 강점을 요약하고 응답 품질을 더 높이기 위한
+        구체적인 개선 제안을 제공합니다. Self-Refinement의 입력으로 사용됩니다.
+
+        Args:
+            problem_text: 문제 텍스트
+            student_response: 학생의 응답
+            po_evaluation: PO 평가 결과
+
+        Returns:
+            긍정 피드백 딕셔너리:
+                - feedback_text (str): 전체 피드백 텍스트
+                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
+        """
+        system_message = TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT
+        user_prompt = TEACHER_POSITIVE_FEEDBACK_USER_PROMPT.format(
+            problem_text=problem_text,
+            student_response=student_response[:2000],
+            po_evaluation=json.dumps(po_evaluation, ensure_ascii=False, indent=2),
+        )
+
+        max_retries = 3
+        errors = []
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                feedback_text = self.llm.generate(user_prompt, system_message=system_message)
+                return {
+                    "feedback_text": feedback_text,
+                    "_input_prompt": {
+                        "system_message": system_message,
+                        "user_message": user_prompt,
+                    },
+                    "_failure_metadata": {
+                        "step5a_positive_feedback": {
+                            "is_fallback": False,
+                            "attempts_needed": attempt,
+                        }
+                    },
+                }
+            except Exception as e:
+                errors.append(str(e))
+                if attempt < max_retries:
+                    print(f"  Warning: Positive feedback attempt {attempt}/{max_retries} failed: {e}. Retrying...")
+                else:
+                    print(f"  Warning: All {max_retries} positive feedback attempts failed. Last error: {e}")
+
+        # Fallback: PO 평가의 satisfied feedback으로 기본 피드백 구성
+        satisfied_feedbacks = []
+        for po in po_evaluation.get("performance_evaluation", []):
+            if po.get("is_satisfied", False) and po.get("feedback"):
+                satisfied_feedbacks.append(f"- {po['feedback']}")
+
+        fallback_text = "[Strengths]\n" + "\n".join(satisfied_feedbacks) if satisfied_feedbacks else ""
+
+        return {
+            "feedback_text": fallback_text,
+            "_input_prompt": {
+                "system_message": system_message,
+                "user_message": user_prompt,
+            },
+            "_failure_metadata": {
+                "step5a_positive_feedback": {
+                    "is_fallback": True,
+                    "failure_reason": "positive_feedback_generation_failed",
+                    "last_error": errors if errors else ["Unknown error"],
+                    "max_retries_exceeded": max_retries,
+                }
+            },
         }
 
     def _parse_scaffolding_text(self, text: str) -> Dict[str, Any]:
@@ -403,13 +497,15 @@ class TeacherModel:
         """
         weaknesses_str = "\n".join(f"- {w}" for w in student_weaknesses) if student_weaknesses else "- Unable to identify specific weaknesses"
 
-        prompt = TEACHER_FINAL_SOLUTION_PROMPT.format(
+        system_message = TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT.format(
+            max_iterations=max_iterations
+        )
+        user_prompt = TEACHER_FINAL_SOLUTION_USER_PROMPT.format(
             problem_text=problem_text,
             ground_truth=ground_truth,
             task_analysis=task_analysis[:1500],
             last_iteration_summary=last_iteration_summary if last_iteration_summary else "(No iteration summary available)",
             student_weaknesses=weaknesses_str,
-            max_iterations=max_iterations,
         )
 
         # Retry logic
@@ -419,11 +515,14 @@ class TeacherModel:
         for attempt in range(1, max_retries + 1):
             try:
                 # 평문 출력 (generate_json → generate)
-                plain_text_response = self.llm.generate(prompt, max_tokens=4096)
+                plain_text_response = self.llm.generate(user_prompt, system_message=system_message)
 
                 result = {
                     "solution_explanation": plain_text_response,
-                    "_input_prompt": prompt,
+                    "_input_prompt": {
+                        "system_message": system_message,
+                        "user_message": user_prompt,
+                    },
                     "_raw_output": plain_text_response,
                 }
 
@@ -453,7 +552,10 @@ Let me solve this problem step by step.
 Following the correct approach:
 
 The answer is \\boxed{{{ground_truth}}}""",
-            "_input_prompt": prompt,
+            "_input_prompt": {
+                "system_message": system_message,
+                "user_message": user_prompt,
+            },
             "_failure_metadata": {
                 "step5_case_c_final_solution": {
                     "is_fallback": True,

@@ -554,20 +554,6 @@ class DomainLoader(BaseDatasetLoader):
         """이 도메인의 학습 데이터셋 목록을 반환합니다."""
         return list(self.config["training_datasets"].keys())
 
-    def format_question_as_prompt(self, question: QuestionData) -> str:
-        """JSON의 instruction을 사용하여 질문을 LLM 입력용으로 포맷팅합니다.
-
-        Args:
-            question: QuestionData 객체
-
-        Returns:
-            포맷팅된 프롬프트 문자열
-        """
-        instruction = question.metadata.get("instruction", "")
-        if instruction:
-            return f"{instruction}\n\n{question.question}"
-        return question.question
-
     def format_ground_truth(self, question: QuestionData) -> str:
         """Teacher 모델 평가용 정답을 포맷팅합니다.
 

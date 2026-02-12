@@ -8,19 +8,23 @@
     스캐폴딩 시스템:
         - SCAFFOLDING_SYSTEM_PROMPT: 학생 모델 시스템 프롬프트
 
-    교사 개입:
-        - TEACHER_INTERVENTION_PROMPT: 수행목표 평가 (평가 전용)
-        - SCAFFOLDING_ARTIFACT_PROMPT: 스캐폴딩 아티팩트 + 서술형 피드백 + iteration summary 생성
+    교사 개입 (system/user 분리):
+        - TEACHER_INTERVENTION_SYSTEM_PROMPT / _USER_PROMPT: 수행목표 평가
+        - SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT / _USER_PROMPT: 스캐폴딩 아티팩트 생성
 
     학생 응답:
-        - STUDENT_FEEDBACK_RESPONSE_PROMPT: SCAFFOLDING_SYSTEM_PROMPT 기반 피드백 응답
+        - STUDENT_FEEDBACK_RESPONSE_PROMPT: 피드백 기반 개선 응답 (system 전용)
+
+    Self-Refinement (Case A/B):
+        - TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT / _USER_PROMPT: 긍정 피드백 생성
+        - STUDENT_SELF_REFINEMENT_PROMPT: Self-Refinement 응답 (system 전용)
 
     결과 재구성:
-        - TEACHER_FINAL_SOLUTION_PROMPT: 최종 해답 제공 (Case C, 평문)
+        - TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT / _USER_PROMPT: 최종 해답 제공 (Case C)
 
 학습 케이스:
-    Case A: 첫 시도에 정답 → 원본 응답 사용
-    Case B: 스캐폴딩 후 정답 → PO 통과한 응답 직접 사용
+    Case A: 첫 시도에 정답 → Self-Refined 응답 사용
+    Case B: 스캐폴딩 후 정답 → Self-Refined 응답 사용
     Case C: 최대 반복 후 실패 → 교사 해답 제공 (last iteration summary 기반)
 """
 
@@ -55,18 +59,18 @@ You must adhere to the specific performance procedures and required knowledge/sk
 
 
 # ==============================================================================
-# 교사 개입 프롬프트 (Teacher Intervention Prompt) — 평가 전용
+# 교사 개입 프롬프트 (Teacher Intervention) — 평가 전용
 # ------------------------------------------------------------------------------
 # ReAct 스타일 학습 루프에서 교사 모델이 학생 응답을 평가합니다.
-# 피드백 생성은 SCAFFOLDING_ARTIFACT_PROMPT에서 담당합니다.
-# 출력: performance_evaluation JSON (objective_content, is_satisfied, feedback)
+# 피드백 생성은 SCAFFOLDING_ARTIFACT 프롬프트에서 담당합니다.
+# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
 # ==============================================================================
 
-TEACHER_INTERVENTION_PROMPT = """You are a teacher supporting the learning of a student.
+TEACHER_INTERVENTION_SYSTEM_PROMPT = """You are a teacher supporting the learning of a student.
 
-Your role is to evaluate the student's response against the established performance objectives. You must monitor the student's reasoning steps to ensure they meet the performance objectives.
+Your role is to evaluate the student's response against the established performance objectives. You must monitor the student's reasoning steps to ensure they meet the performance objectives."""
 
-[Input Data]
+TEACHER_INTERVENTION_USER_PROMPT = """[Input Data]
 - Problem: {problem_text}
 - Student response: {student_response}
 - Performance objectives: {performance_objectives}
@@ -91,21 +95,19 @@ Evaluate the student model's response according to the following rules.
   ]
 }}
 
-Output ONLY valid JSON.
-"""
+Output ONLY valid JSON."""
 
 
 # ==============================================================================
-# 피드백에 대한 학생 응답 프롬프트
+# 피드백에 대한 학생 응답 프롬프트 (system 전용)
 # ------------------------------------------------------------------------------
 # SCAFFOLDING_SYSTEM_PROMPT를 기반으로 교사의 피드백을 통합하여
 # 학생 모델이 개선된 응답을 생성합니다.
-# system message로 사용됩니다 (user message는 problem_text만 전달).
+# system message로 사용됩니다 (user message는 input만 전달).
+# dataset_prompt(original instruction)는 호출 측에서 prepend합니다.
 # ==============================================================================
 
-STUDENT_FEEDBACK_RESPONSE_PROMPT = """{dataset_prompt}
-
-{scaffolding_system_prompt}
+STUDENT_FEEDBACK_RESPONSE_PROMPT = """{scaffolding_system_prompt}
 
 [Scaffolding Artifact]
 Your teacher has evaluated your previous response and designed the following scaffolding to guide your improvement:
@@ -129,14 +131,14 @@ Your teacher has evaluated your previous response and designed the following sca
 # Dick & Carey 모델 기반의 스캐폴딩 아티팩트를 생성합니다.
 # 실패한 수행목표에 대해 HOT/LOT 기술 유형에 따라
 # 적절한 스캐폴딩(전략 제안, 부분 예시, 피드백 등)을 설계합니다.
-# 학생에게 전달할 서술형 feedback도 함께 생성합니다.
+# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
 # ==============================================================================
 
-SCAFFOLDING_ARTIFACT_PROMPT = """You are an instructional design expert (Dick & Carey model) creating a Scaffolding Artifact to help a student improve.
+SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT = """You are an instructional design expert (Dick & Carey model) creating a Scaffolding Artifact to help a student improve.
 
-Your role is to design pedagogical scaffolding for Performance Objectives that the student failed to meet. This scaffolding will be stored as a "Scaffolding Artifact" that the student can reference in their next attempt.
+Your role is to design pedagogical scaffolding for Performance Objectives that the student failed to meet. This scaffolding will be stored as a "Scaffolding Artifact" that the student can reference in their next attempt."""
 
-[Input Data]
+SCAFFOLDING_ARTIFACT_USER_PROMPT = """[Input Data]
 - Problem: {problem_text}
 - Student's Response: {student_response}
 - Performance Objectives Evaluation: {po_evaluation}
@@ -145,31 +147,31 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
 {previous_iteration_summaries}
 
 [Instructions]
-1. **Select scaffolding targets**: Focus on Performance Objectives with high failure rates that are critical for achieving the Instructional Goal.
+1. Select scaffolding targets: Generate scaffolding ONLY for Performance Objectives where is_satisfied is false in the evaluation. Do NOT create scaffolding for satisfied POs. The number of [Scaffolding for Task] sections must exactly match the number of unsatisfied POs.
 
-2. **Classify skill level**: For each unmet PO, determine if it requires:
-   - **HOT (High-Order Thinking)**: Analyze, Evaluate, Create
-   - **LOT (Low-Order Thinking)**: Remember, Understand, Apply
+2. Classify skill level: For each unmet PO, determine if it requires:
+   - HOT (High-Order Thinking): Analyze, Evaluate, Create
+   - LOT (Low-Order Thinking): Remember, Understand, Apply
 
-3. **Design appropriate scaffolding**:
+3. Design appropriate scaffolding:
 
-   For **HOT skills**:
+   For HOT skills:
    - Strategy suggestion: Propose an approach or reasoning strategy
-   - Partial worked example: Show partial reasoning (stop before the final answer)
+   - Partial worked example: Show partial reasoning but STOP before computing the final numerical result. Leave the last calculation step incomplete (e.g., "3 × 4 = ?"). Never show the complete answer.
    - Key attention points: What the student should focus on
 
-   For **LOT skills**:
+   For LOT skills:
    - Missed concept/information: Explicitly state what the student missed
    - Brief explanation: Provide a concise explanation to minimize cognitive load
 
-4. **Generate integrated narrative feedback**: Write a single cohesive feedback paragraph that integrates ALL unsatisfied POs into a natural narrative. This feedback will be directly provided to the student. It must include:
+4. Generate integrated narrative feedback: Write a single cohesive feedback paragraph that integrates ALL unsatisfied POs into a natural narrative. This feedback will be directly provided to the student. It must include:
    (a) Error analysis: What the student got wrong and why
    (b) Improvement direction: The fundamental approach the student should take
    (c) Verification steps: Concrete intermediate steps the student should check
 
-5. **Do NOT reveal correct answers** - guide reasoning, don't solve.
+5. Do NOT reveal correct answers — guide reasoning, don't solve.
 
-6. **Generate iteration summary**: Write a concise summary of THIS iteration that captures:
+6. Generate iteration summary: Write a concise summary of THIS iteration that captures:
    (a) What the student attempted and how (brief response summary)
    (b) Which Performance Objectives were not met and why
    (c) What scaffolding was provided and the key guidance direction
@@ -183,28 +185,27 @@ Your role is to design pedagogical scaffolding for Performance Objectives that t
 [Instructional Analysis]
 {task_analysis}
 
-[Scaffolding for Task [1] (High Order Skill)]:
-- Target Objective: <the specific unmet Performance Objective>
-- Cognitive Level: Analyze / Evaluate / Create
+[Scaffolding for Task [1] (High Order Skill / Low Order Skill)]:
+- Target Objective: <Copy the FULL text of the unmet Performance Objective VERBATIM from the evaluation. Do NOT paraphrase, summarize, or use subskill names from the Instructional Analysis.>
+- Cognitive Level: Analyze / Evaluate / Create / Remember / Understand / Apply
 - Failure Analysis: <why the student failed this objective>
-- Suggested Strategy:
-  (a) Strategy 1: <approach or reasoning strategy>
-      - Partial worked example (stop before the final answer):
-        <partial reasoning showing key steps>
-  (b) Strategy 2: <alternative approach>
-      - Teacher's reasoning clarification
-        (why this strategy should be considered):
-        <explanation>
-- Key Attention Points: <what the student should focus on>
 
-[Scaffolding for Task [2] (Low Order Skill)]:
-- Target Objective: <the specific unmet Performance Objective>
-- Cognitive Level: Remember / Understand / Apply
-- Failure Analysis: <why the student failed>
-- Missed Concept/Information: <what the student missed>
-- Brief Explanation: <concise explanation to minimize cognitive load>
+  If High Order Skill:
+  - Suggested Strategy:
+    (a) Strategy 1: <approach or reasoning strategy>
+        - Partial worked example (stop before the final answer):
+          <partial reasoning showing key steps — leave the last calculation incomplete>
+    (b) Strategy 2: <alternative approach>
+        - Teacher's reasoning clarification (why this strategy should be considered):
+          <explanation of the APPROACH only — do NOT compute or reveal the final answer>
+  - Key Attention Points: <what the student should focus on>
 
-(Repeat [Scaffolding for Task [N] ...] sections as needed for each unmet PO)
+  If Low Order Skill:
+  - Missed Concept/Information: <what the student missed>
+  - Brief Explanation: <concise explanation to minimize cognitive load>
+
+(If there are additional unsatisfied POs, repeat with [Scaffolding for Task [2]], [3], etc.
+Generate ONLY as many sections as there are unsatisfied POs. If only 1 PO is unsatisfied, output only 1 section.)
 
 [Feedback]
 <A single cohesive narrative paragraph integrating ALL unsatisfied POs.
@@ -220,27 +221,30 @@ This is directly provided to the student. Do NOT reveal correct answers.>
 This will be passed to the next iteration as context.>
 
 CRITICAL INSTRUCTIONS:
-1. Do NOT reveal correct answers or complete solutions
-2. Focus on guiding the reasoning process
-3. The [Feedback] section is the primary feedback delivered to the student - make it specific, actionable, and educational
-4. The [Iteration Summary] must capture BOTH the student's attempt AND the scaffolding provided
+1. Do NOT reveal correct answers or complete solutions.
+2. Focus on guiding the reasoning process.
+3. The [Feedback] section is the primary feedback delivered to the student — make it specific, actionable, and educational.
+4. The [Iteration Summary] must capture BOTH the student's attempt AND the scaffolding provided.
+5. In Strategy 2 (alternative approach), explain ONLY the reasoning approach. Do NOT compute the final answer or show complete numerical calculations that lead to the answer.
+6. The partial worked example must stop at least ONE step before the final answer. Show the setup and method, not the result.
 
 Output ONLY the structured text above. Do NOT include JSON formatting.
 """
 
 
 # ==============================================================================
-# 교사 최종 해답 프롬프트 (Case C) — 평문 출력
+# 교사 최종 해답 프롬프트 (Case C)
 # ------------------------------------------------------------------------------
 # 최대 반복 횟수 후에도 학생이 정답에 도달하지 못한 경우,
-# 교사가 완전한 해답을 제공합니다. 학생의 지속적인 약점을 직접 다루고
-# 각 단계가 왜 필요한지 설명하여 교육적 가치를 극대화합니다.
-# 출력: 풀이과정 + The answer is \boxed{answer} 형식의 평문 텍스트
+# 교사가 완전한 해답을 제공합니다.
+# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
 # ==============================================================================
 
-TEACHER_FINAL_SOLUTION_PROMPT = """You are a teacher providing a complete, correct solution after the student failed to solve the problem after {max_iterations} attempts.
+TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT = """You are a teacher providing a complete, correct solution after the student failed to solve the problem after {max_iterations} attempts.
 
-[Problem]
+The solution should be what an expert student would produce - clear, complete, and pedagogically valuable."""
+
+TEACHER_FINAL_SOLUTION_USER_PROMPT = """[Problem]
 {problem_text}
 
 [Correct Answer]
@@ -265,8 +269,6 @@ Generate a complete, educational solution that:
 4. Explains WHY each step is necessary (not just WHAT to do)
 5. Serves as an ideal learning example for SFT training
 
-The solution should be what an expert student would produce - clear, complete, and pedagogically valuable.
-
 [Output Format]
 Write your response as plain text (NOT JSON). Structure your solution clearly and end with the boxed answer.
 
@@ -284,4 +286,85 @@ Step 2: ...
 The answer is \\boxed{{correct answer}}
 
 Output ONLY the solution as plain text. Do not include any JSON, metadata, or commentary.
+"""
+
+
+# ==============================================================================
+# 교사 긍정 피드백 프롬프트 (Case A/B Self-Refinement용)
+# ------------------------------------------------------------------------------
+# 학생이 모든 PO를 충족한 경우, 교사가 강점 요약 및 개선 제안을 제공합니다.
+# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
+# ==============================================================================
+
+TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT = """You are a teacher providing constructive feedback to strengthen a student's already satisfactory response."""
+
+TEACHER_POSITIVE_FEEDBACK_USER_PROMPT = """[Problem]
+{problem_text}
+
+[Student's Response]
+{student_response}
+
+[Performance Objectives Evaluation]
+{po_evaluation}
+
+[Instructions]
+The student's response has satisfied all Performance Objectives. Provide feedback that will help the student further strengthen their response:
+
+1. Strengths Summary: For each satisfied PO, briefly describe what the student did well, citing specific parts of their response.
+
+2. Enhancement Suggestions: Identify 2-3 concrete ways the student could improve their response quality:
+   - Clearer reasoning structure or explanations
+   - More explicit connections between steps
+   - Better demonstration of the underlying concepts
+   - More rigorous justification of key steps
+
+3. Integration Guidance: Explain how to incorporate these improvements naturally into the existing solution without changing the core logic or final answer.
+
+[Output Format]
+
+[Strengths]
+- PO 1: <what was done well>
+- PO 2: <what was done well>
+...
+
+[Enhancement Suggestions]
+1. <specific improvement suggestion>
+2. <specific improvement suggestion>
+3. <specific improvement suggestion>
+
+[Integration Guidance]
+<How to naturally incorporate these improvements into the response>
+
+Output ONLY the structured text above.
+"""
+
+
+# ==============================================================================
+# 학생 Self-Refinement 프롬프트 (Case A/B) — system 전용
+# ------------------------------------------------------------------------------
+# 모든 PO를 충족한 학생이 교사의 긍정 피드백을 반영하여
+# 응답을 개선합니다. 최종 답은 유지하되 추론 과정의 질을 높입니다.
+# system message로 사용됩니다 (user message는 input만 전달).
+# ==============================================================================
+
+STUDENT_SELF_REFINEMENT_PROMPT = """{scaffolding_system_prompt}
+
+[Teacher's Feedback on Your Response]
+Your teacher has evaluated your response and confirmed that it meets all performance objectives.
+The following feedback highlights your strengths and suggests ways to further improve your response:
+
+{positive_feedback}
+
+[Instructions]
+1. Keep your correct reasoning and final answer unchanged.
+2. Integrate the enhancement suggestions naturally into your solution.
+3. Strengthen the clarity, structure, and justification of your reasoning.
+4. Demonstrate deeper understanding of the underlying concepts.
+5. Your improved response should be a complete, standalone solution (not a diff or list of changes).
+
+[Output Format]
+Write your complete improved solution following the original output format:
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
+- Step-by-step reasoning: [your improved detailed solution]
+- Final answer: "The answer is \\boxed{{your final answer}}"
 """

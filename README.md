@@ -8,7 +8,7 @@ ID-MAS는 교수 설계(Instructional Design) 이론을 LLM 학습에 적용한 
 
 **핵심 특징:**
 - **데이터셋별 분리 학습**: GSM8K, MATH 각각 고유한 Instructional Goal로 독립 학습
-- **Iterative Scaffolding Pipeline**: Performance Objectives 기반 평가 + HOT/LOT Scaffolding을 통한 6-Step 반복 학습 (최대 5회 반복)
+- **Iterative Scaffolding Pipeline**: Performance Objectives 기반 평가 + HOT/LOT Scaffolding + Self-Refinement을 통한 반복 학습 (최대 5회 반복)
 - **LangGraph 기반 워크플로우**: StateGraph 상태 관리, 체크포인트 기반 Resume 지원
 
 ## 빠른 시작
