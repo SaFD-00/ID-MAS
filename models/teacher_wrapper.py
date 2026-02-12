@@ -31,7 +31,8 @@ from typing import Dict, Any, Optional, List
 from models.base_wrapper import BaseModelWrapper
 from models.local_model_mixin import LocalModelMixin
 from models.model_cache import ModelCache
-from config.config import DESIGN_MODEL_CONFIG, OPENAI_API_KEY
+from config import DESIGN_MODEL_CONFIG
+from config.api import OPENAI_API_KEY
 
 
 def _fix_control_characters(text: str) -> str:
@@ -272,14 +273,16 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
             # 로컬 모델: vLLM ModelCache를 통해 로드
             self._api_client = None
             self._is_custom_endpoint = False
+            self._gpu_id = self.config.get("gpu_id")
             cached = ModelCache.get_or_load(
                 self.model_name,
                 self.device,
                 tensor_parallel_size=self.config.get("tensor_parallel_size", 1),
                 gpu_memory_utilization=self.config.get("gpu_memory_utilization", 0.90),
+                gpu_id=self._gpu_id,
             )
             self.llm = cached["llm"]
-            print(f"[TeacherModelWrapper] Using local model (vLLM): {self.model_name}")
+            print(f"[TeacherModelWrapper] Using local model (vLLM): {self.model_name} (gpu_id={self._gpu_id})")
 
         # 로컬 모델용 생성 설정 (LocalModelMixin에서 사용)
         # JSON 생성을 위해 기본값을 4096으로 증가 (긴 응답 지원)

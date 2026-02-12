@@ -6,7 +6,7 @@
     format_samples_for_prompt: 샘플 데이터를 프롬프트용 문자열로 변환
     get_instructional_goal_prompt: 완성된 학습목표 생성 프롬프트 구성
 """
-from prompts.design_prompts import INSTRUCTIONAL_GOAL_PROMPT
+from prompts.design_prompts import INSTRUCTIONAL_GOAL_USER_PROMPT
 
 
 def format_samples_for_prompt(samples: list, max_samples: int = 20) -> str:
@@ -63,7 +63,7 @@ def get_instructional_goal_prompt(
     Returns:
         {sample_count}, {train_data} 등이 채워진 완성된 프롬프트 문자열
     """
-    template = custom_template or INSTRUCTIONAL_GOAL_PROMPT
+    template = custom_template or INSTRUCTIONAL_GOAL_USER_PROMPT
 
     train_data = format_samples_for_prompt(samples)
 

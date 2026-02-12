@@ -25,9 +25,11 @@ LangGraph 기반 Iterative Scaffolding Pipeline을 사용하여:
     python main.py --mode eval --method baseline --domain math --eval-dataset gsm8k
 """
 import sys
+import os
 import json
 import re
 import argparse
+import multiprocessing as mp
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, List
@@ -56,7 +58,6 @@ from config import (
     get_design_output_dir
 )
 from models.model_cache import ModelCache
-from utils.dataset_enhancer import DataEnhancer
 
 
 class IDMASPipeline:
@@ -93,7 +94,8 @@ class IDMASPipeline:
         student_model_name: Optional[str] = None,
         teacher_config: Optional[Dict] = None,
         resume: bool = False,
-        checkpoint_interval: int = 10
+        checkpoint_interval: int = 10,
+        student_gpu_id: Optional[int] = None
     ):
         """IDMASPipeline 인스턴스를 초기화합니다.
 
@@ -104,6 +106,7 @@ class IDMASPipeline:
             teacher_config: 교사 모델 설정. None이면 기본 OpenAI 모델 사용
             resume: 체크포인트에서 이어서 학습할지 여부
             checkpoint_interval: 체크포인트 저장 간격 (문제 수 기준)
+            student_gpu_id: Student 모델 GPU 인덱스. None이면 자동 할당.
         """
         self.domain = domain.lower()
         self.train_dataset = train_dataset.lower()
@@ -149,7 +152,7 @@ class IDMASPipeline:
         self.enhanced_data_dir = self.model_dirs["enhanced_data_dir"]
 
         # 파이프라인용 학생/교사 모델 초기화
-        self.student_model = StudentModel(model_name=self.student_model_name)
+        self.student_model = StudentModel(model_name=self.student_model_name, gpu_id=student_gpu_id)
         self.teacher_model = TeacherModel(teacher_config)
 
         # LangGraph 파이프라인 실행기 초기화
@@ -513,7 +516,8 @@ class IDMASEvaluator:
         domain: str,
         eval_dataset: str,
         student_model_name: Optional[str] = None,
-        eval_method: str = "baseline"
+        eval_method: str = "baseline",
+        student_gpu_id: Optional[int] = None
     ):
         """IDMASEvaluator 인스턴스를 초기화합니다.
 
@@ -522,6 +526,7 @@ class IDMASEvaluator:
             eval_dataset: 평가 데이터셋명 (예: "gsm8k", "svamp")
             student_model_name: 학생 모델명. None이면 기본 모델 사용
             eval_method: 평가 방법. "baseline", "sft", "sft_id-mas" 중 하나
+            student_gpu_id: Student GPU 인덱스. None이면 자동 할당.
         """
         self.domain = domain.lower()
         self.eval_dataset = eval_dataset.lower()
@@ -542,11 +547,12 @@ class IDMASEvaluator:
             model_name=self.student_model_name,
             use_sft_model=use_sft,
             use_sft_idmas_model=use_sft_idmas,
-            sft_domain=domain
+            sft_domain=domain,
+            gpu_id=student_gpu_id,
         )
 
         # 파일명용 모델 약칭
-        from config.config import get_model_short_name
+        from config.models import get_model_short_name
         self.model_short = get_model_short_name(self.student_model_name)
 
         # 평가 결과 디렉토리 (data/{domain}/eval/{Model}/)
@@ -751,6 +757,59 @@ class IDMASEvaluator:
         return self.answer_extractor
 
 
+def _resolve_gpu_allocation(args, student_model_name, teacher_model_name):
+    """GPU 할당을 결정합니다.
+
+    Args:
+        args: CLI 인자 (student_gpu, teacher_gpu 속성 포함)
+        student_model_name: Student 모델명
+        teacher_model_name: Teacher 모델명
+
+    Returns:
+        (student_gpu_id, teacher_gpu_id) 튜플. None이면 자동 할당.
+    """
+    student_gpu = getattr(args, 'student_gpu', None)
+    teacher_gpu = getattr(args, 'teacher_gpu', None)
+
+    is_api_teacher = teacher_model_name.startswith("gpt-")
+    is_local_teacher = not is_api_teacher
+
+    # 시나리오 1: teacher-gpu 지정 + API teacher → 경고, teacher-gpu 무시
+    if teacher_gpu is not None and is_api_teacher:
+        print(f"\n[GPU] WARNING: --teacher-gpu={teacher_gpu} ignored (teacher '{teacher_model_name}' is an API model)")
+        teacher_gpu = None
+
+    # 시나리오 2: 같은 로컬 모델 + 다른 GPU → 경고, student-gpu로 통일 (ModelCache 공유)
+    if (is_local_teacher
+            and teacher_model_name == student_model_name
+            and student_gpu is not None and teacher_gpu is not None
+            and student_gpu != teacher_gpu):
+        print(f"\n[GPU] WARNING: Same model '{teacher_model_name}' on different GPUs ({student_gpu} vs {teacher_gpu})")
+        print(f"[GPU] Using student-gpu={student_gpu} for both (ModelCache sharing)")
+        teacher_gpu = student_gpu
+
+    # 시나리오 3: 같은 로컬 모델 + student-gpu만 지정 → teacher-gpu도 동일하게 설정 (ModelCache 공유)
+    if (is_local_teacher
+            and teacher_model_name == student_model_name
+            and student_gpu is not None and teacher_gpu is None):
+        print(f"\n[GPU] Same model '{teacher_model_name}': setting teacher-gpu={student_gpu} (ModelCache sharing)")
+        teacher_gpu = student_gpu
+
+    # CUDA_VISIBLE_DEVICES 자동 설정
+    gpu_ids = set()
+    if student_gpu is not None:
+        gpu_ids.add(student_gpu)
+    if teacher_gpu is not None:
+        gpu_ids.add(teacher_gpu)
+
+    if gpu_ids and "CUDA_VISIBLE_DEVICES" not in os.environ:
+        cuda_visible = ",".join(str(g) for g in sorted(gpu_ids))
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible
+        print(f"[GPU] CUDA_VISIBLE_DEVICES set to: {cuda_visible}")
+
+    return student_gpu, teacher_gpu
+
+
 def run_train_mode(args):
     """학습 모드를 실행합니다.
 
@@ -765,11 +824,17 @@ def run_train_mode(args):
             - teacher_model: 교사 모델명 (선택)
             - resume: 이어서 학습 여부
             - run_design: 설계 단계 강제 실행 여부
+            - student_gpu: Student GPU 인덱스 (선택)
+            - teacher_gpu: Teacher GPU 인덱스 (선택)
     """
     # CLI 인자에서 설정 생성
     teacher_model_name = args.teacher_model or DEFAULT_TEACHER_MODEL
     student_model_name = args.student_model or DEFAULT_STUDENT_MODEL
-    teacher_config = create_teacher_config(teacher_model_name)
+
+    # GPU 할당 결정
+    student_gpu_id, teacher_gpu_id = _resolve_gpu_allocation(args, student_model_name, teacher_model_name)
+
+    teacher_config = create_teacher_config(teacher_model_name, gpu_id=teacher_gpu_id)
 
     print(f"\n{'=' * 60}")
     print(f"ID-MAS: TRAIN MODE (Iterative Scaffolding Pipeline)")
@@ -778,6 +843,10 @@ def run_train_mode(args):
     print(f"Train Dataset: {args.train_dataset}")
     print(f"Student Model: {student_model_name}")
     print(f"Teacher Model: {teacher_model_name}")
+    if student_gpu_id is not None:
+        print(f"Student GPU: {student_gpu_id}")
+    if teacher_gpu_id is not None:
+        print(f"Teacher GPU: {teacher_gpu_id}")
     print(f"Resume: {args.resume}")
 
     # 로컬 모델인 경우 Teacher/Student 동일 여부 확인
@@ -795,7 +864,8 @@ def run_train_mode(args):
         student_model_name=args.student_model,
         teacher_config=teacher_config,
         resume=args.resume,
-        checkpoint_interval=10
+        checkpoint_interval=10,
+        student_gpu_id=student_gpu_id,
     )
 
     if pipeline.instructional_goal:
@@ -856,8 +926,9 @@ def run_train_mode(args):
     loaded_models = ModelCache.get_loaded_models()
     if loaded_models:
         print(f"\n[Model Cache] Loaded models: {len(loaded_models)}")
-        for model_name, device in loaded_models:
-            print(f"  - {model_name} @ {device}")
+        for model_name, device, gpu_id in loaded_models:
+            gpu_info = f" (gpu_id={gpu_id})" if gpu_id is not None else ""
+            print(f"  - {model_name} @ {device}{gpu_info}")
 
     print("=" * 60)
 
@@ -874,7 +945,15 @@ def run_eval_mode(args):
             - method: 평가 방법
             - student_model: 학생 모델명 (선택)
             - eval_resume: 이어서 평가 여부
+            - student_gpu: Student GPU 인덱스 (선택)
     """
+    student_gpu = getattr(args, 'student_gpu', None)
+
+    # CUDA_VISIBLE_DEVICES 자동 설정
+    if student_gpu is not None and "CUDA_VISIBLE_DEVICES" not in os.environ:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(student_gpu)
+        print(f"[GPU] CUDA_VISIBLE_DEVICES set to: {student_gpu}")
+
     print(f"\n{'=' * 60}")
     print(f"ID-MAS: EVAL MODE ({args.method.upper()})")
     print(f"{'=' * 60}")
@@ -882,6 +961,8 @@ def run_eval_mode(args):
     print(f"Domain: {args.domain}")
     print(f"Eval Dataset: {args.eval_dataset}")
     print(f"Model: {args.student_model or DEFAULT_STUDENT_MODEL}")
+    if student_gpu is not None:
+        print(f"Student GPU: {student_gpu}")
     print(f"{'=' * 60}\n")
 
     # 평가기 초기화
@@ -889,7 +970,8 @@ def run_eval_mode(args):
         domain=args.domain,
         eval_dataset=args.eval_dataset,
         student_model_name=args.student_model,
-        eval_method=args.method
+        eval_method=args.method,
+        student_gpu_id=student_gpu,
     )
 
     # 평가 실행
@@ -962,6 +1044,20 @@ Examples:
   python main.py --mode eval --method sft_id-mas \\
       --domain math --eval-dataset svamp \\
       --student-model Qwen/Qwen3-4B
+
+  # ========================================
+  # GPU 할당 (다중 GPU)
+  # ========================================
+
+  # 다른 로컬 모델을 다른 GPU에 할당
+  python main.py --mode train --domain math --train-dataset gsm8k \\
+      --student-model Qwen/Qwen3-4B --teacher-model Qwen/Qwen3-32B \\
+      --student-gpu 0 --teacher-gpu 1
+
+  # API Teacher + Student GPU 지정
+  python main.py --mode train --domain math --train-dataset gsm8k \\
+      --student-model Qwen/Qwen3-8B --teacher-model gpt-5.2 \\
+      --student-gpu 0
         """
     )
 
@@ -1047,6 +1143,24 @@ Examples:
         help=f"교사 모델 (설계 및 평가용). 기본값: {DEFAULT_TEACHER_MODEL}"
     )
 
+    # ========================================
+    # GPU 할당 옵션
+    # ========================================
+    parser.add_argument(
+        "--student-gpu",
+        type=int,
+        default=None,
+        dest="student_gpu",
+        help="Student 모델 GPU 인덱스 (예: 0, 1). 미지정 시 CUDA_VISIBLE_DEVICES 사용"
+    )
+    parser.add_argument(
+        "--teacher-gpu",
+        type=int,
+        default=None,
+        dest="teacher_gpu",
+        help="Teacher 모델 GPU 인덱스 (예: 0, 1). 미지정 시 CUDA_VISIBLE_DEVICES 사용. API 모델은 무시"
+    )
+
     args = parser.parse_args()
 
     # ========================================
@@ -1120,4 +1234,5 @@ Examples:
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()

@@ -20,10 +20,12 @@ from models.base_wrapper import BaseModelWrapper
 from models.teacher_wrapper import TeacherModelWrapper
 from models.student_wrapper import StudentModelWrapper
 from models.model_cache import ModelCache
+from models.remote_model import RemoteLLMProxy
 
 __all__ = [
     "BaseModelWrapper",
     "TeacherModelWrapper",
     "StudentModelWrapper",
     "ModelCache",
+    "RemoteLLMProxy",
 ]

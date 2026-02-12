@@ -16,7 +16,7 @@
     >>> loader = DomainLoader("math")
     >>> train_data = loader.load_training_data(dataset="gsm8k", limit=100)
     >>> eval_data = loader.load_eval_data("svamp", limit=50)
-    >>> instructional_goal = loader.get_learning_objective("gsm8k")
+    >>> eval_data = loader.load_eval_data("gsm8k", limit=50)
 """
 import json
 import random
@@ -26,6 +26,7 @@ from typing import List, Optional, Dict, Any
 
 from utils.base_loader import BaseDatasetLoader, QuestionData, AnswerType
 from utils.answer_extractor import extract_boxed_answer
+from config.domains import DOMAIN_CONFIG as GLOBAL_DOMAIN_CONFIG, DATA_DIR
 
 
 # Get project root directory
@@ -45,22 +46,6 @@ class DomainLoader(BaseDatasetLoader):
     평가 데이터는 데이터셋당 단일 파일에서 로드됩니다.
     """
 
-    # Instructional Goals for each training dataset
-    INSTRUCTIONAL_GOALS = {
-        # Math domain
-        "gsm8k": "Generate coherent, step-by-step mathematical reasoning in natural language that leads to a correct numerical answer for grade-school level math problems.",
-        "math": "Solve advanced mathematical problems by selecting appropriate mathematical concepts and constructing logically valid, multi-step reasoning that leads to a correct solution.",
-
-        # Logical domain
-        "reclor": "Analyze logical reasoning problems by comprehending complex passages, identifying logical relationships, and selecting the most appropriate conclusion based on formal reasoning principles.",
-
-        # Commonsense domain
-        "arc_c": "Apply commonsense scientific knowledge to solve elementary science problems by understanding fundamental concepts and selecting the correct answer from multiple choices.",
-
-        # BBH (Big Bench Hard)
-        "bbh": "Evaluate and solve various logical reasoning tasks including boolean expressions, formal fallacies, logical deduction, and object tracking.",
-    }
-
     DOMAIN_CONFIG = {
         "math": {
             "training_datasets": {
@@ -75,8 +60,6 @@ class DomainLoader(BaseDatasetLoader):
                 "mawps": {"filename": "mawps_test.json", "answer_type": AnswerType.LATEX},  # 분수 포함
             },
             "default_answer_type": AnswerType.NUMERIC,
-            "domain_category": "math_logic",
-            "data_dir": "data/math"
         },
         "logical": {
             "training_datasets": {
@@ -90,8 +73,6 @@ class DomainLoader(BaseDatasetLoader):
                 "bbh": {"filename": "bbh_test.json", "answer_type": AnswerType.TEXT},
             },
             "default_answer_type": AnswerType.MCQ,
-            "domain_category": "logical_reasoning",
-            "data_dir": "data/logical"
         },
         "commonsense": {
             "training_datasets": {
@@ -103,8 +84,6 @@ class DomainLoader(BaseDatasetLoader):
                 "openbookqa": {"filename": "openbookqa_test.json", "answer_type": AnswerType.MCQ},
             },
             "default_answer_type": AnswerType.MCQ,
-            "domain_category": "commonsense_reasoning",
-            "data_dir": "data/commonsense"
         }
     }
 
@@ -126,7 +105,7 @@ class DomainLoader(BaseDatasetLoader):
 
         self.domain = domain
         self.config = self.DOMAIN_CONFIG[domain]
-        self.data_dir = PROJECT_ROOT / self.config["data_dir"]
+        self.data_dir = GLOBAL_DOMAIN_CONFIG[domain]["data_dir"]
         self._current_eval_dataset: Optional[str] = None
 
     @property
@@ -142,7 +121,7 @@ class DomainLoader(BaseDatasetLoader):
     @property
     def domain_category(self) -> str:
         """도메인 카테고리를 반환합니다."""
-        return self.config["domain_category"]
+        return GLOBAL_DOMAIN_CONFIG[self.domain]["domain_category"]
 
     def load_data(
         self,
@@ -554,6 +533,20 @@ class DomainLoader(BaseDatasetLoader):
         """이 도메인의 학습 데이터셋 목록을 반환합니다."""
         return list(self.config["training_datasets"].keys())
 
+    def format_question_as_prompt(self, question: QuestionData) -> str:
+        """질문을 LLM 입력용 프롬프트로 포맷팅합니다.
+
+        Args:
+            question: QuestionData 객체
+
+        Returns:
+            포맷팅된 프롬프트 문자열
+        """
+        instruction = question.metadata.get("instruction", "") if question.metadata else ""
+        if instruction:
+            return f"{instruction}\n\n{question.question}"
+        return question.question
+
     def format_ground_truth(self, question: QuestionData) -> str:
         """Teacher 모델 평가용 정답을 포맷팅합니다.
 
@@ -564,32 +557,6 @@ class DomainLoader(BaseDatasetLoader):
             사람이 읽을 수 있는 정답 문자열
         """
         return question.ground_truth_formatted
-
-    def get_learning_objective(self, dataset: str) -> str:
-        """특정 학습 데이터셋의 Instructional Goal(학습 목표)을 반환합니다.
-
-        각 학습 데이터셋은 고유한 Instructional Goal을 가집니다:
-            - GSM8K: 초등 수학 단계별 추론
-            - MATH: 고급 수학 문제 해결
-            - ReClor: 논리적 추론 및 분석
-            - ARC-C: 상식 과학 문제 해결
-
-        Args:
-            dataset: 학습 데이터셋 이름 (gsm8k, math, reclor, arc_c)
-
-        Returns:
-            해당 데이터셋의 Instructional Goal 문자열
-
-        Raises:
-            ValueError: 알 수 없는 데이터셋인 경우
-        """
-        dataset = dataset.lower()
-        if dataset not in self.INSTRUCTIONAL_GOALS:
-            raise ValueError(
-                f"Unknown dataset '{dataset}'. "
-                f"Available: {list(self.INSTRUCTIONAL_GOALS.keys())}"
-            )
-        return self.INSTRUCTIONAL_GOALS[dataset]
 
     def get_available_subsets(self) -> Optional[List[str]]:
         """사용 가능한 평가 데이터셋을 서브셋으로 반환합니다."""
@@ -623,11 +590,6 @@ if __name__ == "__main__":
     math_loader = DomainLoader("math")
     print(f"  Available eval datasets: {math_loader.get_available_eval_datasets()}")
     print(f"  Training datasets: {math_loader.get_available_training_datasets()}")
-
-    # Test Instructional Goals
-    for dataset in math_loader.get_available_training_datasets():
-        print(f"\n  Instructional Goal for {dataset.upper()}:")
-        print(f"    {math_loader.get_learning_objective(dataset)[:80]}...")
 
     # Load a few training samples from GSM8K
     print("\n  Loading GSM8K training data (limit=3):")

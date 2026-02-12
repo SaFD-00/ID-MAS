@@ -98,8 +98,25 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 | 옵션 | 설명 | 값 |
 |------|------|-----|
 | `--mode` | 실행 모드 | `train`, `eval` (필수) |
-| `--model` | 학생 모델 선택 | `Qwen/Qwen3-1.7B` (기본값) |
+| `--student-model` | 학생 모델 선택 | `Qwen/Qwen3-1.7B` (기본값) |
 | `--teacher-model` | 교사/설계 모델 선택 | `gpt-5.2` (기본값) |
+| `--student-gpu` | Student 모델 GPU 인덱스 | 미지정 시 CUDA_VISIBLE_DEVICES 사용 |
+| `--teacher-gpu` | Teacher 모델 GPU 인덱스 | 미지정 시 CUDA_VISIBLE_DEVICES 사용 (API 모델은 무시) |
+
+### GPU 할당
+
+`--student-gpu`와 `--teacher-gpu`를 사용하여 모델별 GPU를 지정할 수 있습니다.
+
+| 시나리오 | Student | Teacher | GPU 할당 |
+|----------|---------|---------|----------|
+| **A** 같은 로컬 모델 | Qwen3-8B | Qwen3-8B | 같은 GPU, ModelCache 공유 |
+| **B** 다른 로컬 모델 | Qwen3-4B | Qwen3-32B | 각각 다른 GPU (subprocess) |
+| **C** API Teacher | Qwen3-8B | gpt-5.2 | student만 GPU, teacher는 API |
+
+**`CUDA_VISIBLE_DEVICES`와의 관계:**
+- `--student-gpu`/`--teacher-gpu` 지정 시 `CUDA_VISIBLE_DEVICES`가 자동 설정됩니다
+- 기존 `CUDA_VISIBLE_DEVICES=0 python main.py ...` 방식도 그대로 동작합니다
+- 두 가지를 동시에 사용할 경우 `CUDA_VISIBLE_DEVICES`가 우선합니다
 
 ### 학습 모드 (--mode train)
 
@@ -137,77 +154,93 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 
 #### Math 도메인
 ```bash
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 1
 ```
 
 #### Logical 도메인
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0
 ```
 
 #### Commonsense 도메인
 
 ```bash
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 1
 ```
 
 ### 평가
@@ -216,136 +249,136 @@ CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-
 
 ```bash
 # Baseline 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # SFT 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # SFT_ID-MAS 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset gsm8k \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # OOD 평가 (SVAMP)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain math --eval-dataset svamp \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain math --eval-dataset svamp \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset svamp \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 ```
 
 #### Logical 도메인
 
 ```bash
 # Baseline 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # SFT 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # SFT_ID-MAS 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset reclor \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # OOD 평가 (ANLI-R2)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain logical --eval-dataset anli_r2 \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain logical --eval-dataset anli_r2 \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset anli_r2 \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 # OOD 평가 (BBH 서브태스크 - 개별 평가)
 # 사용 가능한 서브태스크:
@@ -359,89 +392,112 @@ CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
 # - bbh_tracking_shuffled_objects_seven_objects
 # - bbh_web_of_lies
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain logical --eval-dataset bbh_boolean_expressions \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain logical --eval-dataset bbh_web_of_lies \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain logical --eval-dataset bbh_formal_fallacies \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset bbh_logical_deduction_three_objects \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 ```
 
 #### Commonsense 도메인
 
 ```bash
 # Baseline 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # SFT 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # SFT_ID-MAS 평가 (In-Domain)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-4B
+    --student-model Qwen/Qwen3-4B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-8B
+    --student-model Qwen/Qwen3-8B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset arc_c \
-    --model Qwen/Qwen3-32B
+    --student-model Qwen/Qwen3-32B --student-gpu 0
 
 # OOD 평가 (StrategyQA)
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method baseline \
+python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset strategyqa \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft \
+python main.py --mode eval --method sft \
     --domain commonsense --eval-dataset strategyqa \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
+python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset strategyqa \
-    --model Qwen/Qwen3-1.7B
+    --student-model Qwen/Qwen3-1.7B --student-gpu 0
+```
+
+### 멀티 GPU 할당
+
+```bash
+# 시나리오 B: 다른 로컬 모델을 다른 GPU에 할당
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-4B --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-8B --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+# 시나리오 C: API Teacher + Student GPU 지정
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-8B --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+# 평가 시 GPU 지정
+python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k \
+    --student-model Qwen/Qwen3-8B --student-gpu 1
 ```
 
 ---
@@ -450,70 +506,149 @@ CUDA_VISIBLE_DEVICES=0 python main.py --mode eval --method sft_id-mas \
 
 ```bash
 ## [1] Student Model: Qwen3-1.7B / Teacher Model: Qwen3-1.7B
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset math \
+python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
+python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B \
-    --teacher-model Qwen/Qwen3-1.7B
+    --teacher-model Qwen/Qwen3-1.7B \
+    --student-gpu 0
 
 ## [2] Student Model: Qwen3-4B / Teacher Model: Qwen3-4B
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset math \
+python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 0
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
+python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-4B \
-    --teacher-model Qwen/Qwen3-4B
+    --teacher-model Qwen/Qwen3-4B \
+    --student-gpu 0
 
 ## [3] Student Model: Qwen3-8B / Teacher Model: Qwen3-8B
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset gsm8k \
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain math --train-dataset math \
+python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain logical --train-dataset reclor \
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 1
 
-CUDA_VISIBLE_DEVICES=1 python main.py --mode train --domain commonsense --train-dataset arc_c \
+python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-8B \
-    --teacher-model Qwen/Qwen3-8B
+    --teacher-model Qwen/Qwen3-8B \
+    --student-gpu 1
 
-## [4] Student Model: Qwen3-32B / Teacher Model: Qwen3-32B
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset gsm8k \
-    --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+## [4] Student Model: Qwen3-4B / Teacher Model: Qwen3-32B (멀티 GPU)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain math --train-dataset math \
-    --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain logical --train-dataset reclor \
-    --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
 
-CUDA_VISIBLE_DEVICES=0 python main.py --mode train --domain commonsense --train-dataset arc_c \
-    --student-model Qwen/Qwen3-32B \
-    --teacher-model Qwen/Qwen3-32B
+python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+## [5] Student Model: Qwen3-8B / Teacher Model: Qwen3-32B (멀티 GPU)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+## [6] Student Model: Qwen3-4B / Teacher Model: gpt-5.2
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen3-4B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+## [7] Student Model: Qwen3-8B / Teacher Model: gpt-5.2
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
+
+python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen3-8B \
+    --teacher-model gpt-5.2 \
+    --student-gpu 0
 ```

@@ -37,7 +37,7 @@ AVAILABLE_TEACHER_MODELS = [
 DEFAULT_TEACHER_MODEL = "gpt-5.2"
 
 
-def create_teacher_config(model_name: str = None) -> dict:
+def create_teacher_config(model_name: str = None, gpu_id: int = None) -> dict:
     """교사 모델 설정 딕셔너리를 생성합니다.
 
     모델명에 따라 OpenAI API 설정 또는 로컬 HuggingFace 모델 설정을 반환합니다.
@@ -45,6 +45,8 @@ def create_teacher_config(model_name: str = None) -> dict:
 
     Args:
         model_name: 교사 모델명. None이면 DEFAULT_TEACHER_MODEL 사용
+        gpu_id: GPU 인덱스. None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
+            API 모델(gpt-*)인 경우 무시됩니다.
 
     Returns:
         모델 설정 딕셔너리. OpenAI 모델의 경우:
@@ -60,6 +62,7 @@ def create_teacher_config(model_name: str = None) -> dict:
         - max_new_tokens: 최대 생성 토큰 수
         - temperature: 샘플링 온도
         - do_sample: 샘플링 활성화 여부
+        - gpu_id: GPU 인덱스 (None이면 자동)
     """
     if model_name is None:
         model_name = DEFAULT_TEACHER_MODEL
@@ -79,7 +82,7 @@ def create_teacher_config(model_name: str = None) -> dict:
         }
 
     # 로컬 모델 설정 (vLLM)
-    return {
+    config = {
         "model": model_name,
         "device": "cuda",
         "max_new_tokens": 8192,
@@ -88,6 +91,11 @@ def create_teacher_config(model_name: str = None) -> dict:
         "tensor_parallel_size": 1,
         "gpu_memory_utilization": 0.90,
     }
+
+    if gpu_id is not None:
+        config["gpu_id"] = gpu_id
+
+    return config
 
 
 # =============================================================================
@@ -116,13 +124,14 @@ STUDENT_MODEL_BASE_CONFIG = {
 }
 
 
-def get_student_model_config(model_name: str = None) -> dict:
+def get_student_model_config(model_name: str = None, gpu_id: int = None) -> dict:
     """학생 모델 설정 딕셔너리를 생성합니다.
 
     기본 설정에 모델명을 추가하여 반환합니다.
 
     Args:
         model_name: 학생 모델명. None이면 DEFAULT_STUDENT_MODEL 사용
+        gpu_id: GPU 인덱스. None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
 
     Returns:
         모델 설정 딕셔너리:
@@ -131,6 +140,7 @@ def get_student_model_config(model_name: str = None) -> dict:
         - max_new_tokens: 최대 생성 토큰 수
         - temperature: 샘플링 온도
         - do_sample: 샘플링 활성화 여부
+        - gpu_id: GPU 인덱스 (None이면 자동)
 
     Raises:
         ValueError: 지원하지 않는 모델명인 경우
@@ -146,6 +156,9 @@ def get_student_model_config(model_name: str = None) -> dict:
 
     config = STUDENT_MODEL_BASE_CONFIG.copy()
     config["model_name"] = model_name
+
+    if gpu_id is not None:
+        config["gpu_id"] = gpu_id
 
     return config
 

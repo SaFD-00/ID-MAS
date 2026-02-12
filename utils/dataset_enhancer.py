@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.config import create_teacher_config, get_model_short_name
+from config.models import create_teacher_config, get_model_short_name
 from config.domains import DATASET_TO_DOMAIN, TRAINING_DATASETS
 from design_modules.instructional_goal import InstructionalGoalGenerator
 from design_modules.analysis import InstructionalAnalysis

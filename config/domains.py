@@ -52,7 +52,8 @@ DOMAIN_CONFIG = {
         "data_dir": DATA_DIR / "math",
         "training_datasets": ["gsm8k", "math"],
         "eval_datasets": ["gsm8k", "math", "svamp", "asdiv", "mawps"],
-        "default_eval": "gsm8k"
+        "default_eval": "gsm8k",
+        "domain_category": "math_logic",
     },
     "logical": {
         "data_dir": DATA_DIR / "logical",
@@ -61,13 +62,15 @@ DOMAIN_CONFIG = {
             "reclor", "anli_r2", "anli_r3",
             "bbh"  # 통합 BBH (모든 하위 태스크가 단일 파일, subtask 정보는 metadata에)
         ],
-        "default_eval": "reclor"
+        "default_eval": "reclor",
+        "domain_category": "logical_reasoning",
     },
     "commonsense": {
         "data_dir": DATA_DIR / "commonsense",
         "training_datasets": ["arc_c"],
         "eval_datasets": ["arc_c", "strategyqa", "openbookqa"],
-        "default_eval": "arc_c"
+        "default_eval": "arc_c",
+        "domain_category": "commonsense_reasoning",
     }
 }
 
@@ -218,7 +221,7 @@ def _load_instructional_goal_from_design(
     Returns:
         Instructional Goal 문자열 또는 None
     """
-    from config.config import get_model_short_name
+    from config.models import get_model_short_name
 
     try:
         teacher_short = get_model_short_name(teacher_model)

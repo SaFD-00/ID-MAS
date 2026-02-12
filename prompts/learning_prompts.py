@@ -4,23 +4,27 @@
 모든 프롬프트 템플릿을 정의합니다. 교사 모델의 지도 하에 학생 모델이
 단계적으로 문제 해결 능력을 향상시키는 ReAct 스타일 학습 루프를 지원합니다.
 
-프롬프트 카테고리:
-    스캐폴딩 시스템:
+프롬프트 (파이프라인 실행 순서):
+    Step 1 — 학생 초기 응답:
         - SCAFFOLDING_SYSTEM_PROMPT: 학생 모델 시스템 프롬프트
 
-    교사 개입 (system/user 분리):
+    Step 2 — 교사 PO 평가 (system/user 분리):
         - TEACHER_INTERVENTION_SYSTEM_PROMPT / _USER_PROMPT: 수행목표 평가
+
+    Step 3 — 스캐폴딩 아티팩트 생성 (system/user 분리, PO 미충족 시):
         - SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT / _USER_PROMPT: 스캐폴딩 아티팩트 생성
 
-    학생 응답:
+    Step 4 — 학생 재응답 (Iteration 2~5):
         - STUDENT_FEEDBACK_RESPONSE_PROMPT: 피드백 기반 개선 응답 (system 전용)
 
-    Self-Refinement (Case A/B):
+    Step 5a — 교사 긍정 피드백 (Case A/B, PO 충족 시):
         - TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT / _USER_PROMPT: 긍정 피드백 생성
+
+    Step 5b — 학생 Self-Refinement (Case A/B):
         - STUDENT_SELF_REFINEMENT_PROMPT: Self-Refinement 응답 (system 전용)
 
-    결과 재구성:
-        - TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT / _USER_PROMPT: 최종 해답 제공 (Case C)
+    Step 5c — 교사 최종 해답 (Case C, 최대 반복 후 실패):
+        - TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT / _USER_PROMPT: 최종 해답 제공
 
 학습 케이스:
     Case A: 첫 시도에 정답 → Self-Refined 응답 사용
@@ -30,7 +34,7 @@
 
 
 # ==============================================================================
-# 스캐폴딩 시스템 프롬프트 (Scaffolding System Prompt)
+# Step 1: 스캐폴딩 시스템 프롬프트 (Scaffolding System Prompt)
 # ------------------------------------------------------------------------------
 # 학생 모델이 교수분석 결과에 따라 체계적으로 문제를 해결하도록
 # 안내하는 시스템 프롬프트입니다. Instructional Goal과 Task Analysis를
@@ -59,7 +63,7 @@ You must adhere to the specific performance procedures and required knowledge/sk
 
 
 # ==============================================================================
-# 교사 개입 프롬프트 (Teacher Intervention) — 평가 전용
+# Step 2: 교사 개입 프롬프트 (Teacher Intervention) — 평가 전용
 # ------------------------------------------------------------------------------
 # ReAct 스타일 학습 루프에서 교사 모델이 학생 응답을 평가합니다.
 # 피드백 생성은 SCAFFOLDING_ARTIFACT 프롬프트에서 담당합니다.
@@ -99,34 +103,7 @@ Output ONLY valid JSON."""
 
 
 # ==============================================================================
-# 피드백에 대한 학생 응답 프롬프트 (system 전용)
-# ------------------------------------------------------------------------------
-# SCAFFOLDING_SYSTEM_PROMPT를 기반으로 교사의 피드백을 통합하여
-# 학생 모델이 개선된 응답을 생성합니다.
-# system message로 사용됩니다 (user message는 input만 전달).
-# dataset_prompt(original instruction)는 호출 측에서 prepend합니다.
-# ==============================================================================
-
-STUDENT_FEEDBACK_RESPONSE_PROMPT = """{scaffolding_system_prompt}
-
-[Scaffolding Artifact]
-Your teacher has evaluated your previous response and designed the following scaffolding to guide your improvement:
-
-{scaffolding_artifact}
-
-[Instructions]
-1. Carefully study the scaffolding artifact above, including the strategies and examples provided
-2. For High Order Skills: follow the suggested strategies and reasoning approaches
-3. For Low Order Skills: review the missed concepts and explanations
-4. Pay special attention to the Key Attention Points and Feedback sections
-5. Address each unsatisfied performance objective systematically
-6. Show your improved thinking step by step
-7. Provide your final answer clearly
-"""
-
-
-# ==============================================================================
-# 스캐폴딩 아티팩트 생성 프롬프트
+# Step 3: 스캐폴딩 아티팩트 생성 프롬프트
 # ------------------------------------------------------------------------------
 # Dick & Carey 모델 기반의 스캐폴딩 아티팩트를 생성합니다.
 # 실패한 수행목표에 대해 HOT/LOT 기술 유형에 따라
@@ -233,7 +210,115 @@ Output ONLY the structured text above. Do NOT include JSON formatting.
 
 
 # ==============================================================================
-# 교사 최종 해답 프롬프트 (Case C)
+# Step 4: 피드백에 대한 학생 응답 프롬프트 (system 전용)
+# ------------------------------------------------------------------------------
+# SCAFFOLDING_SYSTEM_PROMPT를 기반으로 교사의 피드백을 통합하여
+# 학생 모델이 개선된 응답을 생성합니다.
+# system message로 사용됩니다 (user message는 input만 전달).
+# dataset_prompt(original instruction)는 호출 측에서 prepend합니다.
+# ==============================================================================
+
+STUDENT_FEEDBACK_RESPONSE_PROMPT = """{scaffolding_system_prompt}
+
+[Scaffolding Artifact]
+Your teacher has evaluated your previous response and designed the following scaffolding to guide your improvement:
+
+{scaffolding_artifact}
+
+[Instructions]
+1. Carefully study the scaffolding artifact above, including the strategies and examples provided
+2. For High Order Skills: follow the suggested strategies and reasoning approaches
+3. For Low Order Skills: review the missed concepts and explanations
+4. Pay special attention to the Key Attention Points and Feedback sections
+5. Address each unsatisfied performance objective systematically
+6. Show your improved thinking step by step
+7. Provide your final answer clearly
+"""
+
+
+# ==============================================================================
+# Step 5a: 교사 긍정 피드백 프롬프트 (Case A/B Self-Refinement용)
+# ------------------------------------------------------------------------------
+# 학생이 모든 PO를 충족한 경우, 교사가 강점 요약 및 개선 제안을 제공합니다.
+# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
+# ==============================================================================
+
+TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT = """You are a teacher providing constructive feedback to strengthen a student's already satisfactory response."""
+
+TEACHER_POSITIVE_FEEDBACK_USER_PROMPT = """[Problem]
+{problem_text}
+
+[Student's Response]
+{student_response}
+
+[Performance Objectives Evaluation]
+{po_evaluation}
+
+[Instructions]
+The student's response has satisfied all Performance Objectives. Provide feedback that will help the student further strengthen their response:
+
+1. Strengths Summary: For each satisfied PO, briefly describe what the student did well, citing specific parts of their response.
+
+2. Enhancement Suggestions: Identify 2-3 concrete ways the student could improve their response quality:
+   - Clearer reasoning structure or explanations
+   - More explicit connections between steps
+   - Better demonstration of the underlying concepts
+   - More rigorous justification of key steps
+
+3. Integration Guidance: Explain how to incorporate these improvements naturally into the existing solution without changing the core logic or final answer.
+
+[Output Format]
+
+[Strengths]
+- PO 1: <what was done well>
+- PO 2: <what was done well>
+...
+
+[Enhancement Suggestions]
+1. <specific improvement suggestion>
+2. <specific improvement suggestion>
+3. <specific improvement suggestion>
+
+[Integration Guidance]
+<How to naturally incorporate these improvements into the response>
+
+Output ONLY the structured text above.
+"""
+
+
+# ==============================================================================
+# Step 5b: 학생 Self-Refinement 프롬프트 (Case A/B) — system 전용
+# ------------------------------------------------------------------------------
+# 모든 PO를 충족한 학생이 교사의 긍정 피드백을 반영하여
+# 응답을 개선합니다. 최종 답은 유지하되 추론 과정의 질을 높입니다.
+# system message로 사용됩니다 (user message는 input만 전달).
+# ==============================================================================
+
+STUDENT_SELF_REFINEMENT_PROMPT = """{scaffolding_system_prompt}
+
+[Teacher's Feedback on Your Response]
+Your teacher has evaluated your response and confirmed that it meets all performance objectives.
+The following feedback highlights your strengths and suggests ways to further improve your response:
+
+{positive_feedback}
+
+[Instructions]
+1. Keep your correct reasoning and final answer unchanged.
+2. Integrate the enhancement suggestions naturally into your solution.
+3. Strengthen the clarity, structure, and justification of your reasoning.
+4. Demonstrate deeper understanding of the underlying concepts.
+5. Your improved response should be a complete, standalone solution (not a diff or list of changes).
+
+[Output Format]
+Write your complete improved solution following the original output format:
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
+- Step-by-step reasoning: [your improved detailed solution]
+- Final answer: "The answer is \\boxed{{your final answer}}"
+"""
+
+
+# ==============================================================================
+# Step 5c: 교사 최종 해답 프롬프트 (Case C)
 # ------------------------------------------------------------------------------
 # 최대 반복 횟수 후에도 학생이 정답에 도달하지 못한 경우,
 # 교사가 완전한 해답을 제공합니다.
@@ -286,85 +371,4 @@ Step 2: ...
 The answer is \\boxed{{correct answer}}
 
 Output ONLY the solution as plain text. Do not include any JSON, metadata, or commentary.
-"""
-
-
-# ==============================================================================
-# 교사 긍정 피드백 프롬프트 (Case A/B Self-Refinement용)
-# ------------------------------------------------------------------------------
-# 학생이 모든 PO를 충족한 경우, 교사가 강점 요약 및 개선 제안을 제공합니다.
-# system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
-# ==============================================================================
-
-TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT = """You are a teacher providing constructive feedback to strengthen a student's already satisfactory response."""
-
-TEACHER_POSITIVE_FEEDBACK_USER_PROMPT = """[Problem]
-{problem_text}
-
-[Student's Response]
-{student_response}
-
-[Performance Objectives Evaluation]
-{po_evaluation}
-
-[Instructions]
-The student's response has satisfied all Performance Objectives. Provide feedback that will help the student further strengthen their response:
-
-1. Strengths Summary: For each satisfied PO, briefly describe what the student did well, citing specific parts of their response.
-
-2. Enhancement Suggestions: Identify 2-3 concrete ways the student could improve their response quality:
-   - Clearer reasoning structure or explanations
-   - More explicit connections between steps
-   - Better demonstration of the underlying concepts
-   - More rigorous justification of key steps
-
-3. Integration Guidance: Explain how to incorporate these improvements naturally into the existing solution without changing the core logic or final answer.
-
-[Output Format]
-
-[Strengths]
-- PO 1: <what was done well>
-- PO 2: <what was done well>
-...
-
-[Enhancement Suggestions]
-1. <specific improvement suggestion>
-2. <specific improvement suggestion>
-3. <specific improvement suggestion>
-
-[Integration Guidance]
-<How to naturally incorporate these improvements into the response>
-
-Output ONLY the structured text above.
-"""
-
-
-# ==============================================================================
-# 학생 Self-Refinement 프롬프트 (Case A/B) — system 전용
-# ------------------------------------------------------------------------------
-# 모든 PO를 충족한 학생이 교사의 긍정 피드백을 반영하여
-# 응답을 개선합니다. 최종 답은 유지하되 추론 과정의 질을 높입니다.
-# system message로 사용됩니다 (user message는 input만 전달).
-# ==============================================================================
-
-STUDENT_SELF_REFINEMENT_PROMPT = """{scaffolding_system_prompt}
-
-[Teacher's Feedback on Your Response]
-Your teacher has evaluated your response and confirmed that it meets all performance objectives.
-The following feedback highlights your strengths and suggests ways to further improve your response:
-
-{positive_feedback}
-
-[Instructions]
-1. Keep your correct reasoning and final answer unchanged.
-2. Integrate the enhancement suggestions naturally into your solution.
-3. Strengthen the clarity, structure, and justification of your reasoning.
-4. Demonstrate deeper understanding of the underlying concepts.
-5. Your improved response should be a complete, standalone solution (not a diff or list of changes).
-
-[Output Format]
-Write your complete improved solution following the original output format:
-- Instructional goal alignment: [how this solution demonstrates the instructional goal]
-- Step-by-step reasoning: [your improved detailed solution]
-- Final answer: "The answer is \\boxed{{your final answer}}"
 """

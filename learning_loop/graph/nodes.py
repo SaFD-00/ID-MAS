@@ -90,40 +90,6 @@ def process_question_scaffolding(
             instructional_goal=instructional_goal,
         )
 
-    # NEW: Handle skipped questions (fallback occurred)
-    if result.get("is_skipped", False):
-        updates = {
-            "scaffolding_results": [result],
-            "scaffolding_processed": state.get("scaffolding_processed", 0) + 1,
-            "skipped_count": state.get("skipped_count", 0) + 1,
-            "updated_at": datetime.now().isoformat(),
-        }
-        skip_reason = result.get("skip_reason", "unknown")
-        skip_stage = result.get("skip_stage", "unknown")
-        print(f"  -> SKIPPED: Fallback detected at {skip_stage} ({skip_reason})")
-
-        # Track skip counts from skip_details
-        skip_details = result.get("skip_details", {})
-
-        # Step 2 (Evaluation) skips
-        if skip_details.get("step2_performance_objectives_evaluation", {}).get("is_fallback"):
-            updates["step2_skip_count"] = state.get("step2_skip_count", 0) + 1
-            updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1
-
-        # Step 3 (Scaffolding) skips
-        if skip_details.get("step3_scaffolding_artifact_generation", {}).get("is_fallback"):
-            updates["step3_skip_count"] = state.get("step3_skip_count", 0) + 1
-            updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1
-
-        # Step 5 (Reconstruction) skips
-        if skip_details.get("step5_case_c_final_solution", {}).get("is_fallback"):
-            updates["step5_skip_count"] = state.get("step5_skip_count", 0) + 1
-            updates["step5_case_c_skip_count"] = state.get("step5_case_c_skip_count", 0) + 1
-            updates["case_c_fallback_count"] = state.get("case_c_fallback_count", 0) + 1
-            updates["final_solution_fallback_count"] = state.get("final_solution_fallback_count", 0) + 1
-
-        return updates
-
     # Build state updates
     updates = {
         "scaffolding_results": [result],
@@ -144,31 +110,6 @@ def process_question_scaffolding(
     elif sft_case == SFTCase.C.value:
         updates["case_c_count"] = state.get("case_c_count", 0) + 1
         print(f"  -> Case C: Reconstruction after 5 failed attempts")
-
-        # Check if Case C reconstruction used fallback (Step 5)
-        skip_details = result.get("skip_details", {})
-        step5_fallback = skip_details.get("step5_case_c_final_solution", {}).get("is_fallback")
-        if step5_fallback:
-            updates["step5_skip_count"] = state.get("step5_skip_count", 0) + 1
-            updates["step5_case_c_skip_count"] = state.get("step5_case_c_skip_count", 0) + 1
-            updates["case_c_fallback_count"] = state.get("case_c_fallback_count", 0) + 1
-            updates["final_solution_fallback_count"] = state.get("final_solution_fallback_count", 0) + 1
-            print(f"     [Warning] Step 5 (Case C final solution) skipped - using fallback response")
-
-    # Check for other skips (all cases) from skip_details
-    skip_details = result.get("skip_details", {})
-
-    # Step 2 (Evaluation) skips
-    if skip_details.get("step2_performance_objectives_evaluation", {}).get("is_fallback"):
-        updates["step2_skip_count"] = state.get("step2_skip_count", 0) + 1
-        updates["evaluation_fallback_count"] = state.get("evaluation_fallback_count", 0) + 1
-        print(f"     [Warning] Step 2 (PO evaluation) skipped - using fallback")
-
-    # Step 3 (Scaffolding) skips
-    if skip_details.get("step3_scaffolding_artifact_generation", {}).get("is_fallback"):
-        updates["step3_skip_count"] = state.get("step3_skip_count", 0) + 1
-        updates["scaffolding_artifact_fallback_count"] = state.get("scaffolding_artifact_fallback_count", 0) + 1
-        print(f"     [Warning] Step 3 (scaffolding artifact) skipped - using fallback")
 
     # Update HOT/LOT scaffolding counts
     hot_count = result.get("hot_count", 0) or 0
@@ -271,7 +212,6 @@ def _process_iterative_scaffolding(
     response = None
     last_correct_iteration = None
     last_correct_response = None
-    skip_details = {}  # 통합 skip 메타데이터 (키 형식: "step{N}_{stage}")
     hot_count = 0  # HOT scaffolding count
     lot_count = 0  # LOT scaffolding count
 
@@ -337,35 +277,6 @@ def _process_iterative_scaffolding(
                 previous_response=previous_response,
             )
             all_satisfied = evaluation.get("all_satisfied", False)
-
-            # Collect evaluation skip metadata (Step 2)
-            if evaluation and evaluation.get("_failure_metadata"):
-                step2_meta = evaluation["_failure_metadata"].get("step2_performance_objectives_evaluation")
-                if step2_meta:
-                    skip_details["step2_performance_objectives_evaluation"] = step2_meta
-
-                    # Skip on evaluation fallback
-                    if step2_meta.get("is_fallback"):
-                        print(f"    [SKIP] Step 2 (evaluation) fallback detected. Skipping question {question['id']}")
-                        return QuestionResult(
-                            id=question["id"],
-                            instruction=question.get("instruction", ""),
-                            input=question["input"],
-                            output=question["output"],
-                                            initial_response=response,
-                            predicted_answer=predicted,
-                            scaffolding_correct=False,
-                            sft_case=None,
-                            is_skipped=True,
-                            skip_reason="step2_evaluation_fallback",
-                            skip_stage="step2_evaluation",
-                            skip_details=skip_details if skip_details else None,
-                            iterative_scaffolding={
-                                "success": False,
-                                "iterations_needed": iteration,
-                                "conversation_history": conversation_history,
-                            },
-                        )
         else:
             evaluation = None
             all_satisfied = is_correct
@@ -419,39 +330,6 @@ def _process_iterative_scaffolding(
                 hot_count += 1
             elif skill_type == "LOT":
                 lot_count += 1
-
-        # Collect scaffolding artifact skip metadata (Step 3)
-        if scaffolding_artifact.get("_failure_metadata"):
-            step3_meta = scaffolding_artifact["_failure_metadata"].get("step3_scaffolding_artifact_generation")
-            if step3_meta:
-                skip_details["step3_scaffolding_artifact_generation"] = step3_meta
-
-                # Skip on scaffolding artifact fallback
-                if step3_meta.get("is_fallback"):
-                    print(f"    [SKIP] Step 3 (scaffolding artifact) fallback detected. Skipping question {question['id']}")
-                    return QuestionResult(
-                        id=question["id"],
-                        instruction=question.get("instruction", ""),
-                        input=question["input"],
-                        output=question["output"],
-                                    initial_response=response,
-                        predicted_answer=predicted,
-                        scaffolding_correct=False,
-                        sft_case=None,
-                        is_skipped=True,
-                        skip_reason="step3_scaffolding_fallback",
-                        skip_stage="step3_scaffolding",
-                        skip_details=skip_details if skip_details else None,
-                        iterative_scaffolding={
-                            "success": False,
-                            "iterations_needed": iteration,
-                            "conversation_history": conversation_history,
-                            "iterations": iterations,
-                        },
-                        scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
-                        hot_count=None,  # skip이므로 통계에 반영하지 않음
-                        lot_count=None,  # skip이므로 통계에 반영하지 않음
-                    )
 
         # Accumulate scaffolding artifacts
         iteration_summary = scaffolding_artifact.get("iteration_summary", "")
@@ -511,12 +389,6 @@ def _process_iterative_scaffolding(
         )
         positive_feedback_text = positive_feedback_result.get("feedback_text", "")
 
-        # Collect positive feedback metadata
-        if positive_feedback_result.get("_failure_metadata"):
-            step5a_meta = positive_feedback_result["_failure_metadata"].get("step5a_positive_feedback")
-            if step5a_meta:
-                skip_details["step5a_positive_feedback"] = step5a_meta
-
         # Step 5b: Student self-refines response using positive feedback
         if positive_feedback_text:
             sft_output = student_model.self_refine_response(
@@ -567,7 +439,6 @@ def _process_iterative_scaffolding(
             artifact_references=artifact_references if artifact_references else None,
             hot_count=hot_count if hot_count > 0 else None,
             lot_count=lot_count if lot_count > 0 else None,
-            skip_details=skip_details if skip_details else None,
         )
     else:
         # Case C: Failed after max iterations - Teacher generates final solution
@@ -594,43 +465,6 @@ def _process_iterative_scaffolding(
 
         reconstructed_response = final_solution.get("solution_explanation", "")
 
-        # Collect final solution skip metadata (Step 5, Case C)
-        skip_metadata = final_solution.get("_failure_metadata")
-        if skip_metadata:
-            step5_meta = skip_metadata.get("step5_case_c_final_solution")
-            if step5_meta:
-                skip_details["step5_case_c_final_solution"] = step5_meta
-
-                # Skip on Case C reconstruction fallback
-                if step5_meta.get("is_fallback"):
-                    print(f"    [SKIP] Step 5 (Case C final solution) fallback detected. Skipping question {question['id']}")
-                    return QuestionResult(
-                        id=question["id"],
-                        instruction=question.get("instruction", ""),
-                        input=question["input"],
-                        output=question["output"],
-                                    initial_response=response,
-                        predicted_answer=predicted,
-                        scaffolding_correct=False,
-                        sft_case=None,
-                        is_skipped=True,
-                        skip_reason="step5_reconstruction_fallback",
-                        skip_stage="step5_reconstruction",
-                        skip_details=skip_details if skip_details else None,
-                        iterative_scaffolding={
-                            "success": False,
-                            "iterations_needed": max_iterations,
-                            "conversation_history": conversation_history,
-                            "iterations": iterations,
-                            "case_c_reason": case_c_reason,
-                            "last_correct_iteration": last_correct_iteration,
-                            "last_correct_response": last_correct_response,
-                        },
-                        scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
-                        hot_count=None,  # skip이므로 통계에 반영하지 않음
-                        lot_count=None,  # skip이므로 통계에 반영하지 않음
-                    )
-
         return QuestionResult(
             id=question["id"],
             instruction=question.get("instruction", ""),
@@ -653,7 +487,6 @@ def _process_iterative_scaffolding(
             scaffolding_artifacts=scaffolding_artifacts if scaffolding_artifacts else None,
             hot_count=hot_count if hot_count > 0 else None,
             lot_count=lot_count if lot_count > 0 else None,
-            skip_details=skip_details if skip_details else None,
         )
 
 
@@ -722,7 +555,6 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     """스캐폴딩 결과에서 SFT 훈련 데이터를 생성합니다.
 
     Case A, B, C 결과를 SFT 데이터 형식으로 변환합니다.
-    fallback으로 skip된 문제는 제외됩니다.
 
     Args:
         state: 현재 파이프라인 상태
@@ -737,10 +569,6 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
 
     # Scaffolding results: Case A, Case B, and Case C
     for result in state.get("scaffolding_results", []):
-        # Skip fallback cases (is_skipped=True)
-        if result.get("is_skipped", False):
-            continue
-
         if result.get("sft_case") in (SFTCase.A.value, SFTCase.B.value, SFTCase.C.value):
             entry = _create_sft_entry(result, instructional_goal, task_analysis)
             if entry:
@@ -818,7 +646,7 @@ def _filter_internal_fields(result: Dict[str, Any]) -> Dict[str, Any]:
         - top-level `_` prefix 필드만 제거
         - nested 구조 내부의 `_` prefix 필드는 보존됨
           (conversation_history 내부의 _input_prompt, _raw_text,
-           _failure_metadata, _raw_response 등)
+           _raw_response 등)
         - 이는 의도된 동작: nested 데이터는 디버깅/분석에 필요
 
     Args:

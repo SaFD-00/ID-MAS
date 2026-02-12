@@ -88,7 +88,7 @@ Principles:
 Respond with valid JSON only.
 ```
 
-**User Message** (`INSTRUCTIONAL_GOAL_PROMPT`):
+**User Message** (`INSTRUCTIONAL_GOAL_USER_PROMPT`):
 
 > Placeholder: `{sample_count}` → 20, `{train_data}` → `utils/prompt_helpers.py`의 `format_samples_for_prompt()` 출력
 
@@ -1379,7 +1379,7 @@ Case C                                                   0.0%
 | 상수명 | 소스 파일 | 용도 | Phase/Step | 메시지 역할 | 출력 형식 |
 |--------|----------|------|-----------|------------|----------|
 | `INSTRUCTIONAL_GOAL_SYSTEM_MESSAGE` | `prompts/design_prompts.py` | 교수설계 전문가 역할 설정 | Phase 1 / Step 0 | System | — |
-| `INSTRUCTIONAL_GOAL_PROMPT` | `prompts/design_prompts.py` | 데이터셋 분석 → Instructional Goal 도출 | Phase 1 / Step 0 | User | JSON |
+| `INSTRUCTIONAL_GOAL_USER_PROMPT` | `prompts/design_prompts.py` | 데이터셋 분석 → Instructional Goal 도출 | Phase 1 / Step 0 | User | JSON |
 | `INSTRUCTIONAL_ANALYSIS_SYSTEM_PROMPT` | `prompts/design_prompts.py` | 교수 분석 전문가 역할 설정 | Phase 1 / Step 2 | System | — |
 | `INSTRUCTIONAL_ANALYSIS_USER_PROMPT` | `prompts/design_prompts.py` | Learning Objective → Task Analysis Tree 분해 | Phase 1 / Step 2 | User | Text (Tree) |
 | `PERFORMANCE_OBJECTIVES_SYSTEM_PROMPT` | `prompts/design_prompts.py` | PO 생성 전문가 역할 설정 | Phase 1 / Step 3 | System | — |

@@ -91,7 +91,6 @@ class TeacherModel:
                     - is_satisfied: 충족 여부
                     - feedback: 충족 시 강점 / 미충족 시 사유 (Student response 참조)
                 - all_satisfied (bool): 전체 PO 충족 여부
-                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         system_message = TEACHER_INTERVENTION_SYSTEM_PROMPT
         user_prompt = TEACHER_INTERVENTION_USER_PROMPT.format(
@@ -103,7 +102,6 @@ class TeacherModel:
 
         # 최대 3회 재시도
         max_retries = 3
-        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -124,38 +122,12 @@ class TeacherModel:
                     po.get('is_satisfied', False) for po in pe
                 ) if pe else False
 
-                # 성공 시 failure metadata 추가 (step2 = PO Evaluation)
-                result['_failure_metadata'] = {
-                    "step2_performance_objectives_evaluation": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt
-                    }
-                }
                 return result
             except Exception as e:
-                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: PO evaluation attempt {attempt}/{max_retries} failed: {e}. Retrying...")
-                else:
-                    print(f"  Warning: All {max_retries} PO evaluation attempts failed. Last error: {e}")
-
-        # 모든 재시도 실패 시 fallback 반환 (step2 = PO Evaluation)
-        return {
-            "performance_evaluation": [],
-            "all_satisfied": False,
-            "_input_prompt": {
-                "system_message": system_message,
-                "user_message": user_prompt,
-            },
-            "_failure_metadata": {
-                "step2_performance_objectives_evaluation": {
-                    "is_fallback": True,
-                    "failure_reason": "json_parse_error",
-                    "last_error": errors if errors else ["Unknown error"],
-                    "max_retries_exceeded": max_retries
-                }
-            }
-        }
+                    continue
+                raise
 
     # =========================================================================
     # Scaffolding Artifact Methods
@@ -194,7 +166,6 @@ class TeacherModel:
                 - feedback (str): 학생에게 전달할 통합 서술형 피드백
                 - iteration_summary: 이 iteration의 요약 (response + scaffolding)
                 - _raw_text (str): 전체 구조화된 마크다운 텍스트
-                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         # Extract failed POs
         failed_objectives = [
@@ -216,7 +187,6 @@ class TeacherModel:
 
         # Retry logic
         max_retries = 3
-        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -235,57 +205,13 @@ class TeacherModel:
                 if 'iteration_summary' not in result:
                     result['iteration_summary'] = "Review your previous response and try again with more careful reasoning."
 
-                # Add success metadata (step3 = Scaffolding)
-                result['_failure_metadata'] = {
-                    "step3_scaffolding_artifact_generation": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt
-                    }
-                }
                 return result
 
             except Exception as e:
-                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: Scaffolding artifact attempt {attempt}/{max_retries} failed: {e}. Retrying...")
-                else:
-                    print(f"  Warning: All {max_retries} scaffolding artifact attempts failed. Last error: {e}")
-
-        # Fallback: create basic scaffolding from failed objectives
-        fallback_artifacts = []
-        for failed_po in failed_objectives[:3]:  # Limit to top 3
-            fallback_artifacts.append({
-                "target_objective": failed_po.get("objective_content", "Unknown objective"),
-                "skill_type": "LOT",
-                "cognitive_level": "Understand",
-                "failure_analysis": failed_po.get("feedback", "Unable to analyze"),
-                "scaffolding_content": {
-                    "strategy_suggestion": None,
-                    "partial_example": None,
-                    "feedback": "What key concept might you be missing?",
-                    "missed_concept": "Review the problem requirements carefully",
-                    "brief_explanation": "Focus on the specific criteria mentioned in the problem",
-                    "key_attention_points": "Pay attention to what the question is actually asking"
-                }
-            })
-
-        return {
-            "scaffolding_artifacts": fallback_artifacts,
-            "feedback": "Your previous response did not fully meet the performance objectives. Please review the problem requirements and try to address each objective more carefully.",
-            "iteration_summary": "Student's response did not meet the performance objectives. Basic scaffolding was provided to guide improvement.",
-            "_input_prompt": {
-                "system_message": system_message,
-                "user_message": user_prompt,
-            },
-            "_failure_metadata": {
-                "step3_scaffolding_artifact_generation": {
-                    "is_fallback": True,
-                    "failure_reason": "scaffolding_artifact_generation_failed",
-                    "last_error": errors if errors else ["Unknown error"],
-                    "max_retries_exceeded": max_retries
-                }
-            }
-        }
+                    continue
+                raise
 
     def generate_positive_feedback(
         self,
@@ -306,7 +232,6 @@ class TeacherModel:
         Returns:
             긍정 피드백 딕셔너리:
                 - feedback_text (str): 전체 피드백 텍스트
-                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         system_message = TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT
         user_prompt = TEACHER_POSITIVE_FEEDBACK_USER_PROMPT.format(
@@ -316,7 +241,6 @@ class TeacherModel:
         )
 
         max_retries = 3
-        errors = []
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -327,43 +251,12 @@ class TeacherModel:
                         "system_message": system_message,
                         "user_message": user_prompt,
                     },
-                    "_failure_metadata": {
-                        "step5a_positive_feedback": {
-                            "is_fallback": False,
-                            "attempts_needed": attempt,
-                        }
-                    },
                 }
             except Exception as e:
-                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: Positive feedback attempt {attempt}/{max_retries} failed: {e}. Retrying...")
-                else:
-                    print(f"  Warning: All {max_retries} positive feedback attempts failed. Last error: {e}")
-
-        # Fallback: PO 평가의 satisfied feedback으로 기본 피드백 구성
-        satisfied_feedbacks = []
-        for po in po_evaluation.get("performance_evaluation", []):
-            if po.get("is_satisfied", False) and po.get("feedback"):
-                satisfied_feedbacks.append(f"- {po['feedback']}")
-
-        fallback_text = "[Strengths]\n" + "\n".join(satisfied_feedbacks) if satisfied_feedbacks else ""
-
-        return {
-            "feedback_text": fallback_text,
-            "_input_prompt": {
-                "system_message": system_message,
-                "user_message": user_prompt,
-            },
-            "_failure_metadata": {
-                "step5a_positive_feedback": {
-                    "is_fallback": True,
-                    "failure_reason": "positive_feedback_generation_failed",
-                    "last_error": errors if errors else ["Unknown error"],
-                    "max_retries_exceeded": max_retries,
-                }
-            },
-        }
+                    continue
+                raise
 
     def _parse_scaffolding_text(self, text: str) -> Dict[str, Any]:
         """구조화된 마크다운 스캐폴딩 텍스트를 딕셔너리로 파싱합니다."""
@@ -493,7 +386,6 @@ class TeacherModel:
         Returns:
             최종 솔루션 딕셔너리:
                 - solution_explanation: 완전한 풀이 설명 (평문)
-                - _failure_metadata: 실패 메타데이터 (fallback 발생 시)
         """
         weaknesses_str = "\n".join(f"- {w}" for w in student_weaknesses) if student_weaknesses else "- Unable to identify specific weaknesses"
 
@@ -510,14 +402,13 @@ class TeacherModel:
 
         # Retry logic
         max_retries = 3
-        errors = []  # 모든 에러를 배열로 수집
 
         for attempt in range(1, max_retries + 1):
             try:
                 # 평문 출력 (generate_json → generate)
                 plain_text_response = self.llm.generate(user_prompt, system_message=system_message)
 
-                result = {
+                return {
                     "solution_explanation": plain_text_response,
                     "_input_prompt": {
                         "system_message": system_message,
@@ -526,46 +417,11 @@ class TeacherModel:
                     "_raw_output": plain_text_response,
                 }
 
-                # Add success metadata (step5 = Reconstruction, Case C)
-                result['_failure_metadata'] = {
-                    "step5_case_c_final_solution": {
-                        "is_fallback": False,
-                        "attempts_needed": attempt,
-                        "case": "C"
-                    }
-                }
-                return result
-
             except Exception as e:
-                errors.append(str(e))
                 if attempt < max_retries:
                     print(f"  Warning: Final solution attempt {attempt}/{max_retries} failed: {e}. Retrying...")
-                else:
-                    print(f"  Warning: All {max_retries} final solution attempts failed. Last error: {e}")
-
-        # Fallback: create basic solution (step5 = Reconstruction, Case C)
-        return {
-            "solution_explanation": f"""[Understanding the Problem]
-Let me solve this problem step by step.
-
-[Step-by-Step Solution]
-Following the correct approach:
-
-The answer is \\boxed{{{ground_truth}}}""",
-            "_input_prompt": {
-                "system_message": system_message,
-                "user_message": user_prompt,
-            },
-            "_failure_metadata": {
-                "step5_case_c_final_solution": {
-                    "is_fallback": True,
-                    "failure_reason": "final_solution_generation_failed",
-                    "last_error": errors if errors else ["Unknown error"],
-                    "max_retries_exceeded": max_retries,
-                    "case": "C"
-                }
-            }
-        }
+                    continue
+                raise
 
     def _format_iteration_summaries(self, summaries: List[Dict]) -> str:
         """이전 iteration summaries를 프롬프트용 문자열로 포맷팅합니다.

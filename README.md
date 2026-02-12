@@ -30,7 +30,12 @@ python -m utils.sample_extractor
 # 4. 학습 실행
 python main.py --mode train --domain math --train-dataset gsm8k
 
-# 5. 평가 실행
+# 5. 멀티 GPU 학습 (Student: GPU 0, Teacher: GPU 1)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-4B --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0 --teacher-gpu 1
+
+# 6. 평가 실행
 python main.py --mode eval --method baseline --domain math --eval-dataset gsm8k
 ```
 
@@ -69,6 +74,8 @@ ID-MAS/
 | `--method` | 평가 방법 (`baseline` / `sft` / `sft_id-mas`) | — |
 | `--student-model` | Student 모델 | `Qwen/Qwen3-1.7B` |
 | `--teacher-model` | Teacher 모델 | `gpt-5.2` |
+| `--student-gpu` | Student 모델 GPU 인덱스 | 자동 (CUDA_VISIBLE_DEVICES) |
+| `--teacher-gpu` | Teacher 모델 GPU 인덱스 (API 모델은 무시) | 자동 (CUDA_VISIBLE_DEVICES) |
 | `--run-design` | 설계 단계 강제 재실행 (train 전용) | `False` |
 | `--resume` | 체크포인트에서 이어서 학습 (train 전용) | `True` |
 | `--eval-resume` | 기존 결과에서 이어서 평가 (eval 전용) | `True` |

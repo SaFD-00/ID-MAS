@@ -53,7 +53,8 @@ class StudentModel:
         model_name: str = None,
         use_sft_model: bool = False,
         use_sft_idmas_model: bool = False,
-        sft_domain: str = None
+        sft_domain: str = None,
+        gpu_id: int = None
     ):
         """StudentModel을 초기화합니다.
 
@@ -62,12 +63,14 @@ class StudentModel:
             use_sft_model: True면 SFT fine-tuned 모델 사용
             use_sft_idmas_model: True면 SFT_ID-MAS fine-tuned 모델 사용
             sft_domain: SFT/SFT_ID-MAS 모델의 도메인 (예: "math")
+            gpu_id: GPU 인덱스. None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
         """
         self.model = StudentModelWrapper(
             model_name=model_name,
             use_sft_model=use_sft_model,
             use_sft_idmas_model=use_sft_idmas_model,
-            sft_domain=sft_domain
+            sft_domain=sft_domain,
+            gpu_id=gpu_id,
         )
         self.model_name = self.model.model_name
 

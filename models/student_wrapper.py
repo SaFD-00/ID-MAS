@@ -17,7 +17,7 @@ SFT(Supervised Fine-Tuning) 모델과 SFT_ID-MAS 모델도 지원하여
     >>> student = StudentModelWrapper("Qwen/Qwen3-1.7B", use_sft_model=True, sft_domain="math")
 """
 from typing import Optional, List, Dict
-from config.config import get_student_model_config, DEFAULT_STUDENT_MODEL
+from config.models import get_student_model_config, DEFAULT_STUDENT_MODEL
 from models.base_wrapper import BaseModelWrapper
 from models.local_model_mixin import LocalModelMixin
 from models.model_cache import ModelCache
@@ -47,7 +47,8 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         model_name: str = None,
         use_sft_model: bool = False,
         use_sft_idmas_model: bool = False,
-        sft_domain: str = None
+        sft_domain: str = None,
+        gpu_id: int = None
     ):
         """StudentModelWrapper를 초기화합니다.
 
@@ -56,6 +57,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
             use_sft_model: SFT 파인튜닝 모델 사용 여부
             use_sft_idmas_model: SFT_ID-MAS 파인튜닝 모델 사용 여부
             sft_domain: SFT/SFT_ID-MAS 모델의 도메인 (예: "math", "logical")
+            gpu_id: GPU 인덱스. None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
 
         Raises:
             ValueError: SFT 모델 사용 시 sft_domain이 지정되지 않은 경우
@@ -64,7 +66,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
             model_name = DEFAULT_STUDENT_MODEL
 
         # SFT 모델 이름 resolution
-        from config.config import get_sft_model_name, get_sft_idmas_model_name
+        from config.sft import get_sft_model_name, get_sft_idmas_model_name
 
         actual_model_name = model_name
         self.base_model_name = model_name
@@ -90,11 +92,13 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         self.do_sample = self.config["do_sample"]
 
         # 공유 ModelCache를 사용하여 vLLM 모델 로드 (Teacher와 동일 모델일 경우 공유됨)
+        self._gpu_id = gpu_id if gpu_id is not None else self.config.get("gpu_id")
         cached = ModelCache.get_or_load(
             actual_model_name,
             self.device,
             tensor_parallel_size=self.config.get("tensor_parallel_size", 1),
             gpu_memory_utilization=self.config.get("gpu_memory_utilization", 0.90),
+            gpu_id=self._gpu_id,
         )
         self.llm = cached["llm"]
 

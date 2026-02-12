@@ -86,21 +86,6 @@ class PipelineStep:
     # All steps for iteration
     ALL_STEPS = [STEP1, STEP2, STEP3, STEP4, STEP5, STEP6]
 
-    # Skip key suffixes
-    SKIP_SUFFIX = "_skip"
-
-    @classmethod
-    def get_skip_key(cls, step: str) -> str:
-        """단계의 skip 키를 반환합니다.
-
-        Args:
-            step: 단계 식별자 (예: "step2")
-
-        Returns:
-            skip 키 (예: "step2_skip")
-        """
-        return f"{step}{cls.SKIP_SUFFIX}"
-
     @classmethod
     def get_step_name(cls, step: str) -> str:
         """단계의 읽기 쉬운 이름을 반환합니다.
@@ -162,14 +147,6 @@ class QuestionResult(QuestionResultRequired, total=False):
     hot_count: Optional[int]  # HOT (High-Order Thinking) scaffolding count
     lot_count: Optional[int]  # LOT (Low-Order Thinking) scaffolding count
 
-    # Skip tracking (fallback 발생 시)
-    is_skipped: bool  # fallback 발생으로 skip된 경우 True
-    skip_reason: Optional[str]  # skip 사유 (e.g., "evaluation_fallback")
-    skip_stage: Optional[str]  # skip 발생 단계
-    # skip_details: 통합 skip 메타데이터
-    # 키 형식: "step{N}_{stage}" (예: "step2_performance_objectives_evaluation")
-    # 값 형식: {"is_fallback": bool, "attempts_needed": int, "last_error": [...], ...}
-    skip_details: Optional[Dict[str, Dict[str, Any]]]
 
 
 class DesignResult(TypedDict, total=False):
@@ -227,7 +204,6 @@ class IDMASState(TypedDict, total=False):
         - Design Phase: 교수설계 결과
         - Questions: 처리할 문제 목록
         - Scaffolding Results: 스캐폴딩 결과 및 통계
-        - Skip Statistics: 단계별 skip 통계
         - SFT Data: 생성된 SFT 데이터
         - Pipeline Control: 파이프라인 제어
         - Timestamps: 시간 정보
@@ -267,41 +243,9 @@ class IDMASState(TypedDict, total=False):
     case_b_count: int  # 2~5회차 성공 (Iterative Scaffolding 성공)
     case_c_count: int  # 5회 실패 후 재구성
 
-    # ==================== Step-based Skip Statistics (NEW) ====================
-    # Step 1: Initial Response - skip으로만 처리 (skipped_count에 포함)
-    step1_skip_count: int  # Step 1 skip 수
-
-    # Step 2: PO Evaluation
-    step2_skip_count: int  # Step 2 (evaluation) skip 수
-
-    # Step 3: Scaffolding Artifact
-    step3_skip_count: int  # Step 3 (scaffolding) skip 수
-
-    # Step 4: Student Re-response - 학생 모델이라 fallback 없음
-    step4_skip_count: int  # Step 4 skip 수 (예비)
-
-    # Step 5: Reconstruction (Case A/B/C)
-    step5_skip_count: int  # Step 5 전체 skip 수
-    step5_case_b_skip_count: int  # Step 5 Case B skip 수
-    step5_case_c_skip_count: int  # Step 5 Case C skip 수
-    step5_summarization_skip_count: int  # Step 5 대화 요약 skip 수
-
     # ==================== Scaffolding Artifact Statistics ====================
     hot_scaffolding_count: int  # HOT (High-Order Thinking) 스캐폴딩 생성 횟수
     lot_scaffolding_count: int  # LOT (Low-Order Thinking) 스캐폴딩 생성 횟수
-
-    # ==================== Skip Statistics ====================
-    skipped_count: int  # fallback으로 skip된 문제 수
-
-    # ==================== Legacy Fields (Backward Compatibility) ====================
-    # 이전 버전 호환을 위해 유지, 새 코드에서는 step_* 필드 사용
-    case_b_fallback_count: int  # -> step5_case_b_skip_count
-    case_c_fallback_count: int  # -> step5_case_c_skip_count
-    evaluation_fallback_count: int  # -> step2_skip_count
-    hint_fallback_count: int  # deprecated, 삭제 예정
-    summarization_fallback_count: int  # -> step5_summarization_skip_count
-    scaffolding_artifact_fallback_count: int  # -> step3_skip_count
-    final_solution_fallback_count: int  # -> step5_case_c_skip_count
 
     # ==================== SFT Data ====================
     sft_data: List[Dict[str, Any]]
@@ -381,31 +325,10 @@ def create_initial_state(
         case_a_count=0,
         case_b_count=0,
         case_c_count=0,
-        # Step-based skip statistics (NEW)
-        step1_skip_count=0,
-        step2_skip_count=0,
-        step3_skip_count=0,
-        step4_skip_count=0,
-        step5_skip_count=0,
-        step5_case_b_skip_count=0,
-        step5_case_c_skip_count=0,
-        step5_summarization_skip_count=0,
 
         # Scaffolding Artifact statistics
         hot_scaffolding_count=0,
         lot_scaffolding_count=0,
-
-        # Skip statistics
-        skipped_count=0,
-
-        # Legacy fields (backward compatibility)
-        case_b_fallback_count=0,
-        case_c_fallback_count=0,
-        evaluation_fallback_count=0,
-        hint_fallback_count=0,
-        summarization_fallback_count=0,
-        scaffolding_artifact_fallback_count=0,
-        final_solution_fallback_count=0,
 
         # SFT Data
         sft_data=[],
@@ -437,31 +360,16 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
             - scaffolding_processed: 처리된 문제 수
             - case_statistics: 케이스별 통계 (A/B/C)
             - scaffolding_artifacts: HOT/LOT 스캐폴딩 통계
-            - skip: 단계별 skip 통계
     """
     case_a = state.get("case_a_count", 0)
     case_b = state.get("case_b_count", 0)
     case_c = state.get("case_c_count", 0)
 
-    # Step-based skip counts (NEW)
-    step1_skip = state.get("step1_skip_count", 0)
-    step2_skip = state.get("step2_skip_count", 0)
-    step3_skip = state.get("step3_skip_count", 0)
-    step4_skip = state.get("step4_skip_count", 0)
-    step5_skip = state.get("step5_skip_count", 0)
-    step5_case_b_skip = state.get("step5_case_b_skip_count", 0)
-    step5_case_c_skip = state.get("step5_case_c_skip_count", 0)
-    step5_summarization_skip = state.get("step5_summarization_skip_count", 0)
-
     # Scaffolding Artifact statistics
     hot_count = state.get("hot_scaffolding_count", 0)
     lot_count = state.get("lot_scaffolding_count", 0)
 
-    # Skip statistics
-    skipped = state.get("skipped_count", 0)
-
     processed = state.get("scaffolding_processed", 0)
-    total_skipped = step1_skip + step2_skip + step3_skip + step4_skip + step5_skip
 
     return {
         "total_questions": state.get("total_questions", 0),
@@ -471,43 +379,12 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
             "case_b": case_b,  # Success on attempts 2-5
             "case_c": case_c,  # Reconstructed after 5 failures
             "success_total": case_a + case_b,
-            "success_rate": (case_a + case_b) / (processed - skipped) if (processed - skipped) > 0 else 0,
+            "success_rate": (case_a + case_b) / processed if processed > 0 else 0,
         },
         "scaffolding_artifacts": {
             "hot_count": hot_count,  # High-Order Thinking scaffolding
             "lot_count": lot_count,  # Low-Order Thinking scaffolding
             "total": hot_count + lot_count,
-        },
-        # Step-based skip statistics
-        "skip": {
-            "total": skipped,
-            "step1_initial_response": {
-                "count": step1_skip,
-                "rate": step1_skip / processed if processed > 0 else 0,
-            },
-            "step2_evaluation": {
-                "count": step2_skip,
-                "rate": step2_skip / processed if processed > 0 else 0,
-            },
-            "step3_scaffolding": {
-                "count": step3_skip,
-                "rate": step3_skip / processed if processed > 0 else 0,
-            },
-            "step4_reresponse": {
-                "count": step4_skip,
-                "rate": step4_skip / processed if processed > 0 else 0,
-            },
-            "step5_reconstruction": {
-                "count": step5_skip,
-                "rate": step5_skip / processed if processed > 0 else 0,
-                "case_b": step5_case_b_skip,
-                "case_c": step5_case_c_skip,
-                "summarization": step5_summarization_skip,
-            },
-            "analysis": {
-                "count": skipped,
-                "rate": skipped / processed if processed > 0 else 0,
-            },
         },
     }
 
@@ -543,28 +420,9 @@ def load_checkpoint_from_logs(
         "case_a_count": 0,
         "case_b_count": 0,
         "case_c_count": 0,
-        # Step-based skip statistics (NEW)
-        "step1_skip_count": 0,
-        "step2_skip_count": 0,
-        "step3_skip_count": 0,
-        "step4_skip_count": 0,
-        "step5_skip_count": 0,
-        "step5_case_b_skip_count": 0,
-        "step5_case_c_skip_count": 0,
-        "step5_summarization_skip_count": 0,
         # Scaffolding Artifact statistics
         "hot_scaffolding_count": 0,
         "lot_scaffolding_count": 0,
-        # Skip statistics
-        "skipped_count": 0,
-        # Legacy fields (backward compatibility)
-        "case_b_fallback_count": 0,
-        "case_c_fallback_count": 0,
-        "evaluation_fallback_count": 0,
-        "hint_fallback_count": 0,
-        "summarization_fallback_count": 0,
-        "scaffolding_artifact_fallback_count": 0,
-        "final_solution_fallback_count": 0,
     }
 
     # Process scaffolding results (supports both old and new field names)
@@ -591,97 +449,18 @@ def load_checkpoint_from_logs(
             elif sft_case == SFTCase.B.value:
                 checkpoint_data["case_b_count"] += 1
                 checkpoint_data["scaffolding_correct_count"] += 1
-                # Check for Case B reconstruction fallback (NEW: skip, OLD: failure)
-                skip_data = result.get("skip", {}) or result.get("failure", {})
-                # Backward compatibility: support old reconstruction_failure field
-                if not skip_data and result.get("reconstruction_failure"):
-                    skip_data = {"reconstruction": result["reconstruction_failure"]}
-                if skip_data.get("reconstruction", {}).get("is_fallback"):
-                    checkpoint_data["case_b_fallback_count"] += 1
             elif sft_case == SFTCase.C.value:
                 checkpoint_data["case_c_count"] += 1
-                # Check for Case C reconstruction fallback (NEW: skip, OLD: failure)
-                skip_data = result.get("skip", {}) or result.get("failure", {})
-                # Backward compatibility: support old reconstruction_failure field
-                if not skip_data and result.get("reconstruction_failure"):
-                    skip_data = {"reconstruction": result["reconstruction_failure"]}
-                if skip_data.get("reconstruction", {}).get("is_fallback"):
-                    checkpoint_data["case_c_fallback_count"] += 1
-
-            # Check for step-based skips (NEW format: step_skips, OLD: step_failures)
-            step_skips = result.get("step_skips", {}) or result.get("step_failures", {})
-            if step_skips:
-                # New format: step_skips dict
-                if step_skips.get("step1", {}).get("is_fallback"):
-                    checkpoint_data["step1_skip_count"] += 1
-                if step_skips.get("step2", {}).get("is_fallback"):
-                    checkpoint_data["step2_skip_count"] += 1
-                if step_skips.get("step3", {}).get("is_fallback"):
-                    checkpoint_data["step3_skip_count"] += 1
-                if step_skips.get("step4", {}).get("is_fallback"):
-                    checkpoint_data["step4_skip_count"] += 1
-                step5 = step_skips.get("step5", {})
-                if step5.get("is_fallback"):
-                    checkpoint_data["step5_skip_count"] += 1
-                    if step5.get("case") == "B":
-                        checkpoint_data["step5_case_b_skip_count"] += 1
-                    elif step5.get("case") == "C":
-                        checkpoint_data["step5_case_c_skip_count"] += 1
-                if step_skips.get("step5_summarization", {}).get("is_fallback"):
-                    checkpoint_data["step5_summarization_skip_count"] += 1
-            else:
-                # Legacy format: skip dict (OLD: failure dict)
-                skip_data = result.get("skip", {}) or result.get("failure", {})
-                # Backward compatibility
-                if not skip_data and result.get("reconstruction_failure"):
-                    skip_data = {"reconstruction": result["reconstruction_failure"]}
-
-                if skip_data.get("evaluation", {}).get("is_fallback"):
-                    checkpoint_data["step2_skip_count"] += 1
-                    checkpoint_data["evaluation_fallback_count"] += 1
-                if skip_data.get("hint_generation"):  # list이므로 존재 여부만 확인
-                    checkpoint_data["hint_fallback_count"] += 1
-                if skip_data.get("summarization", {}).get("is_fallback"):
-                    checkpoint_data["step5_summarization_skip_count"] += 1
-                    checkpoint_data["summarization_fallback_count"] += 1
-                if skip_data.get("scaffolding_artifact", {}).get("is_fallback"):
-                    checkpoint_data["step3_skip_count"] += 1
-                    checkpoint_data["scaffolding_artifact_fallback_count"] += 1
-                if skip_data.get("final_solution", {}).get("is_fallback"):
-                    checkpoint_data["step5_case_c_skip_count"] += 1
-                    checkpoint_data["step5_skip_count"] += 1
-                    checkpoint_data["final_solution_fallback_count"] += 1
 
             # Count HOT/LOT scaffolding from scaffolding_artifacts
-            # skip된 결과는 HOT/LOT 카운팅에서 제외
-            if not result.get("is_skipped", False):
-                scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
-                for artifact_entry in scaffolding_artifacts_data:
-                    for artifact in artifact_entry.get("artifacts", []):
-                        skill_type = artifact.get("skill_type", "")
-                        if skill_type == "HOT":
-                            checkpoint_data["hot_scaffolding_count"] += 1
-                        elif skill_type == "LOT":
-                            checkpoint_data["lot_scaffolding_count"] += 1
-
-            # Count skipped questions and their step-based skip details
-            if result.get("is_skipped", False):
-                checkpoint_data["skipped_count"] += 1
-
-                # Handle skip_details format (from is_skipped=True results)
-                skip_details = result.get("skip_details", {})
-                if skip_details:
-                    if skip_details.get("step2_performance_objectives_evaluation", {}).get("is_fallback"):
-                        checkpoint_data["step2_skip_count"] += 1
-                        checkpoint_data["evaluation_fallback_count"] += 1
-                    if skip_details.get("step3_scaffolding_artifact_generation", {}).get("is_fallback"):
-                        checkpoint_data["step3_skip_count"] += 1
-                        checkpoint_data["scaffolding_artifact_fallback_count"] += 1
-                    if skip_details.get("step5_case_c_final_solution", {}).get("is_fallback"):
-                        checkpoint_data["step5_skip_count"] += 1
-                        checkpoint_data["step5_case_c_skip_count"] += 1
-                        checkpoint_data["case_c_fallback_count"] += 1
-                        checkpoint_data["final_solution_fallback_count"] += 1
+            scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
+            for artifact_entry in scaffolding_artifacts_data:
+                for artifact in artifact_entry.get("artifacts", []):
+                    skill_type = artifact.get("skill_type", "")
+                    if skill_type == "HOT":
+                        checkpoint_data["hot_scaffolding_count"] += 1
+                    elif skill_type == "LOT":
+                        checkpoint_data["lot_scaffolding_count"] += 1
 
     return checkpoint_data, processed_ids
 
@@ -725,33 +504,10 @@ def restore_state_from_checkpoint(
     restored["case_a_count"] = checkpoint_data.get("case_a_count", 0)
     restored["case_b_count"] = checkpoint_data.get("case_b_count", 0)
     restored["case_c_count"] = checkpoint_data.get("case_c_count", 0)
-    restored["case_b_fallback_count"] = checkpoint_data.get("case_b_fallback_count", 0)
-    restored["case_c_fallback_count"] = checkpoint_data.get("case_c_fallback_count", 0)
-    # Step-based skip statistics (NEW: skip_count, OLD: failure_count)
-    restored["step1_skip_count"] = checkpoint_data.get("step1_skip_count", 0) or checkpoint_data.get("step1_failure_count", 0)
-    restored["step2_skip_count"] = checkpoint_data.get("step2_skip_count", 0) or checkpoint_data.get("step2_failure_count", 0)
-    restored["step3_skip_count"] = checkpoint_data.get("step3_skip_count", 0) or checkpoint_data.get("step3_failure_count", 0)
-    restored["step4_skip_count"] = checkpoint_data.get("step4_skip_count", 0) or checkpoint_data.get("step4_failure_count", 0)
-    restored["step5_skip_count"] = checkpoint_data.get("step5_skip_count", 0) or checkpoint_data.get("step5_failure_count", 0)
-    restored["step5_case_b_skip_count"] = checkpoint_data.get("step5_case_b_skip_count", 0) or checkpoint_data.get("step5_case_b_failure_count", 0)
-    restored["step5_case_c_skip_count"] = checkpoint_data.get("step5_case_c_skip_count", 0) or checkpoint_data.get("step5_case_c_failure_count", 0)
-    restored["step5_summarization_skip_count"] = checkpoint_data.get("step5_summarization_skip_count", 0) or checkpoint_data.get("step5_summarization_failure_count", 0)
 
     # Scaffolding Artifact statistics
     restored["hot_scaffolding_count"] = checkpoint_data.get("hot_scaffolding_count", 0)
     restored["lot_scaffolding_count"] = checkpoint_data.get("lot_scaffolding_count", 0)
-
-    # Skip statistics
-    restored["skipped_count"] = checkpoint_data.get("skipped_count", 0)
-
-    # Legacy fields (backward compatibility)
-    restored["case_b_fallback_count"] = checkpoint_data.get("case_b_fallback_count", 0)
-    restored["case_c_fallback_count"] = checkpoint_data.get("case_c_fallback_count", 0)
-    restored["evaluation_fallback_count"] = checkpoint_data.get("evaluation_fallback_count", 0)
-    restored["hint_fallback_count"] = checkpoint_data.get("hint_fallback_count", 0)
-    restored["summarization_fallback_count"] = checkpoint_data.get("summarization_fallback_count", 0)
-    restored["scaffolding_artifact_fallback_count"] = checkpoint_data.get("scaffolding_artifact_fallback_count", 0)
-    restored["final_solution_fallback_count"] = checkpoint_data.get("final_solution_fallback_count", 0)
 
     # Update questions to remaining ones
     restored["questions"] = remaining_questions
