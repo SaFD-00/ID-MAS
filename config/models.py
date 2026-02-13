@@ -12,11 +12,36 @@
     STUDENT_MODEL_BASE_CONFIG: 학생 모델 공통 설정
 
 주요 함수:
+    normalize_gpu_ids: GPU ID를 정규화된 tuple로 변환
     create_teacher_config: 교사 모델 설정 생성
     get_student_model_config: 학생 모델 설정 생성
     get_model_short_name: 모델명의 짧은 버전 반환
 """
+from typing import Optional, Tuple, Union
 from config.api import OPENAI_API_KEY
+
+
+def normalize_gpu_ids(
+    gpu_ids: Union[None, int, Tuple[int, ...], list]
+) -> Optional[Tuple[int, ...]]:
+    """GPU ID를 정규화된 tuple로 변환합니다.
+
+    다양한 입력 형태를 hashable한 tuple로 통일합니다.
+
+    Args:
+        gpu_ids: GPU 인덱스. None, int, tuple, list 모두 허용.
+            - None → None (자동 할당)
+            - int → (int,) (단일 GPU)
+            - tuple/list → tuple (다중 GPU)
+
+    Returns:
+        정규화된 GPU ID tuple. None이면 자동 할당.
+    """
+    if gpu_ids is None:
+        return None
+    if isinstance(gpu_ids, int):
+        return (gpu_ids,)
+    return tuple(gpu_ids)
 
 # =============================================================================
 # 교사 모델 설정
@@ -37,7 +62,10 @@ AVAILABLE_TEACHER_MODELS = [
 DEFAULT_TEACHER_MODEL = "gpt-5.2"
 
 
-def create_teacher_config(model_name: str = None, gpu_id: int = None) -> dict:
+def create_teacher_config(
+    model_name: str = None,
+    gpu_ids: Union[None, int, Tuple[int, ...], list] = None
+) -> dict:
     """교사 모델 설정 딕셔너리를 생성합니다.
 
     모델명에 따라 OpenAI API 설정 또는 로컬 HuggingFace 모델 설정을 반환합니다.
@@ -45,8 +73,10 @@ def create_teacher_config(model_name: str = None, gpu_id: int = None) -> dict:
 
     Args:
         model_name: 교사 모델명. None이면 DEFAULT_TEACHER_MODEL 사용
-        gpu_id: GPU 인덱스. None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
+        gpu_ids: GPU 인덱스(들). None, int, tuple, list 허용.
+            None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
             API 모델(gpt-*)인 경우 무시됩니다.
+            다중 GPU 지정 시 tensor_parallel_size가 자동 결정됩니다.
 
     Returns:
         모델 설정 딕셔너리. OpenAI 모델의 경우:
@@ -62,7 +92,8 @@ def create_teacher_config(model_name: str = None, gpu_id: int = None) -> dict:
         - max_new_tokens: 최대 생성 토큰 수
         - temperature: 샘플링 온도
         - do_sample: 샘플링 활성화 여부
-        - gpu_id: GPU 인덱스 (None이면 자동)
+        - gpu_ids: 정규화된 GPU ID tuple (None이면 자동)
+        - tensor_parallel_size: GPU 수에 연동
     """
     if model_name is None:
         model_name = DEFAULT_TEACHER_MODEL
@@ -81,6 +112,9 @@ def create_teacher_config(model_name: str = None, gpu_id: int = None) -> dict:
             "max_tokens": 8192
         }
 
+    # GPU ID 정규화
+    normalized = normalize_gpu_ids(gpu_ids)
+
     # 로컬 모델 설정 (vLLM)
     config = {
         "model": model_name,
@@ -88,12 +122,12 @@ def create_teacher_config(model_name: str = None, gpu_id: int = None) -> dict:
         "max_new_tokens": 8192,
         "temperature": 0.7,
         "do_sample": True,
-        "tensor_parallel_size": 1,
+        "tensor_parallel_size": len(normalized) if normalized else 1,
         "gpu_memory_utilization": 0.90,
     }
 
-    if gpu_id is not None:
-        config["gpu_id"] = gpu_id
+    if normalized is not None:
+        config["gpu_ids"] = normalized
 
     return config
 
@@ -124,14 +158,19 @@ STUDENT_MODEL_BASE_CONFIG = {
 }
 
 
-def get_student_model_config(model_name: str = None, gpu_id: int = None) -> dict:
+def get_student_model_config(
+    model_name: str = None,
+    gpu_ids: Union[None, int, Tuple[int, ...], list] = None
+) -> dict:
     """학생 모델 설정 딕셔너리를 생성합니다.
 
     기본 설정에 모델명을 추가하여 반환합니다.
 
     Args:
         model_name: 학생 모델명. None이면 DEFAULT_STUDENT_MODEL 사용
-        gpu_id: GPU 인덱스. None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
+        gpu_ids: GPU 인덱스(들). None, int, tuple, list 허용.
+            None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
+            다중 GPU 지정 시 tensor_parallel_size가 자동 결정됩니다.
 
     Returns:
         모델 설정 딕셔너리:
@@ -140,7 +179,8 @@ def get_student_model_config(model_name: str = None, gpu_id: int = None) -> dict
         - max_new_tokens: 최대 생성 토큰 수
         - temperature: 샘플링 온도
         - do_sample: 샘플링 활성화 여부
-        - gpu_id: GPU 인덱스 (None이면 자동)
+        - gpu_ids: 정규화된 GPU ID tuple (None이면 자동)
+        - tensor_parallel_size: GPU 수에 연동
 
     Raises:
         ValueError: 지원하지 않는 모델명인 경우
@@ -154,11 +194,16 @@ def get_student_model_config(model_name: str = None, gpu_id: int = None) -> dict
             f"지원 모델: {AVAILABLE_STUDENT_MODELS}"
         )
 
+    # GPU ID 정규화
+    normalized = normalize_gpu_ids(gpu_ids)
+
     config = STUDENT_MODEL_BASE_CONFIG.copy()
     config["model_name"] = model_name
 
-    if gpu_id is not None:
-        config["gpu_id"] = gpu_id
+    # 다중 GPU 시 tensor_parallel_size 자동 결정
+    if normalized is not None:
+        config["gpu_ids"] = normalized
+        config["tensor_parallel_size"] = len(normalized)
 
     return config
 

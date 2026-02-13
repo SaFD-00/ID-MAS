@@ -2,20 +2,23 @@
 
 다른 GPU에 모델을 격리하여 로드하기 위해 자식 프로세스를 사용합니다.
 자식 프로세스는 CUDA 초기화 전에 CUDA_VISIBLE_DEVICES를 설정하므로
-GPU 격리가 보장됩니다.
+GPU 격리가 보장됩니다. 다중 GPU tensor parallel도 지원합니다.
 
 주요 클래스:
     RemoteLLMProxy: 메인 프로세스에서 사용하는 프록시 클래스
 
 사용 예시:
     >>> from models.remote_model import RemoteLLMProxy
-    >>> proxy = RemoteLLMProxy("Qwen/Qwen3-8B", gpu_id=1)
+    >>> # 단일 GPU
+    >>> proxy = RemoteLLMProxy("Qwen/Qwen3-8B", gpu_ids=(1,))
+    >>> # 다중 GPU (tensor parallel)
+    >>> proxy = RemoteLLMProxy("Qwen/Qwen3-32B", gpu_ids=(0, 1, 2))
     >>> outputs = proxy.chat(messages=[messages], sampling_params=params)
 """
 import os
 import atexit
 import multiprocessing as mp
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 
 class _RemoteCompletionOutput:
@@ -35,7 +38,7 @@ class _RemoteOutput:
 def _remote_model_worker(
     conn: mp.connection.Connection,
     model_name: str,
-    gpu_id: int,
+    gpu_ids: Tuple[int, ...],
     dtype: str,
     tensor_parallel_size: int,
     gpu_memory_utilization: float,
@@ -44,22 +47,23 @@ def _remote_model_worker(
     """자식 프로세스에서 vLLM 모델을 로드하고 chat 요청을 처리합니다.
 
     CUDA 초기화 전에 CUDA_VISIBLE_DEVICES를 설정하여 GPU 격리를 보장합니다.
+    다중 GPU가 지정되면 tensor parallel로 모델을 로드합니다.
 
     Args:
         conn: 메인 프로세스와의 Pipe 연결
         model_name: 로드할 모델명
-        gpu_id: 사용할 GPU 인덱스
+        gpu_ids: 사용할 GPU 인덱스 tuple (예: (0,), (0, 1, 2))
         dtype: 모델 데이터 타입
         tensor_parallel_size: 텐서 병렬 처리 GPU 수
         gpu_memory_utilization: GPU 메모리 활용률
         max_model_len: 최대 시퀀스 길이
     """
-    # CUDA 초기화 전에 GPU 설정
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    # CUDA 초기화 전에 GPU 설정 (다중 GPU 지원)
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
 
     from vllm import LLM
 
-    print(f"[RemoteWorker] Loading model {model_name} on GPU {gpu_id}...")
+    print(f"[RemoteWorker] Loading model {model_name} on GPU {gpu_ids} (tp={tensor_parallel_size})...")
 
     llm_kwargs = {
         "model": model_name,
@@ -74,7 +78,7 @@ def _remote_model_worker(
         llm_kwargs["max_model_len"] = max_model_len
 
     llm = LLM(**llm_kwargs)
-    print(f"[RemoteWorker] Model loaded: {model_name} on GPU {gpu_id}")
+    print(f"[RemoteWorker] Model loaded: {model_name} on GPU {gpu_ids}")
 
     # 메인 프로세스에 준비 완료 알림
     conn.send({"status": "ready"})
@@ -108,15 +112,17 @@ class RemoteLLMProxy:
 
     vLLM LLM.chat()과 동일한 인터페이스를 제공합니다.
     내부적으로 자식 프로세스를 통해 지정된 GPU에서 모델을 실행합니다.
+    다중 GPU tensor parallel도 지원합니다.
 
     Attributes:
         model_name: 모델명
-        gpu_id: GPU 인덱스
+        gpu_ids: GPU 인덱스 tuple
         _process: 자식 프로세스
         _conn: Pipe 연결
 
     Example:
-        >>> proxy = RemoteLLMProxy("Qwen/Qwen3-8B", gpu_id=1)
+        >>> proxy = RemoteLLMProxy("Qwen/Qwen3-8B", gpu_ids=(1,))
+        >>> proxy = RemoteLLMProxy("Qwen/Qwen3-32B", gpu_ids=(0, 1, 2))
         >>> outputs = proxy.chat(
         ...     messages=[messages],
         ...     sampling_params=params,
@@ -128,7 +134,7 @@ class RemoteLLMProxy:
     def __init__(
         self,
         model_name: str,
-        gpu_id: int,
+        gpu_ids: Tuple[int, ...],
         dtype: str = "auto",
         tensor_parallel_size: int = 1,
         gpu_memory_utilization: float = 0.85,
@@ -140,14 +146,14 @@ class RemoteLLMProxy:
 
         Args:
             model_name: 로드할 모델명
-            gpu_id: 사용할 GPU 인덱스
+            gpu_ids: 사용할 GPU 인덱스 tuple (예: (0,), (0, 1, 2))
             dtype: 모델 데이터 타입
             tensor_parallel_size: 텐서 병렬 처리 GPU 수
             gpu_memory_utilization: GPU 메모리 활용률
             max_model_len: 최대 시퀀스 길이
         """
         self.model_name = model_name
-        self.gpu_id = gpu_id
+        self.gpu_ids = gpu_ids
 
         # Pipe 생성 (duplex)
         self._conn, child_conn = mp.Pipe()
@@ -158,7 +164,7 @@ class RemoteLLMProxy:
             args=(
                 child_conn,
                 model_name,
-                gpu_id,
+                gpu_ids,
                 dtype,
                 tensor_parallel_size,
                 gpu_memory_utilization,
@@ -175,10 +181,10 @@ class RemoteLLMProxy:
         response = self._conn.recv()
         if response.get("status") != "ready":
             raise RuntimeError(
-                f"[RemoteLLMProxy] Failed to load model {model_name} on GPU {gpu_id}"
+                f"[RemoteLLMProxy] Failed to load model {model_name} on GPU {gpu_ids}"
             )
 
-        print(f"[RemoteLLMProxy] Model ready: {model_name} on GPU {gpu_id}")
+        print(f"[RemoteLLMProxy] Model ready: {model_name} on GPU {gpu_ids}")
 
     def chat(self, **kwargs) -> List[_RemoteOutput]:
         """vLLM chat API와 동일한 인터페이스로 텍스트를 생성합니다.

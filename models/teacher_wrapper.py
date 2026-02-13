@@ -273,16 +273,16 @@ class TeacherModelWrapper(BaseModelWrapper, LocalModelMixin):
             # 로컬 모델: vLLM ModelCache를 통해 로드
             self._api_client = None
             self._is_custom_endpoint = False
-            self._gpu_id = self.config.get("gpu_id")
+            self._gpu_ids = self.config.get("gpu_ids")
             cached = ModelCache.get_or_load(
                 self.model_name,
                 self.device,
                 tensor_parallel_size=self.config.get("tensor_parallel_size", 1),
                 gpu_memory_utilization=self.config.get("gpu_memory_utilization", 0.90),
-                gpu_id=self._gpu_id,
+                gpu_ids=self._gpu_ids,
             )
             self.llm = cached["llm"]
-            print(f"[TeacherModelWrapper] Using local model (vLLM): {self.model_name} (gpu_id={self._gpu_id})")
+            print(f"[TeacherModelWrapper] Using local model (vLLM): {self.model_name} (gpu_ids={self._gpu_ids})")
 
         # 로컬 모델용 생성 설정 (LocalModelMixin에서 사용)
         # JSON 생성을 위해 기본값을 4096으로 증가 (긴 응답 지원)

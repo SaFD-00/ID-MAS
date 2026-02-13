@@ -100,20 +100,40 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 | `--mode` | 실행 모드 | `train`, `eval` (필수) |
 | `--student-model` | 학생 모델 선택 | `Qwen/Qwen3-1.7B` (기본값) |
 | `--teacher-model` | 교사/설계 모델 선택 | `gpt-5.2` (기본값) |
-| `--student-gpu` | Student 모델 GPU 인덱스 | 미지정 시 CUDA_VISIBLE_DEVICES 사용 |
-| `--teacher-gpu` | Teacher 모델 GPU 인덱스 | 미지정 시 CUDA_VISIBLE_DEVICES 사용 (API 모델은 무시) |
+| `--student-gpu` | Student 모델 GPU | 단일(`0`) 또는 다중(`0,1,2`). 미지정 시 CUDA_VISIBLE_DEVICES 사용 |
+| `--teacher-gpu` | Teacher 모델 GPU | 단일(`1`) 또는 다중(`3,4,5,6`). 미지정 시 CUDA_VISIBLE_DEVICES 사용 (API 모델은 무시) |
 
 ### GPU 할당
 
 `--student-gpu`와 `--teacher-gpu`를 사용하여 모델별 GPU를 지정할 수 있습니다.
+**쉼표로 구분하여 다중 GPU를 지정하면 tensor parallel이 자동 활성화됩니다.**
+
+```
+--student-gpu 0          # 단일 GPU → tp=1
+--student-gpu 0,1,2      # 3-GPU tensor parallel → tp=3
+--teacher-gpu 3,4,5,6    # 4-GPU tensor parallel → tp=4
+```
+
+#### GPU 할당 시나리오
 
 | 시나리오 | Student | Teacher | GPU 할당 |
 |----------|---------|---------|----------|
 | **A** 같은 로컬 모델 | Qwen3-8B | Qwen3-8B | 같은 GPU, ModelCache 공유 |
-| **B** 다른 로컬 모델 | Qwen3-4B | Qwen3-32B | 각각 다른 GPU (subprocess) |
-| **C** API Teacher | Qwen3-8B | gpt-5.2 | student만 GPU, teacher는 API |
+| **B** 다른 로컬 모델 (단일) | Qwen3-4B | Qwen3-8B | 각각 다른 GPU (subprocess) |
+| **C** 다른 로컬 모델 (다중) | Qwen3-8B (2-GPU) | Qwen3-32B (4-GPU) | 각각 다중 GPU tensor parallel |
+| **D** API Teacher | Qwen3-8B | gpt-5.2 | student만 GPU, teacher는 API |
+| **E** 대형 모델 단독 | Qwen3-32B (3-GPU) | gpt-5.2 | student 3-GPU tp, teacher API |
 
-**`CUDA_VISIBLE_DEVICES`와의 관계:**
+#### GPU 겹침 경고
+
+다른 모델이 같은 GPU를 사용하면 경고가 출력됩니다:
+```
+--student-gpu 0,1,2 --teacher-gpu 1,2,3
+→ WARNING: GPU overlap detected {1, 2}
+```
+
+#### `CUDA_VISIBLE_DEVICES`와의 관계
+
 - `--student-gpu`/`--teacher-gpu` 지정 시 `CUDA_VISIBLE_DEVICES`가 자동 설정됩니다
 - 기존 `CUDA_VISIBLE_DEVICES=0 python main.py ...` 방식도 그대로 동작합니다
 - 두 가지를 동시에 사용할 경우 `CUDA_VISIBLE_DEVICES`가 우선합니다
@@ -172,7 +192,7 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0
+    --student-gpu 0,1,2
 
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-1.7B \
@@ -192,7 +212,7 @@ python main.py --mode train --domain math --train-dataset math \
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 1
+    --student-gpu 0,1,2
 ```
 
 #### Logical 도메인
@@ -216,7 +236,7 @@ python main.py --mode train --domain logical --train-dataset reclor \
 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0
+    --student-gpu 0,1,2
 ```
 
 #### Commonsense 도메인
@@ -240,7 +260,7 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 1
+    --student-gpu 0,1,2
 ```
 
 ### 평가
@@ -263,7 +283,7 @@ python main.py --mode eval --method baseline \
 
 python main.py --mode eval --method baseline \
     --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2,1,2
 
 # SFT 평가 (In-Domain)
 python main.py --mode eval --method sft \
@@ -280,7 +300,7 @@ python main.py --mode eval --method sft \
 
 python main.py --mode eval --method sft \
     --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT_ID-MAS 평가 (In-Domain)
 python main.py --mode eval --method sft_id-mas \
@@ -297,7 +317,7 @@ python main.py --mode eval --method sft_id-mas \
 
 python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # OOD 평가 (SVAMP)
 python main.py --mode eval --method baseline \
@@ -331,7 +351,7 @@ python main.py --mode eval --method baseline \
 
 python main.py --mode eval --method baseline \
     --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT 평가 (In-Domain)
 python main.py --mode eval --method sft \
@@ -348,7 +368,7 @@ python main.py --mode eval --method sft \
 
 python main.py --mode eval --method sft \
     --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT_ID-MAS 평가 (In-Domain)
 python main.py --mode eval --method sft_id-mas \
@@ -365,7 +385,7 @@ python main.py --mode eval --method sft_id-mas \
 
 python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # OOD 평가 (ANLI-R2)
 python main.py --mode eval --method baseline \
@@ -427,7 +447,7 @@ python main.py --mode eval --method baseline \
 
 python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT 평가 (In-Domain)
 python main.py --mode eval --method sft \
@@ -444,7 +464,7 @@ python main.py --mode eval --method sft \
 
 python main.py --mode eval --method sft \
     --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT_ID-MAS 평가 (In-Domain)
 python main.py --mode eval --method sft_id-mas \
@@ -461,7 +481,7 @@ python main.py --mode eval --method sft_id-mas \
 
 python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-32B --student-gpu 0
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # OOD 평가 (StrategyQA)
 python main.py --mode eval --method baseline \
@@ -479,17 +499,15 @@ python main.py --mode eval --method sft_id-mas \
 
 ### 멀티 GPU 할당
 
+#### 단일 GPU 할당 (기존 방식)
+
 ```bash
 # 시나리오 B: 다른 로컬 모델을 다른 GPU에 할당
 python main.py --mode train --domain math --train-dataset gsm8k \
-    --student-model Qwen/Qwen3-4B --teacher-model Qwen/Qwen3-32B \
+    --student-model Qwen/Qwen3-4B --teacher-model Qwen/Qwen3-8B \
     --student-gpu 0 --teacher-gpu 1
 
-python main.py --mode train --domain math --train-dataset gsm8k \
-    --student-model Qwen/Qwen3-8B --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
-
-# 시나리오 C: API Teacher + Student GPU 지정
+# 시나리오 D: API Teacher + Student GPU 지정
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B --teacher-model gpt-5.2 \
     --student-gpu 0
@@ -498,6 +516,33 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 python main.py --mode eval --method baseline \
     --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-8B --student-gpu 1
+```
+
+#### 다중 GPU Tensor Parallel
+
+대형 모델(Qwen3-32B 등)이 단일 GPU 메모리로 부족한 경우, 쉼표로 구분하여 다중 GPU를 지정합니다.
+`tensor_parallel_size`는 GPU 수에서 자동 결정됩니다.
+
+```bash
+# 시나리오 C: Student 다중 GPU + Teacher 다중 GPU
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-8B --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0,1 --teacher-gpu 2,3,4,5
+
+# 시나리오 E: 대형 모델 단독 (3-GPU tensor parallel) + API Teacher
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-32B --teacher-model gpt-5.2 \
+    --student-gpu 0,1,2
+
+# 같은 대형 모델을 Teacher/Student로 공유 (ModelCache 공유)
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-32B --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0,1,2
+
+# 평가 시 다중 GPU
+python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k \
+    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 ```
 
 ---
@@ -568,47 +613,47 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
     --teacher-model Qwen/Qwen3-8B \
     --student-gpu 1
 
-## [4] Student Model: Qwen3-4B / Teacher Model: Qwen3-32B (멀티 GPU)
+## [4] Student Model: Qwen3-4B / Teacher Model: Qwen3-32B (멀티 GPU tensor parallel)
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0 --teacher-gpu 1,2,3
 
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0 --teacher-gpu 1,2,3
 
 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0 --teacher-gpu 1,2,3
 
 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0 --teacher-gpu 1,2,3
 
-## [5] Student Model: Qwen3-8B / Teacher Model: Qwen3-32B (멀티 GPU)
+## [5] Student Model: Qwen3-8B / Teacher Model: Qwen3-32B (멀티 GPU tensor parallel)
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0,1 --teacher-gpu 2,3,4,5
 
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0,1 --teacher-gpu 2,3,4,5
 
 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0,1 --teacher-gpu 2,3,4,5
 
 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0 --teacher-gpu 1
+    --student-gpu 0,1 --teacher-gpu 2,3,4,5
 
 ## [6] Student Model: Qwen3-4B / Teacher Model: gpt-5.2
 python main.py --mode train --domain math --train-dataset gsm8k \

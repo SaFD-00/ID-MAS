@@ -48,7 +48,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         use_sft_model: bool = False,
         use_sft_idmas_model: bool = False,
         sft_domain: str = None,
-        gpu_id: int = None
+        gpu_ids=None
     ):
         """StudentModelWrapper를 초기화합니다.
 
@@ -57,7 +57,8 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
             use_sft_model: SFT 파인튜닝 모델 사용 여부
             use_sft_idmas_model: SFT_ID-MAS 파인튜닝 모델 사용 여부
             sft_domain: SFT/SFT_ID-MAS 모델의 도메인 (예: "math", "logical")
-            gpu_id: GPU 인덱스. None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
+            gpu_ids: GPU 인덱스 tuple (예: (0,), (0,1,2)).
+                None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
 
         Raises:
             ValueError: SFT 모델 사용 시 sft_domain이 지정되지 않은 경우
@@ -92,13 +93,13 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         self.do_sample = self.config["do_sample"]
 
         # 공유 ModelCache를 사용하여 vLLM 모델 로드 (Teacher와 동일 모델일 경우 공유됨)
-        self._gpu_id = gpu_id if gpu_id is not None else self.config.get("gpu_id")
+        self._gpu_ids = gpu_ids if gpu_ids is not None else self.config.get("gpu_ids")
         cached = ModelCache.get_or_load(
             actual_model_name,
             self.device,
             tensor_parallel_size=self.config.get("tensor_parallel_size", 1),
             gpu_memory_utilization=self.config.get("gpu_memory_utilization", 0.90),
-            gpu_id=self._gpu_id,
+            gpu_ids=self._gpu_ids,
         )
         self.llm = cached["llm"]
 
