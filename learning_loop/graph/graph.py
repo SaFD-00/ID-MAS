@@ -54,8 +54,8 @@ def create_idmas_graph(
 
     그래프 흐름:
         1. scaffolding → 현재 문제를 반복적 스캐폴딩으로 처리
-           - 정답 + PO 충족: Case A
-           - 최대 반복 후 실패: Case B/C (재구성)
+           - 정답 + PO 충족: Case A: Autonomous Mastery (1회차) / Case B: Scaffolded & Coached Mastery (2~5회차)
+           - 최대 반복 후 실패: Case C: Teacher Modeling Distillation (교사 모델링 증류)
         2. advance → 더 많은 문제가 있는지 확인
            - 더 있으면: scaffolding으로 돌아감
            - 없으면: finalize로 이동
@@ -291,11 +291,11 @@ class IDMASGraphRunner:
 
                         case_stats = stats.get('case_statistics', {})
                         print(f"\n[Case Statistics]")
-                        print(f"  Case A (First attempt success): {case_stats.get('case_a', 0)}")
-                        print(f"  Case B (Iterative Scaffolding success): {case_stats.get('case_b', 0)}")
-                        print(f"  Case C (Reconstructed after 5 failures): {case_stats.get('case_c', 0)}")
+                        print(f"  Case A: Independent Performance Mastery (독립적 수행 숙달): {case_stats.get('case_a_independent_performance_mastery', 0)}")
+                        print(f"  Case B: Scaffolded & Coached Mastery (스캐폴딩 기반 숙달): {case_stats.get('case_b_scaffolded_coached_mastery', 0)}")
+                        print(f"  Case C: Teacher Modeling Distillation (교사 모델링 증류): {case_stats.get('case_c_teacher_modeling_distillation', 0)}")
                         print(f"  ────────────────────────────")
-                        print(f"  Success Total (A+B): {case_stats.get('success_total', 0)}")
+                        print(f"  Success Total (Case A + Case B): {case_stats.get('success_total', 0)}")
                         print(f"  Success Rate: {case_stats.get('success_rate', 0) * 100:.1f}%")
                         print("=" * 60)
 
@@ -359,11 +359,11 @@ class IDMASGraphRunner:
 
         case_stats = stats.get('case_statistics', {})
         print(f"\n[Case Statistics]")
-        print(f"  Case A (First attempt success): {case_stats.get('case_a', 0)}")
-        print(f"  Case B (Iterative Scaffolding success): {case_stats.get('case_b', 0)}")
-        print(f"  Case C (Reconstructed after 5 failures): {case_stats.get('case_c', 0)}")
+        print(f"  Case A: Independent Performance Mastery (독립적 수행 숙달): {case_stats.get('case_a_independent_performance_mastery', 0)}")
+        print(f"  Case B: Scaffolded & Coached Mastery (스캐폴딩 기반 숙달): {case_stats.get('case_b_scaffolded_coached_mastery', 0)}")
+        print(f"  Case C: Teacher Modeling Distillation (교사 모델링 증류): {case_stats.get('case_c_teacher_modeling_distillation', 0)}")
         print(f"  ────────────────────────────")
-        print(f"  Success Total (A+B): {case_stats.get('success_total', 0)}")
+        print(f"  Success Total (Case A + Case B): {case_stats.get('success_total', 0)}")
         print(f"  Success Rate: {case_stats.get('success_rate', 0) * 100:.1f}%")
 
         skip_stats = stats.get('skip', {})
@@ -371,9 +371,9 @@ class IDMASGraphRunner:
 
         step5 = skip_stats.get('step5_reconstruction', {})
         print(f"  Reconstruction:")
-        print(f"    Case B: {step5.get('case_b', 0)}")
-        print(f"    Case C: {step5.get('case_c', 0)}")
-        print(f"    Subtotal: {step5.get('case_b', 0) + step5.get('case_c', 0)}")
+        print(f"    Case B: Scaffolded & Coached Mastery: {step5.get('case_b_scaffolded_coached_mastery', 0)}")
+        print(f"    Case C: Teacher Modeling Distillation: {step5.get('case_c_teacher_modeling_distillation', 0)}")
+        print(f"    Subtotal: {step5.get('case_b_scaffolded_coached_mastery', 0) + step5.get('case_c_teacher_modeling_distillation', 0)}")
 
         print(f"  Other:")
         print(f"    Evaluation: {skip_stats.get('step2_evaluation', {}).get('count', 0)}")

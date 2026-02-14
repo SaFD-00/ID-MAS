@@ -6,7 +6,7 @@ Dick & Carey 교수설계 모델을 기반으로 구현되었습니다.
 파이프라인 구성:
     - Task Analysis + 초기 응답 생성
     - Performance Objectives 기반 평가 (피드백 질문 포함)
-    - Case A/B/C SFT 데이터 생성
+    - Case A: Autonomous Mastery / Case B: Scaffolded & Coached Mastery / Case C: Teacher Modeling Distillation SFT 데이터 생성
 
 주요 클래스:
     IDMASState: 파이프라인 상태 스키마

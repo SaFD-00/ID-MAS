@@ -6,7 +6,7 @@
 LangGraph 기반 Iterative Scaffolding Pipeline을 사용하여:
 - 교사 모델의 가이드 하에 학생 모델의 반복적 응답 개선 (최대 5회)
 - Performance Objectives 기반 평가와 소크라테스식 질문 생성
-- Case A(PO 충족)/Case B(재구성) SFT 데이터 생성
+- Case A: Independent Performance Mastery(PO 충족)/Case B: Scaffolded & Coached Mastery(스캐폴딩 후 PO 충족)/Case C: Teacher Modeling Distillation(교사 시범) SFT 데이터 생성
 
 주요 클래스:
     IDMASPipeline: 학습 모드 파이프라인 (설계 → 학습 → SFT 데이터 생성)
@@ -399,7 +399,7 @@ class IDMASPipeline:
         2. 교사 모델 PO 평가 (소크라테스식 질문)
         3. 스캐폴딩 아티팩트 생성
         4. 학생 재응답
-        5. 응답 재구성 (Case A/B/C)
+        5. 응답 재구성 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery / Case C: Teacher Modeling Distillation)
         6. SFT 데이터 생성
 
         Args:
@@ -412,7 +412,7 @@ class IDMASPipeline:
             - total_questions: 전체 문제 수
             - scaffolding_processed: 스캐폴딩 처리된 문제 수
             - scaffolding_correct: 정답 처리된 문제 수
-            - sft_case_a: Case A SFT 데이터 수
+            - case_a_independent_performance_mastery: Case A: Independent Performance Mastery SFT 데이터 수
             - sft_data_count: 총 SFT 데이터 수
             - sft_data_path: SFT 데이터 저장 경로
         """
@@ -468,8 +468,8 @@ class IDMASPipeline:
             "total_questions": stats['total_questions'],
             "scaffolding_processed": stats['scaffolding_processed'],
             "scaffolding_correct": case_stats.get('success_total', 0),
-            "sft_case_a": case_stats.get('case_a', 0),
-            "sft_case_a_failed": case_stats.get('case_c', 0),
+            "case_a_independent_performance_mastery": case_stats.get('case_a_independent_performance_mastery', 0),
+            "case_c_teacher_modeling_distillation": case_stats.get('case_c_teacher_modeling_distillation', 0),
             "case_statistics": case_stats,
             "sft_data_count": len(final_state.get('sft_data', [])),
             "sft_data_path": final_state.get('sft_path', ''),

@@ -26,14 +26,14 @@ Iterative Scaffolding Pipeline에서 교사 역할을 담당합니다.
 """
 from models.teacher_wrapper import TeacherModelWrapper
 from prompts.learning_prompts import (
-    TEACHER_INTERVENTION_SYSTEM_PROMPT,
-    TEACHER_INTERVENTION_USER_PROMPT,
-    SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT,
-    SCAFFOLDING_ARTIFACT_USER_PROMPT,
-    TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT,
-    TEACHER_FINAL_SOLUTION_USER_PROMPT,
-    TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT,
-    TEACHER_POSITIVE_FEEDBACK_USER_PROMPT,
+    FORMATIVE_ASSESSMENT_SYSTEM_PROMPT,
+    FORMATIVE_ASSESSMENT_USER_PROMPT,
+    SCAFFOLDED_CORRECTIVE_FEEDBACK_SYSTEM_PROMPT,
+    SCAFFOLDED_CORRECTIVE_FEEDBACK_USER_PROMPT,
+    TEACHER_MODELING_SYSTEM_PROMPT,
+    TEACHER_MODELING_USER_PROMPT,
+    POSITIVE_REINFORCEMENT_SYSTEM_PROMPT,
+    POSITIVE_REINFORCEMENT_USER_PROMPT,
 )
 from typing import Dict, Any, List
 import json
@@ -48,8 +48,8 @@ class TeacherModel:
     주요 기능:
         - Performance Objectives 기반 평가 (평가 전용)
         - HOT/LOT 구분 스캐폴딩 아티팩트 + 서술형 피드백 생성
-        - 긍정 피드백 생성 (Case A/B Self-Refinement용)
-        - 최종 솔루션 생성 (Case C, 평문)
+        - 긍정 피드백 생성 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery Self-Refinement용)
+        - 최종 솔루션 생성 (Case C: Teacher Modeling Distillation, 평문)
 
     Attributes:
         llm: Teacher 모델 래퍼
@@ -92,8 +92,8 @@ class TeacherModel:
                     - feedback: 충족 시 강점 / 미충족 시 사유 (Student response 참조)
                 - all_satisfied (bool): 전체 PO 충족 여부
         """
-        system_message = TEACHER_INTERVENTION_SYSTEM_PROMPT
-        user_prompt = TEACHER_INTERVENTION_USER_PROMPT.format(
+        system_message = FORMATIVE_ASSESSMENT_SYSTEM_PROMPT
+        user_prompt = FORMATIVE_ASSESSMENT_USER_PROMPT.format(
             problem_text=problem_text,
             student_response=student_response,
             performance_objectives=json.dumps(performance_objectives, ensure_ascii=False, indent=2),
@@ -175,8 +175,8 @@ class TeacherModel:
 
         previous_summaries_str = self._format_iteration_summaries(previous_iteration_summaries)
 
-        system_message = SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT
-        user_prompt = SCAFFOLDING_ARTIFACT_USER_PROMPT.format(
+        system_message = SCAFFOLDED_CORRECTIVE_FEEDBACK_SYSTEM_PROMPT
+        user_prompt = SCAFFOLDED_CORRECTIVE_FEEDBACK_USER_PROMPT.format(
             problem_text=problem_text,
             student_response=student_response[:2000],
             po_evaluation=json.dumps(po_evaluation, ensure_ascii=False, indent=2),
@@ -219,7 +219,7 @@ class TeacherModel:
         student_response: str,
         po_evaluation: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Case A/B: 모든 PO를 충족한 학생에게 긍정 피드백을 생성합니다.
+        """Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery: 모든 PO를 충족한 학생에게 긍정 피드백을 생성합니다.
 
         학생의 강점을 요약하고 응답 품질을 더 높이기 위한
         구체적인 개선 제안을 제공합니다. Self-Refinement의 입력으로 사용됩니다.
@@ -233,8 +233,8 @@ class TeacherModel:
             긍정 피드백 딕셔너리:
                 - feedback_text (str): 전체 피드백 텍스트
         """
-        system_message = TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT
-        user_prompt = TEACHER_POSITIVE_FEEDBACK_USER_PROMPT.format(
+        system_message = POSITIVE_REINFORCEMENT_SYSTEM_PROMPT
+        user_prompt = POSITIVE_REINFORCEMENT_USER_PROMPT.format(
             problem_text=problem_text,
             student_response=student_response[:2000],
             po_evaluation=json.dumps(po_evaluation, ensure_ascii=False, indent=2),
@@ -368,7 +368,7 @@ class TeacherModel:
         max_iterations: int = 5,
         last_iteration_summary: str = "",
     ) -> Dict[str, Any]:
-        """Case C: 최종 정답 풀이를 생성합니다.
+        """Case C: Teacher Modeling Distillation: 최종 정답 풀이를 생성합니다.
 
         학생이 max_iterations 시도 후에도 실패한 경우,
         마지막 iteration의 요약을 참고하여 교육적 정답 풀이를 생성합니다.
@@ -389,10 +389,10 @@ class TeacherModel:
         """
         weaknesses_str = "\n".join(f"- {w}" for w in student_weaknesses) if student_weaknesses else "- Unable to identify specific weaknesses"
 
-        system_message = TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT.format(
+        system_message = TEACHER_MODELING_SYSTEM_PROMPT.format(
             max_iterations=max_iterations
         )
-        user_prompt = TEACHER_FINAL_SOLUTION_USER_PROMPT.format(
+        user_prompt = TEACHER_MODELING_USER_PROMPT.format(
             problem_text=problem_text,
             ground_truth=ground_truth,
             task_analysis=task_analysis[:1500],

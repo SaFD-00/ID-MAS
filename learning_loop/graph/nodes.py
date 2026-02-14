@@ -34,7 +34,7 @@ from learning_loop.graph.state import (
     SFTCase,
     get_statistics,
 )
-from prompts.learning_prompts import SCAFFOLDING_SYSTEM_PROMPT
+from prompts.learning_prompts import LEARNING_TASK_SYSTEM_PROMPT
 
 
 # ==================== Scaffolding ====================
@@ -98,18 +98,18 @@ def process_question_scaffolding(
     }
 
     sft_case = result.get("sft_case")
-    if sft_case == SFTCase.A.value:
-        updates["case_a_count"] = state.get("case_a_count", 0) + 1
+    if sft_case == SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value:
+        updates["case_a_independent_performance_mastery_count"] = state.get("case_a_independent_performance_mastery_count", 0) + 1
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
-        print(f"  -> Case A: Success on first attempt! (PO satisfied at iteration 1)")
-    elif sft_case == SFTCase.B.value:
-        updates["case_b_count"] = state.get("case_b_count", 0) + 1
+        print(f"  -> Case A: Independent Performance Mastery — 독립적 수행 숙달 (PO satisfied at iteration 1)")
+    elif sft_case == SFTCase.SCAFFOLDED_COACHED_MASTERY.value:
+        updates["case_b_scaffolded_coached_mastery_count"] = state.get("case_b_scaffolded_coached_mastery_count", 0) + 1
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
         iterations = result.get("iterative_scaffolding", {}).get("iterations_needed", 0)
-        print(f"  -> Case B: Iterative Scaffolding succeeded! (PO satisfied at iteration {iterations})")
-    elif sft_case == SFTCase.C.value:
-        updates["case_c_count"] = state.get("case_c_count", 0) + 1
-        print(f"  -> Case C: Reconstruction after 5 failed attempts")
+        print(f"  -> Case B: Scaffolded & Coached Mastery — 스캐폴딩 기반 숙달 (PO satisfied at iteration {iterations})")
+    elif sft_case == SFTCase.TEACHER_MODELING_DISTILLATION.value:
+        updates["case_c_teacher_modeling_distillation_count"] = state.get("case_c_teacher_modeling_distillation_count", 0) + 1
+        print(f"  -> Case C: Teacher Modeling Distillation — 교사 모델링 증류 (after {max_iterations} failed attempts)")
 
     # Update HOT/LOT scaffolding counts
     hot_count = result.get("hot_count", 0) or 0
@@ -161,7 +161,7 @@ def _process_single_shot(
         initial_response=response,
         predicted_answer=predicted,
         scaffolding_correct=is_correct,
-        sft_case=SFTCase.A.value if is_correct else None,
+        sft_case=SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value if is_correct else None,
         sft_response=response if is_correct else None,
     )
 
@@ -184,9 +184,12 @@ def _process_iterative_scaffolding(
         3. PO 미충족 시 → 교사가 Scaffolding Artifact (HOT/LOT) 생성
         4. 학생이 Scaffolding Artifacts를 참조하여 응답 (출처 인용 필수)
         5. 모든 PO 충족 또는 최대 반복 도달까지 반복
-        6. Case A: 1회차 성공
-        7. Case B: 2-5회차 성공 (재구성)
-        8. Case C: 최대 반복 후 실패 → 교사가 최종 솔루션 생성
+        6. Case A: Independent Performance Mastery — 1회차 PO 충족 (독립적 수행 숙달)
+           Step 5a-1: 긍정 강화 피드백, Step 5a-2: 피드백 기반 정교화
+        7. Case B: Scaffolded & Coached Mastery — 2-5회차 PO 충족 (스캐폴딩 기반 숙달)
+           Step 5a-1: 긍정 강화 피드백, Step 5a-2: 피드백 기반 정교화
+        8. Case C: Teacher Modeling Distillation — 최대 반복 후 실패 → 교사가 최종 솔루션 생성
+           Step 5b: 교사 모델링
 
     Args:
         question: 문제 정보 딕셔너리
@@ -379,9 +382,9 @@ def _process_iterative_scaffolding(
     # Build result
     if all_satisfied:
         iterations_needed = len(iterations)
-        sft_case = SFTCase.A.value if iterations_needed == 1 else SFTCase.B.value
+        sft_case = SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value if iterations_needed == 1 else SFTCase.SCAFFOLDED_COACHED_MASTERY.value
 
-        # Step 5a: Teacher generates positive feedback for Self-Refinement
+        # Step 5a-1: Teacher generates positive feedback for Self-Refinement
         positive_feedback_result = teacher_model.generate_positive_feedback(
             problem_text=question["input"],
             student_response=response,
@@ -389,7 +392,7 @@ def _process_iterative_scaffolding(
         )
         positive_feedback_text = positive_feedback_result.get("feedback_text", "")
 
-        # Step 5b: Student self-refines response using positive feedback
+        # Step 5a-2: Student self-refines response using positive feedback
         if positive_feedback_text:
             sft_output = student_model.self_refine_response(
                 problem_text=question["input"],
@@ -397,10 +400,10 @@ def _process_iterative_scaffolding(
                 task_analysis=task_analysis,
                 instructional_goal=instructional_goal,
             )
-            print(f"    -> Self-Refinement completed (Case {sft_case})")
+            print(f"    -> Self-Refinement completed ({sft_case})")
         else:
             sft_output = response
-            print(f"    -> Self-Refinement skipped (no feedback), using original response (Case {sft_case})")
+            print(f"    -> Self-Refinement skipped (no feedback), using original response ({sft_case})")
 
         # Record self-refinement in conversation history
         conversation_history.append({
@@ -441,9 +444,9 @@ def _process_iterative_scaffolding(
             lot_count=lot_count if lot_count > 0 else None,
         )
     else:
-        # Case C: Failed after max iterations - Teacher generates final solution
-        case_c_reason = "po_not_satisfied"
-        print(f"    -> Failed after {max_iterations} iterations. (Reason: {case_c_reason}) Generating final solution...")
+        # Case C: Teacher Modeling Distillation — Failed after max iterations - Teacher generates final solution
+        distillation_reason = "po_not_satisfied"
+        print(f"    -> Failed after {max_iterations} iterations. (Reason: {distillation_reason}) Generating final solution...")
 
         # Extract student weaknesses from conversation history
         student_weaknesses = teacher_model.extract_student_weaknesses(conversation_history)
@@ -473,14 +476,14 @@ def _process_iterative_scaffolding(
             initial_response=reconstructed_response,
             predicted_answer=predicted,
             scaffolding_correct=False,
-            sft_case=SFTCase.C.value,
+            sft_case=SFTCase.TEACHER_MODELING_DISTILLATION.value,
             sft_response=reconstructed_response,
             iterative_scaffolding={
                 "success": False,
                 "iterations_needed": max_iterations,
                 "conversation_history": conversation_history,
                 "iterations": iterations,
-                "case_c_reason": case_c_reason,
+                "distillation_reason": distillation_reason,
                 "last_correct_iteration": last_correct_iteration,
                 "last_correct_response": last_correct_response,
             },
@@ -554,7 +557,7 @@ def advance_to_next_question(state: IDMASState) -> Dict[str, Any]:
 def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     """스캐폴딩 결과에서 SFT 훈련 데이터를 생성합니다.
 
-    Case A, B, C 결과를 SFT 데이터 형식으로 변환합니다.
+    Case A: Independent Performance Mastery, Case B: Scaffolded & Coached Mastery, Case C: Teacher Modeling Distillation 결과를 SFT 데이터 형식으로 변환합니다.
 
     Args:
         state: 현재 파이프라인 상태
@@ -567,9 +570,9 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     instructional_goal = state.get("instructional_goal", "")
     task_analysis = state.get("task_analysis", "")
 
-    # Scaffolding results: Case A, Case B, and Case C
+    # Scaffolding results: Case A: Independent Performance Mastery, Case B: Scaffolded & Coached Mastery, Case C: Teacher Modeling Distillation
     for result in state.get("scaffolding_results", []):
-        if result.get("sft_case") in (SFTCase.A.value, SFTCase.B.value, SFTCase.C.value):
+        if result.get("sft_case") in (SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value, SFTCase.SCAFFOLDED_COACHED_MASTERY.value, SFTCase.TEACHER_MODELING_DISTILLATION.value):
             entry = _create_sft_entry(result, instructional_goal, task_analysis)
             if entry:
                 sft_data.append(entry)
@@ -589,7 +592,7 @@ def _create_sft_entry(
 ) -> Optional[Dict[str, Any]]:
     """케이스에 따라 단일 SFT 엔트리를 생성합니다.
 
-    instruction은 원본 instruction + SCAFFOLDING_SYSTEM_PROMPT를
+    instruction은 원본 instruction + LEARNING_TASK_SYSTEM_PROMPT를
     동적으로 결합하여 생성합니다.
 
     Args:
@@ -604,16 +607,16 @@ def _create_sft_entry(
     output = result.get("sft_response", "")
 
     if not output:
-        if case in (SFTCase.A.value, SFTCase.B.value, SFTCase.C.value):
+        if case in (SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value, SFTCase.SCAFFOLDED_COACHED_MASTERY.value, SFTCase.TEACHER_MODELING_DISTILLATION.value):
             output = result.get("initial_response", "")
 
     if not output:
         return None
 
-    # Dynamic instruction combination: original + SCAFFOLDING_SYSTEM_PROMPT
+    # Dynamic instruction combination: original + LEARNING_TASK_SYSTEM_PROMPT
     original_instruction = result.get("instruction", "")
     if instructional_goal and task_analysis:
-        scaffolding_prompt = SCAFFOLDING_SYSTEM_PROMPT.format(
+        scaffolding_prompt = LEARNING_TASK_SYSTEM_PROMPT.format(
             instructional_goal=instructional_goal,
             task_analysis=task_analysis
         )

@@ -25,9 +25,11 @@ Iterative Scaffolding Pipeline에서 학생 역할을 담당합니다.
 """
 from models.student_wrapper import StudentModelWrapper
 from prompts.learning_prompts import (
-    SCAFFOLDING_SYSTEM_PROMPT,
-    STUDENT_FEEDBACK_RESPONSE_PROMPT,
-    STUDENT_SELF_REFINEMENT_PROMPT,
+    LEARNING_TASK_SYSTEM_PROMPT,
+    TEACHER_SUPPORTED_REATTEMPT_SYSTEM_PROMPT,
+    TEACHER_SUPPORTED_REATTEMPT_USER_PROMPT,
+    FEEDBACK_DRIVEN_ELABORATION_SYSTEM_PROMPT,
+    FEEDBACK_DRIVEN_ELABORATION_USER_PROMPT,
 )
 from typing import Dict, Any, Optional, List
 
@@ -36,12 +38,12 @@ class StudentModel:
     """학생 모델 에이전트 클래스.
 
     Iterative Scaffolding Pipeline에서 문제에 대한 응답을 생성합니다.
-    SCAFFOLDING_SYSTEM_PROMPT를 중심으로 일관된 system message를 사용합니다.
+    LEARNING_TASK_SYSTEM_PROMPT를 중심으로 일관된 system message를 사용합니다.
 
     주요 기능:
         - 초기 응답 생성 (Task Analysis 기반)
         - 교사 피드백 기반 재응답 생성
-        - Self-Refinement 응답 생성 (Case A/B, 긍정 피드백 기반)
+        - Self-Refinement 응답 생성 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery, 긍정 피드백 기반)
 
     Attributes:
         model: Student 모델 래퍼
@@ -122,7 +124,7 @@ class StudentModel:
         Returns:
             생성된 응답 텍스트
         """
-        scaffolding_prompt = SCAFFOLDING_SYSTEM_PROMPT.format(
+        scaffolding_prompt = LEARNING_TASK_SYSTEM_PROMPT.format(
             instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
             task_analysis=task_analysis
         )
@@ -148,7 +150,7 @@ class StudentModel:
     ) -> str:
         """교사의 scaffolding artifact를 참조하여 개선된 풀이를 생성합니다.
 
-        dataset_prompt + SCAFFOLDING_SYSTEM_PROMPT + scaffolding artifact를
+        dataset_prompt + LEARNING_TASK_SYSTEM_PROMPT + scaffolding artifact를
         system message에 통합하고 problem_text(순수 input)만 user message로 전달합니다.
 
         Args:
@@ -161,20 +163,23 @@ class StudentModel:
         Returns:
             개선된 응답 텍스트
         """
-        feedback_prompt = STUDENT_FEEDBACK_RESPONSE_PROMPT.format(
-            scaffolding_system_prompt=SCAFFOLDING_SYSTEM_PROMPT.format(
+        system_prompt = TEACHER_SUPPORTED_REATTEMPT_SYSTEM_PROMPT.format(
+            scaffolding_system_prompt=LEARNING_TASK_SYSTEM_PROMPT.format(
                 instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
                 task_analysis=task_analysis
             ),
-            scaffolding_artifact=scaffolding_text
+        )
+        user_prompt = TEACHER_SUPPORTED_REATTEMPT_USER_PROMPT.format(
+            scaffolding_artifact=scaffolding_text,
+            problem_text=problem_text,
         )
         if dataset_prompt:
-            system_message = f"{dataset_prompt}\n\n{feedback_prompt}"
+            system_message = f"{dataset_prompt}\n\n{system_prompt}"
         else:
-            system_message = feedback_prompt
+            system_message = system_prompt
 
         response = self.model.generate(
-            prompt=problem_text,
+            prompt=user_prompt,
             system_message=system_message
         )
 
@@ -201,19 +206,20 @@ class StudentModel:
         Returns:
             Self-Refined 응답 텍스트
         """
-        scaffolding_system_prompt = SCAFFOLDING_SYSTEM_PROMPT.format(
-            instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
-            task_analysis=task_analysis,
+        system_prompt = FEEDBACK_DRIVEN_ELABORATION_SYSTEM_PROMPT.format(
+            scaffolding_system_prompt=LEARNING_TASK_SYSTEM_PROMPT.format(
+                instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
+                task_analysis=task_analysis,
+            ),
         )
-
-        system_message = STUDENT_SELF_REFINEMENT_PROMPT.format(
-            scaffolding_system_prompt=scaffolding_system_prompt,
+        user_prompt = FEEDBACK_DRIVEN_ELABORATION_USER_PROMPT.format(
             positive_feedback=positive_feedback,
+            problem_text=problem_text,
         )
 
         response = self.model.generate(
-            prompt=problem_text,
-            system_message=system_message,
+            prompt=user_prompt,
+            system_message=system_prompt,
         )
 
         return response
@@ -225,13 +231,11 @@ class StudentModel:
         instructional_goal: str = "",
     ) -> str:
         """Self-Refinement의 system message를 반환합니다 (로깅용)."""
-        scaffolding_system_prompt = SCAFFOLDING_SYSTEM_PROMPT.format(
-            instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
-            task_analysis=task_analysis,
-        )
-        return STUDENT_SELF_REFINEMENT_PROMPT.format(
-            scaffolding_system_prompt=scaffolding_system_prompt,
-            positive_feedback=positive_feedback,
+        return FEEDBACK_DRIVEN_ELABORATION_SYSTEM_PROMPT.format(
+            scaffolding_system_prompt=LEARNING_TASK_SYSTEM_PROMPT.format(
+                instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
+                task_analysis=task_analysis,
+            ),
         )
 
     def get_initial_system_message(
@@ -241,7 +245,7 @@ class StudentModel:
         dataset_prompt: str = "",
     ) -> str:
         """Step 1의 system message를 반환합니다 (로깅용)."""
-        scaffolding_prompt = SCAFFOLDING_SYSTEM_PROMPT.format(
+        scaffolding_prompt = LEARNING_TASK_SYSTEM_PROMPT.format(
             instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
             task_analysis=task_analysis
         )
@@ -257,16 +261,15 @@ class StudentModel:
         dataset_prompt: str = "",
     ) -> str:
         """Step 4의 system message를 반환합니다 (로깅용)."""
-        feedback_prompt = STUDENT_FEEDBACK_RESPONSE_PROMPT.format(
-            scaffolding_system_prompt=SCAFFOLDING_SYSTEM_PROMPT.format(
+        system_prompt = TEACHER_SUPPORTED_REATTEMPT_SYSTEM_PROMPT.format(
+            scaffolding_system_prompt=LEARNING_TASK_SYSTEM_PROMPT.format(
                 instructional_goal=instructional_goal if instructional_goal else "solve the problem correctly",
                 task_analysis=task_analysis
             ),
-            scaffolding_artifact=scaffolding_text
         )
         if dataset_prompt:
-            return f"{dataset_prompt}\n\n{feedback_prompt}"
-        return feedback_prompt
+            return f"{dataset_prompt}\n\n{system_prompt}"
+        return system_prompt
 
     def extract_db_references(self, response: str) -> List[str]:
         """학생 응답에서 Artifact 참조 정보를 추출합니다.

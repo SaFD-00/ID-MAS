@@ -33,13 +33,13 @@ class SFTCase(str, Enum):
     """스캐폴딩 결과에 따른 SFT 데이터 케이스 분류.
 
     Attributes:
-        A: 1회차 성공 (PO 첫 시도에 충족)
-        B: 2~5회차 성공 (Iterative Scaffolding 후 충족)
-        C: 최대 시도 후 실패 (재구성 필요)
+        INDEPENDENT_PERFORMANCE_MASTERY: Case A: Independent Performance Mastery — 독립적 수행 숙달 (1회차 PO 충족)
+        SCAFFOLDED_COACHED_MASTERY: Case B: Scaffolded & Coached Mastery — 스캐폴딩 기반 숙달 (2~5회차 PO 충족)
+        TEACHER_MODELING_DISTILLATION: Case C: Teacher Modeling Distillation — 교사 모델링 증류 (최대 반복 후 교사 시범)
     """
-    A = "A"
-    B = "B"
-    C = "C"
+    INDEPENDENT_PERFORMANCE_MASTERY = "case_a_independent_performance_mastery"
+    SCAFFOLDED_COACHED_MASTERY = "case_b_scaffolded_coached_mastery"
+    TEACHER_MODELING_DISTILLATION = "case_c_teacher_modeling_distillation"
 
 
 class PipelineStep:
@@ -50,7 +50,7 @@ class PipelineStep:
         Step 2: PO Evaluation (Performance Objectives 평가) - 반복
         Step 3: Scaffolding (스캐폴딩 아티팩트 생성) - PO 미충족 시
         Step 4: Re-response (학생 재응답) - iteration 2~5
-        Step 5: Reconstruction (재구성) - Case A/B/C
+        Step 5: Reconstruction (재구성) - Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery / Case C: Teacher Modeling Distillation
         Step 6: SFT Generation (SFT 데이터 생성)
 
     Attributes:
@@ -239,9 +239,9 @@ class IDMASState(TypedDict, total=False):
     scaffolding_correct_count: int
 
     # Iterative scaffolding statistics
-    case_a_count: int  # 1회차 성공 (한번에 성공)
-    case_b_count: int  # 2~5회차 성공 (Iterative Scaffolding 성공)
-    case_c_count: int  # 5회 실패 후 재구성
+    case_a_independent_performance_mastery_count: int  # Case A: Independent Performance Mastery — 독립적 수행 숙달 (1회차 PO 충족)
+    case_b_scaffolded_coached_mastery_count: int  # Case B: Scaffolded & Coached Mastery — 스캐폴딩 기반 숙달 (2~5회차 PO 충족)
+    case_c_teacher_modeling_distillation_count: int  # Case C: Teacher Modeling Distillation — 교사 모델링 증류 (최대 반복 후 교사 시범)
 
     # ==================== Scaffolding Artifact Statistics ====================
     hot_scaffolding_count: int  # HOT (High-Order Thinking) 스캐폴딩 생성 횟수
@@ -322,9 +322,9 @@ def create_initial_state(
         scaffolding_results=[],
         scaffolding_processed=0,
         scaffolding_correct_count=0,
-        case_a_count=0,
-        case_b_count=0,
-        case_c_count=0,
+        case_a_independent_performance_mastery_count=0,
+        case_b_scaffolded_coached_mastery_count=0,
+        case_c_teacher_modeling_distillation_count=0,
 
         # Scaffolding Artifact statistics
         hot_scaffolding_count=0,
@@ -358,12 +358,12 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
         통계 딕셔너리:
             - total_questions: 전체 문제 수
             - scaffolding_processed: 처리된 문제 수
-            - case_statistics: 케이스별 통계 (A/B/C)
+            - case_statistics: 케이스별 통계 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery / Case C: Teacher Modeling Distillation)
             - scaffolding_artifacts: HOT/LOT 스캐폴딩 통계
     """
-    case_a = state.get("case_a_count", 0)
-    case_b = state.get("case_b_count", 0)
-    case_c = state.get("case_c_count", 0)
+    case_a = state.get("case_a_independent_performance_mastery_count", 0)
+    case_b = state.get("case_b_scaffolded_coached_mastery_count", 0)
+    case_c = state.get("case_c_teacher_modeling_distillation_count", 0)
 
     # Scaffolding Artifact statistics
     hot_count = state.get("hot_scaffolding_count", 0)
@@ -375,9 +375,9 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
         "total_questions": state.get("total_questions", 0),
         "scaffolding_processed": processed,
         "case_statistics": {
-            "case_a": case_a,  # First attempt success
-            "case_b": case_b,  # Success on attempts 2-5
-            "case_c": case_c,  # Reconstructed after 5 failures
+            "case_a_independent_performance_mastery": case_a,  # Case A: Independent Performance Mastery (독립적 수행 숙달)
+            "case_b_scaffolded_coached_mastery": case_b,  # Case B: Scaffolded & Coached Mastery (스캐폴딩 기반 숙달)
+            "case_c_teacher_modeling_distillation": case_c,  # Case C: Teacher Modeling Distillation (교사 모델링 증류)
             "success_total": case_a + case_b,
             "success_rate": (case_a + case_b) / processed if processed > 0 else 0,
         },
@@ -412,14 +412,21 @@ def load_checkpoint_from_logs(
         print(f"Warning: Could not load logs from {logs_path}: {e}")
         return {}, set()
 
+    # Legacy case value mapping (기존 "A"/"B"/"C" → 새 enum 값)
+    LEGACY_CASE_MAP = {
+        "A": SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value,
+        "B": SFTCase.SCAFFOLDED_COACHED_MASTERY.value,
+        "C": SFTCase.TEACHER_MODELING_DISTILLATION.value,
+    }
+
     processed_ids = set()
     checkpoint_data = {
         "scaffolding_results": [],
         "scaffolding_processed": 0,
         "scaffolding_correct_count": 0,
-        "case_a_count": 0,
-        "case_b_count": 0,
-        "case_c_count": 0,
+        "case_a_independent_performance_mastery_count": 0,
+        "case_b_scaffolded_coached_mastery_count": 0,
+        "case_c_teacher_modeling_distillation_count": 0,
         # Scaffolding Artifact statistics
         "hot_scaffolding_count": 0,
         "lot_scaffolding_count": 0,
@@ -438,19 +445,23 @@ def load_checkpoint_from_logs(
             is_correct = result.get("scaffolding_correct") or result.get("phase1_correct")
             sft_case = result.get("sft_case")
 
-            # Legacy compatibility: old "B" case (재구성) → 새로운 "C" case로 매핑
+            # Legacy compatibility: old "B" case (재구성) → Teacher Modeling Distillation로 매핑
             if sft_case == "B" and not is_correct:
-                sft_case = "C"
+                sft_case = SFTCase.TEACHER_MODELING_DISTILLATION.value
+
+            # Legacy case value mapping (기존 "A"/"B"/"C" → 새 값)
+            if sft_case in LEGACY_CASE_MAP:
+                sft_case = LEGACY_CASE_MAP[sft_case]
 
             # Count by case
-            if sft_case == SFTCase.A.value:
-                checkpoint_data["case_a_count"] += 1
+            if sft_case == SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value:
+                checkpoint_data["case_a_independent_performance_mastery_count"] += 1
                 checkpoint_data["scaffolding_correct_count"] += 1
-            elif sft_case == SFTCase.B.value:
-                checkpoint_data["case_b_count"] += 1
+            elif sft_case == SFTCase.SCAFFOLDED_COACHED_MASTERY.value:
+                checkpoint_data["case_b_scaffolded_coached_mastery_count"] += 1
                 checkpoint_data["scaffolding_correct_count"] += 1
-            elif sft_case == SFTCase.C.value:
-                checkpoint_data["case_c_count"] += 1
+            elif sft_case == SFTCase.TEACHER_MODELING_DISTILLATION.value:
+                checkpoint_data["case_c_teacher_modeling_distillation_count"] += 1
 
             # Count HOT/LOT scaffolding from scaffolding_artifacts
             scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
@@ -501,9 +512,9 @@ def restore_state_from_checkpoint(
     # Restore counters
     restored["scaffolding_processed"] = checkpoint_data.get("scaffolding_processed", 0)
     restored["scaffolding_correct_count"] = checkpoint_data.get("scaffolding_correct_count", 0)
-    restored["case_a_count"] = checkpoint_data.get("case_a_count", 0)
-    restored["case_b_count"] = checkpoint_data.get("case_b_count", 0)
-    restored["case_c_count"] = checkpoint_data.get("case_c_count", 0)
+    restored["case_a_independent_performance_mastery_count"] = checkpoint_data.get("case_a_independent_performance_mastery_count", 0)
+    restored["case_b_scaffolded_coached_mastery_count"] = checkpoint_data.get("case_b_scaffolded_coached_mastery_count", 0)
+    restored["case_c_teacher_modeling_distillation_count"] = checkpoint_data.get("case_c_teacher_modeling_distillation_count", 0)
 
     # Scaffolding Artifact statistics
     restored["hot_scaffolding_count"] = checkpoint_data.get("hot_scaffolding_count", 0)

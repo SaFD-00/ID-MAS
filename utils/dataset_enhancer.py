@@ -115,7 +115,7 @@ class DataEnhancer:
 
         instruction 필드는 원본 그대로 유지하고,
         instructional_goal과 task_analysis는 metadata에 저장합니다.
-        SCAFFOLDING_SYSTEM_PROMPT와의 결합은 학습 파이프라인에서 동적으로 수행됩니다.
+        LEARNING_TASK_SYSTEM_PROMPT와의 결합은 학습 파이프라인에서 동적으로 수행됩니다.
 
         Args:
             data: 원본 데이터 리스트

@@ -15,9 +15,9 @@
    - [Step 3: Performance Objectives 생성](#step-3-performance-objectives-생성)
    - [Enhanced Data 생성](#enhanced-data-생성)
 3. [Phase 2: Adaptive Scaffolding](#3-phase-2-adaptive-scaffolding)
-   - [Case A 예시](#case-a-1회차-성공)
-   - [Case B 예시](#case-b-2회차-이상-성공)
-   - [Case C 예시](#case-c-최대-반복-후-실패)
+   - [Case A: Independent Performance Mastery 예시](#case-a-independent-performance-mastery-독립적-수행-숙달)
+   - [Case B: Scaffolded & Coached Mastery 예시](#case-b-scaffolded--coached-mastery-스캐폴딩-기반-숙달)
+   - [Case C: Teacher Modeling Distillation 예시](#case-c-teacher-modeling-distillation-교사-모델링-증류)
 4. [Phase 3: Instructional Delivery (SFT)](#4-phase-3-instructional-delivery)
 5. [부록 A: 주요 개념 정리](#부록-a-주요-개념-정리)
 6. [부록 B: 프롬프트 상수 참조 테이블](#부록-b-프롬프트-상수-참조-테이블)
@@ -35,13 +35,13 @@ Phase 1: Instructional Design (1회 실행, 데이터셋 단위)
          ↓
 Phase 2: Adaptive Scaffolding (문제별 반복)
   ├── Step 1: Student 초기 응답
-  ├── Step 2: Teacher PO 평가 (평가 전용) → 성공이면 Case A/B
+  ├── Step 2: Teacher PO 평가 (평가 전용) → 성공이면 Case A: Independent Performance Mastery/Case B: Scaffolded & Coached Mastery
   ├── Step 3: Scaffolding Artifact + 서술형 피드백 생성
   ├── Step 4: Student 재응답 (Teacher 피드백 참조)
   ├── (Step 2~4 반복, 최대 5회)
-  ├── Step 5a: Teacher Positive Feedback (Case A/B) — 강점 + 개선점
-  ├── Step 5b: Student Self-Refinement (Case A/B) — 응답 개선
-  ├── Step 5c: Final Solution (Case C만) — 교육적 풀이 평문 텍스트 출력
+  ├── Step 5a-1: Teacher Positive Reinforcement (Case A: Independent Performance Mastery/Case B: Scaffolded & Coached Mastery) — 강점 + 개선점
+  ├── Step 5a-2: Student Feedback-Driven Elaboration (Case A: Independent Performance Mastery/Case B: Scaffolded & Coached Mastery) — 응답 개선
+  ├── Step 5b: Final Solution (Case C: Teacher Modeling Distillation만) — 교육적 풀이 평문 텍스트 출력
   └── Step 6: SFT 데이터 생성
          ↓
 Phase 3: Instructional Delivery
@@ -333,7 +333,7 @@ Phase 1의 결과물(Instructional Goal + Task Analysis)을 원본 학습 데이
 }
 ```
 
-> **핵심**: `instruction`은 원본 그대로 유지되며, Phase 2에서 `SCAFFOLDING_SYSTEM_PROMPT`와 동적으로 결합됩니다. SFT 데이터 생성 시에도 `original_instruction + SCAFFOLDING_SYSTEM_PROMPT`로 동적 결합합니다.
+> **핵심**: `instruction`은 원본 그대로 유지되며, Phase 2에서 `LEARNING_TASK_SYSTEM_PROMPT`와 동적으로 결합됩니다. SFT 데이터 생성 시에도 `original_instruction + LEARNING_TASK_SYSTEM_PROMPT`로 동적 결합합니다.
 
 ---
 
@@ -343,27 +343,27 @@ Phase 2는 **각 문제별로** 실행됩니다. 교사-학생 반복 상호작�
 
 ### Case 분류 기준
 
-| Case | 조건 | SFT 응답 소스 |
+| 분류 명칭 | 조건 | SFT 응답 소스 |
 |------|------|--------------|
-| **A** | 1회차에 모든 PO 충족 | Teacher Positive Feedback → Student Self-Refinement → Refined Response |
-| **B** | 2~5회차에 모든 PO 충족 | Teacher Positive Feedback → Student Self-Refinement → Refined Response |
-| **C** | 5회 반복 후에도 PO 미충족 | Teacher가 정답 기반 교육적 풀이 생성 (평문 텍스트) |
+| **Case A: Independent Performance Mastery** | 1회차에 모든 PO 충족 | Teacher Positive Reinforcement → Student Feedback-Driven Elaboration → Refined Response |
+| **Case B: Scaffolded & Coached Mastery** | 2~5회차에 모든 PO 충족 | Teacher Positive Reinforcement → Student Feedback-Driven Elaboration → Refined Response |
+| **Case C: Teacher Modeling Distillation** | 5회 반복 후에도 PO 미충족 | Teacher가 정답 기반 교육적 풀이 생성 (평문 텍스트) |
 
 ---
 
-### Case A: 1회차 성공
+### Case A: Independent Performance Mastery: 독립적 수행 숙달
 
 > **문제 ID**: `gsm8k_train_0`
 > **문제**: "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
 > **정답**: 72
 
-#### Case A Step 1: Student 초기 응답
+#### Case A: Independent Performance Mastery Step 1: Student 초기 응답
 
 Student 모델이 Enhanced Instruction(Task Analysis 포함)을 참고하여 체계적 풀이를 생성합니다.
 
 ##### 실제 프롬프트
 
-**System Message** (`SCAFFOLDING_SYSTEM_PROMPT`):
+**System Message** (`LEARNING_TASK_SYSTEM_PROMPT`):
 
 > Placeholder: `{instructional_goal}` → GSM8K Instructional Goal, `{task_analysis}` → Task Analysis Tree
 
@@ -446,20 +446,20 @@ Natalia sold clips to 48 of her friends in April, and then she sold half as many
 
 **추출된 답**: 72 (정답과 일치)
 
-#### Case A Step 2: Teacher PO 평가
+#### Case A: Independent Performance Mastery Step 2: Teacher PO 평가
 
 Teacher가 Performance Objectives 기준으로 학생 응답을 **평가만** 수행합니다. 피드백은 생성하지 않습니다.
 
 ##### 실제 프롬프트
 
-**System Message** (`TEACHER_INTERVENTION_SYSTEM_PROMPT`):
+**System Message** (`FORMATIVE_ASSESSMENT_SYSTEM_PROMPT`):
 ```
 You are a teacher supporting the learning of a student.
 
 Your role is to evaluate the student's response against the established performance objectives. You must monitor the student's reasoning steps to ensure they meet the performance objectives.
 ```
 
-**User Message** (`TEACHER_INTERVENTION_USER_PROMPT`):
+**User Message** (`FORMATIVE_ASSESSMENT_USER_PROMPT`):
 
 > Placeholder: `{problem_text}` → 문제 원문, `{student_response}` → 위 Student 응답, `{performance_objectives}` → Phase 1에서 생성된 13개 PO JSON, `{ground_truth}` → "72"
 
@@ -521,22 +521,22 @@ Output ONLY valid JSON.
 
 > **참고**: 위는 13개 PO 중 대표 3개만 발췌한 것입니다. 실제 평가에서는 13개 PO 전체에 대해 개별 평가가 수행됩니다.
 >
-> **평가 전용**: 현재 `TEACHER_INTERVENTION_USER_PROMPT`는 `objective_content`, `is_satisfied`, `feedback`만 출력합니다. `overall_assessment`는 포함되지 않습니다.
+> **평가 전용**: 현재 `FORMATIVE_ASSESSMENT_USER_PROMPT`는 `objective_content`, `is_satisfied`, `feedback`만 출력합니다. `overall_assessment`는 포함되지 않습니다.
 
-**모든 PO 충족 (13/13)** → 반복 종료 → **Case A 확정**
+**모든 PO 충족 (13/13)** → 반복 종료 → **Case A: Independent Performance Mastery 확정**
 
-#### Case A Step 3: Teacher Positive Feedback
+#### Case A: Independent Performance Mastery Step 3: Teacher Positive Reinforcement (Teacher 피드백)
 
-모든 PO가 충족되었으므로 Teacher가 학생 응답의 강점과 개선점을 분석하는 Positive Feedback을 생성합니다.
+모든 PO가 충족되었으므로 Teacher가 학생 응답의 강점과 개선점을 분석하는 Positive Reinforcement를 생성합니다.
 
 ##### 실제 프롬프트
 
-**System Message** (`TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT`):
+**System Message** (`POSITIVE_REINFORCEMENT_SYSTEM_PROMPT`):
 ```
 You are a teacher providing constructive feedback to strengthen a student's already satisfactory response.
 ```
 
-**User Message** (`TEACHER_POSITIVE_FEEDBACK_USER_PROMPT`):
+**User Message** (`POSITIVE_REINFORCEMENT_USER_PROMPT`):
 
 > Placeholder: `{problem_text}` → 문제 원문, `{student_response}` → Student 응답, `{po_evaluation}` → PO 평가 JSON
 
@@ -581,7 +581,7 @@ The student's response has satisfied all Performance Objectives. Provide feedbac
 Output ONLY the structured text above.
 ```
 
-##### Teacher Positive Feedback 결과
+##### Teacher Positive Reinforcement 결과
 
 ```
 [Strengths]
@@ -612,26 +612,18 @@ use consistent labels for each step to make the structure more organized and vis
 altering the core logic or final answer.
 ```
 
-#### Case A Step 4: Student Self-Refinement
+#### Case A: Independent Performance Mastery Step 4: Student Feedback-Driven Elaboration (Student 정교화)
 
-Student가 Teacher의 Positive Feedback을 참조하여 응답을 개선합니다.
+Student가 Teacher의 Positive Reinforcement를 참조하여 응답을 정교화합니다.
 
 ##### 실제 프롬프트
 
-**System Message** (`STUDENT_SELF_REFINEMENT_PROMPT`):
+**System Message** (`FEEDBACK_DRIVEN_ELABORATION_SYSTEM_PROMPT`):
 
-> Placeholder: `{scaffolding_system_prompt}` → `SCAFFOLDING_SYSTEM_PROMPT` (채워진 상태), `{positive_feedback}` → Teacher의 Positive Feedback 텍스트
+> Placeholder: `{scaffolding_system_prompt}` → `LEARNING_TASK_SYSTEM_PROMPT` (채워진 상태)
 
 ```
-[SCAFFOLDING_SYSTEM_PROMPT — Task Analysis 포함]
-
-[Teacher's Feedback on Your Response]
-Your teacher has evaluated your response and confirmed that it meets all performance objectives.
-The following feedback highlights your strengths and suggests ways to further improve your response:
-
-[Strengths]
-- PO 1: The student effectively applied arithmetic operations...
-[... 전체 Positive Feedback ...]
+[LEARNING_TASK_SYSTEM_PROMPT — Task Analysis 포함]
 
 [Instructions]
 1. Keep your correct reasoning and final answer unchanged.
@@ -647,9 +639,26 @@ Write your complete improved solution following the original output format:
 - Final answer: "The answer is \boxed{your final answer}"
 ```
 
-**User Message** = `question["input"]` (문제 원문)
+**User Message** (`FEEDBACK_DRIVEN_ELABORATION_USER_PROMPT`):
 
-##### Self-Refined 응답 결과
+> Placeholder: `{positive_feedback}` → Teacher의 Positive Feedback 텍스트, `{problem_text}` → 문제 원문
+
+```
+[Teacher's Feedback on Your Response]
+Your teacher has evaluated your response and confirmed that it meets all performance objectives.
+The following feedback highlights your strengths and suggests ways to further improve your response:
+
+[Strengths]
+- PO 1: The student effectively applied arithmetic operations...
+[... 전체 Positive Feedback ...]
+
+[Problem]
+Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?
+```
+
+> **변경**: 기존에는 system에 지침 + 피드백이 모두 포함되고, user에는 `question["input"]`만 전달되었습니다. 이제 system (`FEEDBACK_DRIVEN_ELABORATION_SYSTEM_PROMPT`)에는 지침만, user (`FEEDBACK_DRIVEN_ELABORATION_USER_PROMPT`)에는 피드백 + 문제가 포함됩니다.
+
+##### Feedback-Driven Elaboration 응답 결과
 
 ```
 - **Instructional goal alignment**: This solution demonstrates the instructional goal by applying
@@ -686,16 +695,16 @@ Write your complete improved solution following the original output format:
 
 #### Step 5 & 6: SFT 데이터 생성
 
-Case A는 Self-Refinement 후의 **Refined Response**를 SFT 학습 데이터로 사용합니다.
+Case A: Independent Performance Mastery는 Feedback-Driven Elaboration 후의 **Refined Response**를 SFT 학습 데이터로 사용합니다.
 
 ```json
 {
-  "instruction": "[Original Instruction + SCAFFOLDING_SYSTEM_PROMPT (동적 결합)]",
+  "instruction": "[Original Instruction + LEARNING_TASK_SYSTEM_PROMPT (동적 결합)]",
   "input": "Question: Natalia sold clips to 48 of her friends in April...",
-  "output": "[Student의 Self-Refined 응답]",
+  "output": "[Student의 Feedback-Driven Elaboration 응답]",
   "metadata": {
     "id": "gsm8k_train_0",
-    "sft_case": "A",
+    "sft_case": "case_a_independent_performance_mastery",
     "ground_truth": "72"
   }
 }
@@ -710,7 +719,7 @@ Case A는 Self-Refinement 후의 **Refined Response**를 SFT 학습 데이터로
 
 ---
 
-### Case B: 2회차 이상 성공
+### Case B: Scaffolded & Coached Mastery: 스캐폴딩 기반 숙달
 
 > **문제 ID**: `gsm8k_train_6`
 > **문제**: "Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas and 2 small pizzas. A large pizza has 16 slices and a small pizza has 8 slices. If he eats it all, how many pieces does he eat that day?"
@@ -720,7 +729,7 @@ Case A는 Self-Refinement 후의 **Refined Response**를 SFT 학습 데이터로
 
 **Step 1 — Student 초기 응답:**
 
-(System Message = `SCAFFOLDING_SYSTEM_PROMPT`, User Message = 위 문제 원문 — Case A Step 1과 동일한 프롬프트 구조)
+(System Message = `LEARNING_TASK_SYSTEM_PROMPT`, User Message = 위 문제 원문 — Case A: Independent Performance Mastery Step 1과 동일한 프롬프트 구조)
 
 ```
 - Instructional goal alignment: This solution demonstrates the instructional goal by applying
@@ -796,20 +805,20 @@ Case A는 Self-Refinement 후의 **Refined Response**를 SFT 학습 데이터로
 
 > **핵심 관찰**: Student는 정답(48)을 도출했지만, 풀이 과정에서 **비례 추론(proportional reasoning)**을 명시적으로 시연하지 않았습니다. Teacher의 PO 평가는 정답 여부와 무관하게, Instructional Analysis에 정의된 모든 역량의 시연을 요구합니다. 이는 ID-MAS의 핵심 설계: **정답만으로는 충분하지 않으며, 추론 과정의 완전성이 평가 기준**임을 보여줍니다.
 
-#### Case B Step 3: Scaffolding Artifact 생성
+#### Case B: Scaffolded & Coached Mastery Step 3: Scaffolding Artifact 생성
 
 Teacher가 미충족 PO별로 차별화된 Scaffolding과 **서술형 피드백**을 생성합니다.
 
 ##### 실제 프롬프트
 
-**System Message** (`SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT`):
+**System Message** (`SCAFFOLDED_CORRECTIVE_FEEDBACK_SYSTEM_PROMPT`):
 ```
 You are an instructional design expert (Dick & Carey model) creating a Scaffolding Artifact to help a student improve.
 
 Your role is to design pedagogical scaffolding for Performance Objectives that the student failed to meet. This scaffolding will be stored as a "Scaffolding Artifact" that the student can reference in their next attempt.
 ```
 
-**User Message** (`SCAFFOLDING_ARTIFACT_USER_PROMPT`):
+**User Message** (`SCAFFOLDED_CORRECTIVE_FEEDBACK_USER_PROMPT`):
 
 > Placeholder: `{problem_text}` → 문제 원문, `{student_response}` → Student의 응답, `{po_evaluation}` → Teacher PO 평가 JSON, `{previous_iteration_summaries}` → 이전 반복 요약 목록, `{instructional_goal}` → Instructional Goal, `{task_analysis}` → Task Analysis Tree
 
@@ -883,31 +892,20 @@ and how to apply proportional reasoning in similar problems.
 
 > **핵심 변경**: 출력 형식이 JSON에서 구조화된 마크다운으로 변경되었습니다. `[Feedback]` 섹션은 서술형 단락으로, (1) 오류 분석, (2) 개선 방향, (3) 검증 단계를 통합합니다. 전체 Scaffolding Artifact 텍스트(`_raw_text`)가 학생에게 직접 전달됩니다.
 
-#### Case B Step 4: Student 재응답
+#### Case B: Scaffolded & Coached Mastery Step 4: Student 재응답
 
 Student가 Teacher의 **Scaffolding Artifact**를 참조하여 개선된 응답을 생성합니다.
 
 ##### 실제 프롬프트
 
-**System Message** (`STUDENT_FEEDBACK_RESPONSE_PROMPT`):
+**System Message** (`TEACHER_SUPPORTED_REATTEMPT_SYSTEM_PROMPT`):
 
-> Placeholder: `{scaffolding_system_prompt}` → `SCAFFOLDING_SYSTEM_PROMPT` (채워진 상태), `{scaffolding_artifact}` → Scaffolding Artifact 전체 텍스트 (`_raw_text`)
+> Placeholder: `{scaffolding_system_prompt}` → `LEARNING_TASK_SYSTEM_PROMPT` (채워진 상태)
 
 ```
 [dataset_prompt — 원본 instruction]
 
-[SCAFFOLDING_SYSTEM_PROMPT — Task Analysis 포함]
-
-[Scaffolding Artifact]
-Your teacher has evaluated your previous response and designed the following scaffolding to
-guide your improvement:
-
-[Instructional Goal]
-The model will solve multi-step mathematical problems...
-
-[Scaffolding for Task [1] (High Order Skill)]
-- Target Objective: Given a mathematical problem requiring proportional reasoning...
-[... 전체 Scaffolding Artifact ...]
+[LEARNING_TASK_SYSTEM_PROMPT — Task Analysis 포함]
 
 [Instructions]
 1. Carefully study the scaffolding artifact above, including the strategies and examples provided
@@ -919,7 +917,25 @@ The model will solve multi-step mathematical problems...
 7. Provide your final answer clearly
 ```
 
-**User Message** = `question["input"]` (문제 원문)
+**User Message** (`TEACHER_SUPPORTED_REATTEMPT_USER_PROMPT`):
+
+> Placeholder: `{scaffolding_artifact}` → Scaffolding Artifact 전체 텍스트 (`_raw_text`), `{problem_text}` → 문제 원문
+
+```
+[Scaffolding Artifact]
+Your teacher has evaluated your previous response and designed the following scaffolding to
+guide your improvement:
+
+[Instructional Goal]
+The model will solve multi-step mathematical problems...
+
+[Scaffolding for Task [1] (High Order Skill)]
+- Target Objective: Given a mathematical problem requiring proportional reasoning...
+[... 전체 Scaffolding Artifact ...]
+
+[Problem]
+Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas and 2 small pizzas. A large pizza has 16 slices and a small pizza has 8 slices. If he eats it all, how many pieces does he eat that day?
+```
 
 ##### Iteration 2 Student 응답
 
@@ -956,17 +972,17 @@ The model will solve multi-step mathematical problems...
 
 **Step 2 — Teacher PO 평가 (Iteration 2):**
 
-**모든 PO 충족 (13/13)** → 반복 종료 → **Case B 확정** (2회차 성공)
+**모든 PO 충족 (13/13)** → 반복 종료 → **Case B: Scaffolded & Coached Mastery 확정** (2회차 성공)
 
 > Iteration 2에서는 Student가 비례 추론을 풀이에 반영하여, 이전에 미충족이었던 PO 6~9가 모두 충족되었습니다. Teacher는 "The student interpreted the proportional relationship between the number of pizzas and the number of slices"로 평가했습니다.
 
-#### Case B Step 5: Self-Refinement
+#### Case B: Scaffolded & Coached Mastery Step 5: Feedback-Driven Elaboration
 
-Case B에서도 Case A와 동일하게, PO가 모두 충족된 후 **Teacher Positive Feedback → Student Self-Refinement** 과정을 수행합니다.
+Case B: Scaffolded & Coached Mastery에서도 Case A: Independent Performance Mastery와 동일하게, PO가 모두 충족된 후 **Teacher Positive Reinforcement → Student Feedback-Driven Elaboration** 과정을 수행합니다.
 
 ```python
 # nodes.py
-# Case A/B: PO 충족 후 Self-Refinement
+# Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery: PO 충족 후 Feedback-Driven Elaboration
 positive_feedback_result = teacher_model.generate_positive_feedback(
     problem_text=question["input"],
     student_response=response,
@@ -979,12 +995,12 @@ refined_response = student_model.self_refine_response(
     instructional_goal=instructional_goal,
 )
 sft_output = refined_response  # Refined Response가 SFT output
-sft_case = SFTCase.B.value
+sft_case = SFTCase.SCAFFOLDED_COACHED_MASTERY.value
 ```
 
-**SFT output = Iteration 2의 Student Self-Refined 응답**
+**SFT output = Iteration 2의 Student Feedback-Driven Elaboration 응답**
 
-##### Self-Refined 응답 결과
+##### Feedback-Driven Elaboration 응답 결과
 
 ```
 - Instructional goal alignment: This solution demonstrates the instructional goal by applying
@@ -1012,14 +1028,14 @@ sft_case = SFTCase.B.value
 - Final answer: The answer is $\boxed{48}$
 ```
 
-> **설계 의도**: Scaffolding 과정을 거쳐 Student가 자력으로 PO를 충족시킨 후, Teacher의 Positive Feedback을 통해 응답의 reasoning을 더욱 강화합니다. PO 평가의 강점/개선점을 기존 풀이에 녹여 SFT 데이터 품질을 향상시킵니다.
+> **설계 의도**: Scaffolding 과정을 거쳐 Student가 자력으로 PO를 충족시킨 후, Teacher의 Positive Reinforcement를 통해 응답의 reasoning을 더욱 강화합니다. PO 평가의 강점/개선점을 기존 풀이에 녹여 SFT 데이터 품질을 향상시킵니다.
 
 #### 최종 로그 요약
 
 ```json
 {
   "id": "gsm8k_train_6",
-  "sft_case": "B",
+  "sft_case": "case_b_scaffolded_coached_mastery",
   "iterative_scaffolding": {
     "success": true,
     "iterations_needed": 2
@@ -1029,27 +1045,27 @@ sft_case = SFTCase.B.value
 }
 ```
 
-**Case B 흐름 요약:**
+**Case B: Scaffolded & Coached Mastery 흐름 요약:**
 ```
 Iteration 1: Student(48✓) → Teacher(9/13 PO) → Scaffolding(3 HOT) + 서술형 피드백
-Iteration 2: Student(48✓) → Teacher(13/13 PO ✓) → Case B 확정
+Iteration 2: Student(48✓) → Teacher(13/13 PO ✓) → Case B: Scaffolded & Coached Mastery 확정
      ↓
-Self-Refinement: Teacher Positive Feedback → Student Self-Refine → Refined Response
+Feedback-Driven Elaboration: Teacher Positive Reinforcement → Student Feedback-Driven Elaboration → Refined Response
      ↓
-Case B: Refined Response를 SFT 데이터로 사용
+Case B: Scaffolded & Coached Mastery: Refined Response를 SFT 데이터로 사용
 ```
 
 > **핵심 관찰**: Student는 1회차에서 정답(48)을 도출했지만, 풀이에서 비례 추론(proportional reasoning)을 명시적으로 시연하지 않아 4개 PO가 미충족되었습니다. Teacher의 HOT Scaffolding에서 "large pizza has twice as many slices as a small pizza"와 같은 비례 관계를 분석하도록 안내한 후, 2회차에서 비례 추론을 풀이에 통합하여 모든 PO를 충족했습니다. 이는 **정답만으로는 충분하지 않고, 추론 과정의 완전성이 평가 기준**인 ID-MAS의 특성을 보여주는 사례입니다.
 
 ---
 
-### Case C: 최대 반복 후 실패
+### Case C: Teacher Modeling Distillation: 교사 모델링 증류
 
 > **문제 ID**: `gsm8k_train_59`
 > **문제**: "Every hour Joanne has to collect the coins out of the fountain inside the mall. During the first hour, she collected 15 coins. For the next two hours, she collected 35 coins from the fountain. In the fourth hour, she collected 50 coins from the fountain but she gave 15 of them to her coworker so she could buy a soda. How many coins did she have after the fourth hour?"
 > **정답**: 120
 
-5회 반복 후에도 모든 PO를 충족하지 못한 경우 → **Case C 확정**
+5회 반복 후에도 모든 PO를 충족하지 못한 경우 → **Case C: Teacher Modeling Distillation 확정**
 
 #### Iteration 1~5 요약
 
@@ -1126,22 +1142,22 @@ Scaffolding was provided to clarify the correct interpretation.
 3. **Subskill 3**: 실세계 맥락 잘못 적용
 4. **Subtask 3-3**: 해답 검증 실패
 
-→ **5회 반복 후 PO 미충족** → **Case C 확정**
+→ **5회 반복 후 PO 미충족** → **Case C: Teacher Modeling Distillation 확정**
 
-#### Case C Step 5: Final Solution
+#### Case C: Teacher Modeling Distillation Step 5b: Final Solution
 
 Teacher가 Student의 약점을 분석한 뒤, 정답(120)을 기반으로 교육적 풀이를 **평문 텍스트**로 생성합니다.
 
 ##### 실제 프롬프트
 
-**System Message** (`TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT`):
+**System Message** (`TEACHER_MODELING_SYSTEM_PROMPT`):
 ```
 You are a teacher providing a complete, correct solution after the student failed to solve the problem after 5 attempts.
 
 The solution should be what an expert student would produce - clear, complete, and pedagogically valuable.
 ```
 
-**User Message** (`TEACHER_FINAL_SOLUTION_USER_PROMPT`):
+**User Message** (`TEACHER_MODELING_USER_PROMPT`):
 
 > Placeholder: `{max_iterations}` → 5, `{problem_text}` → 문제 원문, `{ground_truth}` → "120", `{task_analysis}` → Task Analysis Tree (최대 1500자 제한), `{last_iteration_summary}` → 마지막 iteration의 summary 텍스트, `{student_weaknesses}` → `extract_student_weaknesses()`로 추출한 약점 목록 (최대 5개)
 
@@ -1239,7 +1255,7 @@ The answer is \boxed{120}
 ```json
 {
   "id": "gsm8k_train_59",
-  "sft_case": "C",
+  "sft_case": "case_c_teacher_modeling_distillation",
   "iterative_scaffolding": {
     "success": false,
     "iterations_needed": 5
@@ -1250,13 +1266,13 @@ The answer is \boxed{120}
 }
 ```
 
-**Case C 흐름 요약:**
+**Case C: Teacher Modeling Distillation 흐름 요약:**
 ```
 Iteration 1: Student(85✗) → Teacher(3/13 PO) → Scaffolding → "35 per hour" 교정 시도
 Iteration 2: Student(85✗) → Teacher(4/13 PO) → Scaffolding → 교정 실패
 Iteration 3: Student(85✗) → Teacher(0/13 PO) → Scaffolding → 교정 실패
 Iteration 4: Student(85✗) → Teacher(3/13 PO) → Scaffolding → 교정 실패
-Iteration 5: Student(85✗) → Teacher(9/13 PO) → 5회 초과 → Case C 확정
+Iteration 5: Student(85✗) → Teacher(9/13 PO) → 5회 초과 → Case C: Teacher Modeling Distillation 확정
      ↓
 Teacher Final Solution: 정답(120) 기반 교육적 풀이 생성 → SFT 데이터로 사용
 ```
@@ -1273,22 +1289,22 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 
 ```json
 {
-  "instruction": "[Original Instruction + SCAFFOLDING_SYSTEM_PROMPT (동적 결합)]",
+  "instruction": "[Original Instruction + LEARNING_TASK_SYSTEM_PROMPT (동적 결합)]",
   "input": "Question: [문제 텍스트]",
   "output": "[Case별 SFT 응답]",
   "metadata": {
     "id": "gsm8k_train_XXX",
-    "sft_case": "A|B|C",
+    "sft_case": "case_a_independent_performance_mastery|case_b_scaffolded_coached_mastery|case_c_teacher_modeling_distillation",
     "ground_truth": "[정답]"
   }
 }
 ```
 
-> **instruction 동적 결합**: SFT 데이터 생성 시 `_create_sft_entry()`에서 `original_instruction + "\n\n" + SCAFFOLDING_SYSTEM_PROMPT`를 런타임에 결합합니다.
+> **instruction 동적 결합**: SFT 데이터 생성 시 `_create_sft_entry()`에서 `original_instruction + "\n\n" + LEARNING_TASK_SYSTEM_PROMPT`를 런타임에 결합합니다.
 
 ### Case별 SFT 엔트리 예시
 
-#### Case A 엔트리 (gsm8k_train_0)
+#### Case A: Independent Performance Mastery 엔트리 (gsm8k_train_0)
 
 ```json
 {
@@ -1297,55 +1313,55 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
   "output": "- **Instructional goal alignment**: This solution demonstrates the instructional goal by applying arithmetic operations (division and addition), proportional reasoning (interpreting \"half as many\" as a proportional relationship), and real-world context understanding...\n- **Step-by-step reasoning**:\n  **Step 1: Identify the given information** ...\n  **Step 2: Calculate the number of clips sold in May** ... 48/2 = 24\n  **Step 3: Calculate the total** ... 48 + 24 = 72\n  **Step 4: Verify the relevance and accuracy** ...\n- **Final answer**: The answer is $\\boxed{72}$.",
   "metadata": {
     "id": "gsm8k_train_0",
-    "sft_case": "A",
+    "sft_case": "case_a_independent_performance_mastery",
     "ground_truth": "72"
   }
 }
 ```
 
-> **Case A**: PO 충족 후 Teacher Positive Feedback → Student Self-Refinement → Refined Response를 SFT output으로 사용.
+> **Case A: Independent Performance Mastery**: PO 충족 후 Teacher Positive Reinforcement → Student Feedback-Driven Elaboration → Refined Response를 SFT output으로 사용.
 
-#### Case B 엔트리 (gsm8k_train_6)
+#### Case B: Scaffolded & Coached Mastery 엔트리 (gsm8k_train_6)
 
 ```json
 {
-  "instruction": "Original Instruction + SCAFFOLDING_SYSTEM_PROMPT (동적 결합) — Case A와 동일한 구조",
+  "instruction": "Original Instruction + LEARNING_TASK_SYSTEM_PROMPT (동적 결합) — Case A: Independent Performance Mastery와 동일한 구조",
   "input": "Question: Albert is wondering how much pizza he can eat in one day. He buys 2 large pizzas and 2 small pizzas. A large pizza has 16 slices and a small pizza has 8 slices. If he eats it all, how many pieces does he eat that day?",
   "output": "- Instructional goal alignment: This solution demonstrates the instructional goal by applying arithmetic operations to calculate the total number of pizza slices, using proportional reasoning to understand the relationship between the number of pizzas and slices...\n- Step-by-step reasoning:\n  1. **Identify real-world information**: Albert buys 2 large pizzas and 2 small pizzas...\n  2. **Apply arithmetic operations**: 2×16=32, 2×8=16, 32+16=48\n  3. **Apply proportional reasoning**: The number of slices is directly proportional to the number of pizzas...\n  4. **Verify real-world context**: Since Albert eats all the pizza, the total is 48.\n- Final answer: The answer is $\\boxed{48}$",
   "metadata": {
     "id": "gsm8k_train_6",
-    "sft_case": "B",
+    "sft_case": "case_b_scaffolded_coached_mastery",
     "ground_truth": "48"
   }
 }
 ```
 
-> **Case B**: Scaffolding을 통해 PO를 충족한 후 Teacher Positive Feedback → Student Self-Refinement → Refined Response를 SFT output으로 사용.
+> **Case B: Scaffolded & Coached Mastery**: Scaffolding을 통해 PO를 충족한 후 Teacher Positive Reinforcement → Student Feedback-Driven Elaboration → Refined Response를 SFT output으로 사용.
 
-#### Case C 엔트리 (gsm8k_train_59)
+#### Case C: Teacher Modeling Distillation 엔트리 (gsm8k_train_59)
 
 ```json
 {
-  "instruction": "Original Instruction + SCAFFOLDING_SYSTEM_PROMPT (동적 결합) — Case A와 동일한 구조",
+  "instruction": "Original Instruction + LEARNING_TASK_SYSTEM_PROMPT (동적 결합) — Case A: Independent Performance Mastery와 동일한 구조",
   "input": "Question: Every hour Joanne has to collect the coins out of the fountain inside the mall. During the first hour, she collected 15 coins. For the next two hours, she collected 35 coins from the fountain. In the fourth hour, she collected 50 coins from the fountain but she gave 15 of them to her coworker so she could buy a soda. How many coins did she have after the fourth hour?",
   "output": "[Understanding the Problem]\nLet me analyze this problem step by step...\n\n[Key Concepts Applied]\nThe key concepts here include: Accurate addition and subtraction, Order of operations, Real-world context understanding...\n\n[Step-by-Step Solution]\nStep 1: First hour: 15 coins\nStep 2: Next two hours: 35 + 35 = 70 coins\nStep 3: Fourth hour: 50 – 15 = 35 coins\nStep 4: Total: 15 + 70 + 35 = 120 coins\n\nThe answer is \\boxed{120}",
   "metadata": {
     "id": "gsm8k_train_59",
-    "sft_case": "C",
+    "sft_case": "case_c_teacher_modeling_distillation",
     "ground_truth": "120"
   }
 }
 ```
 
-> **Case C**: Teacher가 교육적 풀이를 평문 텍스트로 생성. 5회 Scaffolding 후에도 Student가 문제 해석 오류를 교정하지 못해 Teacher의 모범 풀이를 SFT 데이터로 사용.
+> **Case C: Teacher Modeling Distillation**: Teacher가 교육적 풀이를 평문 텍스트로 생성. 5회 Scaffolding 후에도 Student가 문제 해석 오류를 교정하지 못해 Teacher의 모범 풀이를 SFT 데이터로 사용.
 
-### Case별 SFT 응답 소스
+### 분류별 SFT 응답 소스
 
-| Case | SFT `output` 소스 | 특징 |
+| 분류 명칭 | SFT `output` 소스 | 특징 |
 |------|-------------------|------|
-| **A** | Student Self-Refined 응답 | PO 충족 후 Teacher Positive Feedback 기반 Self-Refinement |
-| **B** | Student Self-Refined 응답 | Scaffolding + PO 충족 후 Teacher Positive Feedback 기반 Self-Refinement |
-| **C** | Teacher 최종 풀이 (평문 텍스트) | 학생 약점을 보완한 교육적 정답 풀이 |
+| **Case A: Independent Performance Mastery** | Student Feedback-Driven Elaboration 응답 | PO 충족 후 Teacher Positive Reinforcement 기반 Feedback-Driven Elaboration |
+| **Case B: Scaffolded & Coached Mastery** | Student Feedback-Driven Elaboration 응답 | Scaffolding + PO 충족 후 Teacher Positive Reinforcement 기반 Feedback-Driven Elaboration |
+| **Case C: Teacher Modeling Distillation** | Teacher 최종 풀이 (평문 텍스트) | 학생 약점을 보완한 교육적 정답 풀이 |
 
 ### 평가 방법
 
@@ -1369,7 +1385,7 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 ### Scaffolding Artifact 및 피드백
 
 - 각 iteration에서 생성된 Scaffolding Artifact가 **누적** 저장됩니다
-- `SCAFFOLDING_ARTIFACT_USER_PROMPT`는 **구조화된 마크다운**으로 출력합니다 (JSON 미사용)
+- `SCAFFOLDED_CORRECTIVE_FEEDBACK_USER_PROMPT`는 **구조화된 마크다운**으로 출력합니다 (JSON 미사용)
 - 출력은 `[Instructional Goal]`, `[Scaffolding for Task [N]]`, `[Feedback]`, `[Iteration Summary]` 섹션으로 구성됩니다
 - `[Feedback]` 섹션은 (1) 오류 분석, (2) 개선 방향, (3) 검증 단계를 하나의 자연스러운 서술로 통합합니다
 - Student는 재응답 시 **전체 Scaffolding Artifact 텍스트**를 참조합니다 (HOT/LOT 스캐폴딩, 전략, Feedback 등 모든 교수적 지원 포함)
@@ -1380,7 +1396,7 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 |------|-----------|---------------|
 | Step 2 (PO 평가) | API 에러, JSON 파싱 실패 | 보수적 평가 → Skip |
 | Step 3 (Scaffolding) | API 에러, 생성 실패 | 기본 LOT Scaffolding → Skip |
-| Step 5 (재구성) | 재구성 실패 | Case B: 학생 최종 응답 / Case C: ground_truth 기반 |
+| Step 5 (재구성) | 재구성 실패 | Case B: Scaffolded & Coached Mastery: 학생 최종 응답 / Case C: Teacher Modeling Distillation: ground_truth 기반 |
 
 **`_failure_metadata` 필드:**
 - `is_fallback`: Fallback 처리 여부
@@ -1400,14 +1416,16 @@ Phase 2에서 생성된 SFT 데이터로 Student 모델을 Fine-tuning하고, �
 | `INSTRUCTIONAL_ANALYSIS_USER_PROMPT` | `prompts/design_prompts.py` | Learning Objective → Task Analysis Tree 분해 | Phase 1 / Step 2 | User | Text (Tree) |
 | `PERFORMANCE_OBJECTIVES_SYSTEM_PROMPT` | `prompts/design_prompts.py` | PO 생성 전문가 역할 설정 | Phase 1 / Step 3 | System | — |
 | `PERFORMANCE_OBJECTIVES_USER_PROMPT` | `prompts/design_prompts.py` | Task Analysis → Performance Objectives 생성 | Phase 1 / Step 3 | User | JSON |
-| `SCAFFOLDING_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Student 문제 해결 시스템 프롬프트 | Phase 2 / Step 1 | System | Text |
-| `TEACHER_INTERVENTION_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Teacher 평가 역할 설정 | Phase 2 / Step 2 | System | — |
-| `TEACHER_INTERVENTION_USER_PROMPT` | `prompts/learning_prompts.py` | Teacher PO 평가 (평가 전용) | Phase 2 / Step 2 | User | JSON |
-| `SCAFFOLDING_ARTIFACT_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Scaffolding 생성 역할 설정 | Phase 2 / Step 3 | System | — |
-| `SCAFFOLDING_ARTIFACT_USER_PROMPT` | `prompts/learning_prompts.py` | 미충족 PO별 HOT/LOT Scaffolding + Feedback 생성 | Phase 2 / Step 3 | User | Structured Text |
-| `STUDENT_FEEDBACK_RESPONSE_PROMPT` | `prompts/learning_prompts.py` | Student: `dataset_prompt` + `SCAFFOLDING_SYSTEM_PROMPT` + Scaffolding Artifact 기반 재응답 | Phase 2 / Step 4 | System | Text |
-| `TEACHER_POSITIVE_FEEDBACK_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Positive Feedback 역할 설정 | Phase 2 / Step 5 (Case A/B) | System | — |
-| `TEACHER_POSITIVE_FEEDBACK_USER_PROMPT` | `prompts/learning_prompts.py` | PO 충족 후 강점 + 개선점 피드백 생성 | Phase 2 / Step 5 (Case A/B) | User | Structured Text |
-| `STUDENT_SELF_REFINEMENT_PROMPT` | `prompts/learning_prompts.py` | Positive Feedback 기반 응답 개선 | Phase 2 / Step 5 (Case A/B) | System | Text |
-| `TEACHER_FINAL_SOLUTION_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Final Solution 역할 설정 | Phase 2 / Step 5 (Case C) | System | — |
-| `TEACHER_FINAL_SOLUTION_USER_PROMPT` | `prompts/learning_prompts.py` | 최대 반복 실패 후 교육적 풀이 생성 | Phase 2 / Step 5 (Case C) | User | Text (평문) |
+| `LEARNING_TASK_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Student 문제 해결 시스템 프롬프트 | Phase 2 / Step 1 | System | Text |
+| `FORMATIVE_ASSESSMENT_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Teacher 평가 역할 설정 | Phase 2 / Step 2 | System | — |
+| `FORMATIVE_ASSESSMENT_USER_PROMPT` | `prompts/learning_prompts.py` | Teacher PO 평가 (평가 전용) | Phase 2 / Step 2 | User | JSON |
+| `SCAFFOLDED_CORRECTIVE_FEEDBACK_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Scaffolding 생성 역할 설정 | Phase 2 / Step 3 | System | — |
+| `SCAFFOLDED_CORRECTIVE_FEEDBACK_USER_PROMPT` | `prompts/learning_prompts.py` | 미충족 PO별 HOT/LOT Scaffolding + Feedback 생성 | Phase 2 / Step 3 | User | Structured Text |
+| `TEACHER_SUPPORTED_REATTEMPT_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Student 재응답: `dataset_prompt` + `LEARNING_TASK_SYSTEM_PROMPT` 기반 지침 | Phase 2 / Step 4 | System | Text |
+| `TEACHER_SUPPORTED_REATTEMPT_USER_PROMPT` | `prompts/learning_prompts.py` | Student 재응답: Scaffolding Artifact + 문제 전달 | Phase 2 / Step 4 | User | Text |
+| `POSITIVE_REINFORCEMENT_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Positive Reinforcement 역할 설정 | Phase 2 / Step 5a-1 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery) | System | — |
+| `POSITIVE_REINFORCEMENT_USER_PROMPT` | `prompts/learning_prompts.py` | PO 충족 후 강점 + 개선점 피드백 생성 | Phase 2 / Step 5a-1 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery) | User | Structured Text |
+| `FEEDBACK_DRIVEN_ELABORATION_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Positive Reinforcement 기반 응답 정교화 지침 | Phase 2 / Step 5a-2 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery) | System | Text |
+| `FEEDBACK_DRIVEN_ELABORATION_USER_PROMPT` | `prompts/learning_prompts.py` | Positive Reinforcement + 문제 전달 | Phase 2 / Step 5a-2 (Case A: Independent Performance Mastery / Case B: Scaffolded & Coached Mastery) | User | Text |
+| `TEACHER_MODELING_SYSTEM_PROMPT` | `prompts/learning_prompts.py` | Final Solution 역할 설정 | Phase 2 / Step 5b (Case C: Teacher Modeling Distillation) | System | — |
+| `TEACHER_MODELING_USER_PROMPT` | `prompts/learning_prompts.py` | 최대 반복 실패 후 교육적 풀이 생성 | Phase 2 / Step 5b (Case C: Teacher Modeling Distillation) | User | Text (평문) |
