@@ -29,7 +29,7 @@
 학습 케이스:
     Case A: Independent Performance Mastery: 첫 시도에 PO 충족 → 피드백 기반 정교화 응답 사용
     Case B: Scaffolded & Coached Mastery: 스캐폴딩 후 PO 충족 → 피드백 기반 정교화 응답 사용
-    Case C: Teacher Modeling Distillation: 최대 반복 후 실패 → 교사 해답 제공 (last iteration summary 기반)
+    Case C: Teacher Modeling Distillation: 최대 반복 후 실패 → 교사 해답 제공 (전체 iteration history 기반)
 """
 
 
@@ -61,6 +61,10 @@ You must adhere to the specific performance procedures and required knowledge/sk
 - Final answer: \"The answer is \\boxed{{your final answer}}\"
 """
 
+LEARNING_TASK_USER_PROMPT = """[Problem]
+{problem_text}
+"""
+
 
 # ==============================================================================
 # Step 2: 형성평가 프롬프트 (Formative Assessment) — 평가 전용
@@ -85,9 +89,9 @@ FORMATIVE_ASSESSMENT_USER_PROMPT = """[Input Data]
 Evaluate the student model's response according to the following rules.
 1. Assess student performance according to the performance objectives. Use the criterion embedded in each performance objective as the evaluation standard. Do not reveal correct answers or model solutions.
 2. Analyze the student response and determine which performance objectives are satisfied and which are not. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed. Avoid vague or abstract evaluations.
-3. For each PO, write a "feedback" that references the student's actual response:
-   - If satisfied: describe specific strengths observed (e.g., which reasoning steps, strategies, or expressions demonstrate mastery).
-   - If NOT satisfied: explain the specific reason the objective was not met, citing what the student wrote or omitted.
+3. For each PO, write a "reasoning" that explains your evaluation:
+   - State WHY you determined the objective is satisfied or not, citing specific evidence from the student's response (e.g., which reasoning steps, strategies, expressions, or omissions led to your judgment).
+   - Then describe HOW the student could improve or elaborate: if satisfied, suggest ways to strengthen or deepen the demonstrated reasoning; if NOT satisfied, explain what specific changes or additions would help meet the objective.
 
 [Output Format - JSON]
 {{
@@ -95,7 +99,7 @@ Evaluate the student model's response according to the following rules.
     {{
       "objective_content": "Copy the performance_objective field from performance objectives VERBATIM",
       "is_satisfied": true or false,
-      "feedback": "If satisfied: specific strengths observed in the student's response. If NOT satisfied: specific reason this objective was not met, referencing what the student wrote or omitted."
+      "reasoning": "WHY: Evidence-based explanation of why this objective is/is not satisfied, referencing the student's actual response. HOW: Specific suggestions for improvement or elaboration."
     }}
   ]
 }}
@@ -206,7 +210,7 @@ CRITICAL INSTRUCTIONS:
 5. In Strategy 2 (alternative approach), explain ONLY the reasoning approach. Do NOT compute the final answer or show complete numerical calculations that lead to the answer.
 6. The partial worked example must stop at least ONE step before the final answer. Show the setup and method, not the result.
 
-Output ONLY the structured text above. Do NOT include JSON formatting.
+Output ONLY the structured text above.
 """
 
 
@@ -336,50 +340,33 @@ The following feedback highlights your strengths and suggests ways to further im
 # system: 역할 정의 / user: 입력 데이터 + 지시 + 출력 형식
 # ==============================================================================
 
-TEACHER_MODELING_SYSTEM_PROMPT = """You are a teacher providing a complete, correct solution after the student failed to solve the problem after {max_iterations} attempts.
+TEACHER_MODELING_SYSTEM_PROMPT = """The purpose of your response is to demonstrate the attainment of the Instructional Goal: {instructional_goal}
 
-The solution should be what an expert student would produce - clear, complete, and pedagogically valuable."""
-
-TEACHER_MODELING_USER_PROMPT = """[Problem]
-{problem_text}
-
-[Correct Answer]
-{ground_truth}
+You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
 
 [Instructional Analysis]
 {task_analysis}
 
-[Last Iteration Summary]
-The following is a summary of the student's last attempt and the scaffolding provided:
-{last_iteration_summary}
-
-[Student's Persistent Weaknesses]
-Based on the failed attempts, the student consistently struggled with:
-{student_weaknesses}
-
 [Instructions]
-Generate a complete, educational solution that:
-1. Directly addresses each of the student's identified weaknesses
-2. Demonstrates the correct reasoning process step by step
-3. Highlights the key concepts and strategies the student missed
-4. Explains WHY each step is necessary (not just WHAT to do)
-5. Serves as an ideal learning example for SFT training
+1. Identify which skills and sub-skills from the instructional analysis are relevant to this problem
+2. Plan your problem-solving strategy based on the instructional goal and subskills
+3. Execute each step systematically, demonstrating the required performance behaviors
+4. Ensure your solution describes the full reasoning process using all provided steps and resources
+5. Provide your final answer clearly
 
 [Output Format]
-Write your response as plain text (NOT JSON). Structure your solution clearly and end with the boxed answer.
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
+- Step-by-step reasoning: [your detailed solution following the instructional structure]
+- Final answer: \"The answer is \\boxed{{your final answer}}\"
+"""
 
-Example format:
-[Understanding the Problem]
-Let me analyze this problem step by step...
+TEACHER_MODELING_USER_PROMPT = """[Problem]
+{problem_text}
 
-[Key Concepts Applied]
-The key insight here is...
+[Ground Truth]
+{ground_truth}
 
-[Step-by-Step Solution]
-Step 1: ...
-Step 2: ...
-
-The answer is \\boxed{{correct answer}}
-
-Output ONLY the solution as plain text. Do not include any JSON, metadata, or commentary.
+[Iteration History]
+The following is a summary of each iteration's student attempt and teacher scaffolding:
+{iteration_history}
 """

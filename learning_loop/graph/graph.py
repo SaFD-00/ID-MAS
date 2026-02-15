@@ -204,7 +204,7 @@ class IDMASGraphRunner:
         output_dir: Optional[Path] = None,
         checkpoint_interval: int = 10,
         use_iterative_scaffolding: bool = True,
-        max_iterations: int = 5,
+        max_iterations: int = 3,
         thread_id: str = "default",
         resume: bool = True,
     ) -> Dict[str, Any]:
@@ -222,7 +222,7 @@ class IDMASGraphRunner:
             output_dir: 결과 저장 디렉토리. 기본값: None
             checkpoint_interval: 체크포인트 저장 간격. 기본값: 10
             use_iterative_scaffolding: Iterative Scaffolding 사용 여부. 기본값: True
-            max_iterations: 최대 반복 횟수. 기본값: 5
+            max_iterations: 최대 반복 횟수. 기본값: 3
             thread_id: 체크포인팅용 스레드 ID. 기본값: "default"
             resume: 기존 로그에서 재개 여부. 기본값: True
 

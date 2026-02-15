@@ -34,7 +34,7 @@ from learning_loop.graph.state import (
     SFTCase,
     get_statistics,
 )
-from prompts.learning_prompts import LEARNING_TASK_SYSTEM_PROMPT
+from prompts.learning_prompts import LEARNING_TASK_SYSTEM_PROMPT, LEARNING_TASK_USER_PROMPT
 
 
 # ==================== Scaffolding ====================
@@ -63,7 +63,7 @@ def process_question_scaffolding(
     question = state["current_question"]
     task_analysis = state.get("task_analysis", "")
     use_iterative = state.get("use_iterative_scaffolding", True)
-    max_iterations = state.get("max_iterations", 5)
+    max_iterations = state.get("max_iterations", 3)
     performance_objectives = state.get("performance_objectives", [])
     instructional_goal = state.get("instructional_goal", "")
 
@@ -172,7 +172,7 @@ def _process_iterative_scaffolding(
     student_model,
     teacher_model,
     answer_extractor,
-    max_iterations: int = 5,
+    max_iterations: int = 3,
     performance_objectives: List[Dict] = None,
     instructional_goal: str = "",
 ) -> QuestionResult:
@@ -186,7 +186,7 @@ def _process_iterative_scaffolding(
         5. 모든 PO 충족 또는 최대 반복 도달까지 반복
         6. Case A: Independent Performance Mastery — 1회차 PO 충족 (독립적 수행 숙달)
            Step 5a-1: 긍정 강화 피드백, Step 5a-2: 피드백 기반 정교화
-        7. Case B: Scaffolded & Coached Mastery — 2-5회차 PO 충족 (스캐폴딩 기반 숙달)
+        7. Case B: Scaffolded & Coached Mastery — 2-3회차 PO 충족 (스캐폴딩 기반 숙달)
            Step 5a-1: 긍정 강화 피드백, Step 5a-2: 피드백 기반 정교화
         8. Case C: Teacher Modeling Distillation — 최대 반복 후 실패 → 교사가 최종 솔루션 생성
            Step 5b: 교사 모델링
@@ -197,7 +197,7 @@ def _process_iterative_scaffolding(
         student_model: StudentModel 인스턴스
         teacher_model: TeacherModel 인스턴스
         answer_extractor: AnswerExtractor 인스턴스
-        max_iterations: 최대 반복 횟수. 기본값: 5
+        max_iterations: 최대 반복 횟수. 기본값: 3
         performance_objectives: PO 리스트. 기본값: None
         instructional_goal: 학습 목표. 기본값: ""
 
@@ -237,7 +237,7 @@ def _process_iterative_scaffolding(
                     task_analysis=task_analysis,
                     dataset_prompt=question.get("instruction", ""),
                 ),
-                "user_message": question["input"],
+                "user_message": LEARNING_TASK_USER_PROMPT.format(problem_text=question["input"]),
             }
         else:
             # Step 4: Student responds using teacher scaffolding artifact
@@ -448,22 +448,13 @@ def _process_iterative_scaffolding(
         distillation_reason = "po_not_satisfied"
         print(f"    -> Failed after {max_iterations} iterations. (Reason: {distillation_reason}) Generating final solution...")
 
-        # Extract student weaknesses from conversation history
-        student_weaknesses = teacher_model.extract_student_weaknesses(conversation_history)
-
-        # Get last iteration summary
-        last_iteration_summary = ""
-        if iteration_summaries:
-            last_iteration_summary = iteration_summaries[-1].get("summary", "")
-
-        # Generate final solution with last iteration summary
+        # Generate final solution with full iteration history
         final_solution = teacher_model.generate_final_solution(
             problem_text=question["input"],
             ground_truth=question["output"],
             task_analysis=task_analysis,
-            student_weaknesses=student_weaknesses,
-            max_iterations=max_iterations,
-            last_iteration_summary=last_iteration_summary,
+            iteration_summaries=iteration_summaries,
+            instructional_goal=instructional_goal,
         )
 
         reconstructed_response = final_solution.get("solution_explanation", "")

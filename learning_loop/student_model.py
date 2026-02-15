@@ -26,6 +26,7 @@ Iterative Scaffolding Pipeline에서 학생 역할을 담당합니다.
 from models.student_wrapper import StudentModelWrapper
 from prompts.learning_prompts import (
     LEARNING_TASK_SYSTEM_PROMPT,
+    LEARNING_TASK_USER_PROMPT,
     TEACHER_SUPPORTED_REATTEMPT_SYSTEM_PROMPT,
     TEACHER_SUPPORTED_REATTEMPT_USER_PROMPT,
     FEEDBACK_DRIVEN_ELABORATION_SYSTEM_PROMPT,
@@ -133,8 +134,12 @@ class StudentModel:
         else:
             system_message = scaffolding_prompt
 
+        user_prompt = LEARNING_TASK_USER_PROMPT.format(
+            problem_text=problem_text
+        )
+
         response = self.model.generate(
-            prompt=problem_text,
+            prompt=user_prompt,
             system_message=system_message
         )
 

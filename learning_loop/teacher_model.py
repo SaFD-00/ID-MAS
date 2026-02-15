@@ -89,7 +89,7 @@ class TeacherModel:
                 - performance_evaluation (list): 각 PO별 평가 결과
                     - objective_content: PO 내용
                     - is_satisfied: 충족 여부
-                    - feedback: 충족 시 강점 / 미충족 시 사유 (Student response 참조)
+                    - reasoning: 판단 근거 (WHY) + 개선/정교화 방향 (HOW)
                 - all_satisfied (bool): 전체 PO 충족 여부
         """
         system_message = FORMATIVE_ASSESSMENT_SYSTEM_PROMPT
@@ -140,7 +140,7 @@ class TeacherModel:
         po_evaluation: Dict[str, Any],
         iteration_number: int,
         task_analysis: str,
-        max_iterations: int = 5,
+        max_iterations: int = 3,
         previous_iteration_summaries: List[Dict] = None,
         instructional_goal: str = "",
     ) -> Dict[str, Any]:
@@ -156,7 +156,7 @@ class TeacherModel:
             po_evaluation: PO 평가 결과
             iteration_number: 현재 반복 횟수
             task_analysis: 과제 분석 결과
-            max_iterations: 최대 반복 횟수. 기본값: 5
+            max_iterations: 최대 반복 횟수. 기본값: 3
             previous_iteration_summaries: 이전 iteration의 요약 리스트. 기본값: None
             instructional_goal: 학습 목표. 기본값: ""
 
@@ -364,40 +364,37 @@ class TeacherModel:
         problem_text: str,
         ground_truth: str,
         task_analysis: str,
-        student_weaknesses: List[str],
-        max_iterations: int = 5,
-        last_iteration_summary: str = "",
+        iteration_summaries: List[Dict] = None,
+        instructional_goal: str = "",
     ) -> Dict[str, Any]:
         """Case C: Teacher Modeling Distillation: 최종 정답 풀이를 생성합니다.
 
-        학생이 max_iterations 시도 후에도 실패한 경우,
-        마지막 iteration의 요약을 참고하여 교육적 정답 풀이를 생성합니다.
+        학생이 최대 반복 시도 후에도 실패한 경우,
+        전체 iteration history를 참고하여 Step 1과 동일한 형식의 풀이를 생성합니다.
 
-        출력 형식: 평문 텍스트 (JSON 아님)
+        출력 형식: Step 1과 동일 (instructional goal alignment + step-by-step reasoning + boxed answer)
 
         Args:
             problem_text: 문제 텍스트
             ground_truth: 정답
             task_analysis: 과제 분석 결과
-            student_weaknesses: 학생의 약점 목록
-            max_iterations: 최대 반복 횟수. 기본값: 5
-            last_iteration_summary: 마지막 iteration의 요약. 기본값: ""
+            iteration_summaries: 전체 iteration summary 리스트. 기본값: None
+            instructional_goal: 학습 목표. 기본값: ""
 
         Returns:
             최종 솔루션 딕셔너리:
-                - solution_explanation: 완전한 풀이 설명 (평문)
+                - solution_explanation: 완전한 풀이 설명
         """
-        weaknesses_str = "\n".join(f"- {w}" for w in student_weaknesses) if student_weaknesses else "- Unable to identify specific weaknesses"
+        iteration_history = self._format_iteration_history(iteration_summaries)
 
         system_message = TEACHER_MODELING_SYSTEM_PROMPT.format(
-            max_iterations=max_iterations
+            instructional_goal=instructional_goal,
+            task_analysis=task_analysis[:1500],
         )
         user_prompt = TEACHER_MODELING_USER_PROMPT.format(
             problem_text=problem_text,
             ground_truth=ground_truth,
-            task_analysis=task_analysis[:1500],
-            last_iteration_summary=last_iteration_summary if last_iteration_summary else "(No iteration summary available)",
-            student_weaknesses=weaknesses_str,
+            iteration_history=iteration_history,
         )
 
         # Retry logic
@@ -444,6 +441,26 @@ class TeacherModel:
                 formatted.append(f"[Iteration {iteration} Summary]\n{summary}")
 
         return "\n\n".join(formatted) if formatted else "(No previous iteration summaries)"
+
+    def _format_iteration_history(self, summaries: List[Dict]) -> str:
+        """전체 iteration summaries를 'Iter N: summary' 형식으로 포맷팅합니다.
+
+        Args:
+            summaries: iteration summary 리스트. 각 항목은
+                {"iteration": int, "summary": str} 형식.
+
+        Returns:
+            포맷된 iteration history 문자열
+        """
+        if not summaries:
+            return "(No iteration history available)"
+        formatted = []
+        for entry in summaries:
+            iteration = entry.get("iteration", "?")
+            summary = entry.get("summary", "")
+            if summary:
+                formatted.append(f"Iter {iteration}: {summary}")
+        return "\n".join(formatted) if formatted else "(No iteration history available)"
 
     def _format_scaffolding_history(self, scaffolding_history: List[Dict]) -> str:
         """스캐폴딩 히스토리를 프롬프트용 문자열로 변환합니다.
@@ -495,44 +512,6 @@ class TeacherModel:
                 formatted.append(f"[Iteration {iteration} Feedback]\n{feedback}")
 
         return "\n\n".join(formatted) if formatted else "(No feedback history)"
-
-    def extract_student_weaknesses(
-        self,
-        conversation_history: List[Dict]
-    ) -> List[str]:
-        """대화 히스토리에서 학생의 약점을 추출합니다.
-
-        PO 평가와 스캐폴딩 아티팩트에서 학생의 약점을 수집합니다.
-
-        Args:
-            conversation_history: 대화 기록
-
-        Returns:
-            학생 약점 목록 (최대 5개)
-        """
-        weaknesses = []
-        seen = set()
-
-        for entry in conversation_history:
-            if entry.get("role") == "teacher":
-                # From PO evaluation
-                evaluation = entry.get("evaluation", {})
-                for po in evaluation.get("performance_evaluation", []):
-                    if not po.get("is_satisfied", True):
-                        reason = po.get("feedback", "")
-                        if reason and reason not in seen:
-                            weaknesses.append(reason[:200])
-                            seen.add(reason)
-
-                # From scaffolding artifact
-                artifact = entry.get("scaffolding_artifact", {})
-                for art in artifact.get("scaffolding_artifacts", []):
-                    failure = art.get("failure_analysis", "")
-                    if failure and failure not in seen:
-                        weaknesses.append(failure[:200])
-                        seen.add(failure)
-
-        return weaknesses[:5]  # Limit to top 5
 
 
 if __name__ == "__main__":

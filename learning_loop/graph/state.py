@@ -274,7 +274,7 @@ def create_initial_state(
     questions: List[Dict[str, Any]],
     checkpoint_interval: int = 10,
     use_iterative_scaffolding: bool = True,
-    max_iterations: int = 5,
+    max_iterations: int = 3,
     design_result: Optional[DesignResult] = None,
 ) -> IDMASState:
     """파이프라인 초기 상태를 생성합니다.
@@ -289,7 +289,7 @@ def create_initial_state(
         questions: 처리할 문제 리스트
         checkpoint_interval: 체크포인트 저장 간격 (문제 수). 기본값: 10
         use_iterative_scaffolding: Iterative Scaffolding 사용 여부. 기본값: True
-        max_iterations: 최대 반복 횟수. 기본값: 5
+        max_iterations: 최대 반복 횟수. 기본값: 3
         design_result: 사전 로드된 교수설계 결과. 기본값: None
 
     Returns:

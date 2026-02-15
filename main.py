@@ -452,7 +452,7 @@ class IDMASPipeline:
             output_dir=self.model_dir,
             checkpoint_interval=self.checkpoint_interval,
             use_iterative_scaffolding=True,
-            max_iterations=5,
+            max_iterations=3,
             thread_id=thread_id,
             resume=resume,
         )

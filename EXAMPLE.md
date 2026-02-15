@@ -477,9 +477,9 @@ Your role is to evaluate the student's response against the established performa
 Evaluate the student model's response according to the following rules.
 1. Assess student performance according to the performance objectives. Use the criterion embedded in each performance objective as the evaluation standard. Do not reveal correct answers or model solutions.
 2. Analyze the student response and determine which performance objectives are satisfied and which are not. All judgments must be grounded in observable reasoning behaviors in the student response, such as how claims are justified, how relationships are analyzed, or how judgments are formed. Avoid vague or abstract evaluations.
-3. For each PO, write a "feedback" that references the student's actual response:
-   - If satisfied: describe specific strengths observed (e.g., which reasoning steps, strategies, or expressions demonstrate mastery).
-   - If NOT satisfied: explain the specific reason the objective was not met, citing what the student wrote or omitted.
+3. For each PO, write a "reasoning" that explains your evaluation:
+   - State WHY you determined the objective is satisfied or not, citing specific evidence from the student's response (e.g., which reasoning steps, strategies, expressions, or omissions led to your judgment).
+   - Then describe HOW the student could improve or elaborate: if satisfied, suggest ways to strengthen or deepen the demonstrated reasoning; if NOT satisfied, explain what specific changes or additions would help meet the objective.
 
 [Output Format - JSON]
 {
@@ -487,7 +487,7 @@ Evaluate the student model's response according to the following rules.
     {
       "objective_content": "Copy the performance_objective field from performance objectives VERBATIM",
       "is_satisfied": true or false,
-      "feedback": "If satisfied: specific strengths observed in the student's response. If NOT satisfied: specific reason this objective was not met, referencing what the student wrote or omitted."
+      "reasoning": "WHY: Evidence-based explanation of why this objective is/is not satisfied, referencing the student's actual response. HOW: Specific suggestions for improvement or elaboration."
     }
   ]
 }
@@ -503,17 +503,17 @@ Output ONLY valid JSON.
     {
       "objective_content": "Given a multi-step mathematical problem, the model will solve it by applying arithmetic operations, proportional reasoning, and real-world context understanding to arrive at an accurate numerical solution with 100% accuracy.",
       "is_satisfied": true,
-      "feedback": "The student correctly solved the multi-step problem by applying arithmetic operations (division and addition) and proportional reasoning (interpreting 'half as many'). The real-world context of selling clips was also appropriately considered, and the final answer of 72 is accurate."
+      "reasoning": "WHY: The student correctly solved the multi-step problem by applying arithmetic operations (division and addition) and proportional reasoning (interpreting 'half as many'). The real-world context of selling clips was also appropriately considered, and the final answer of 72 is accurate. HOW: The student could further strengthen the response by explicitly stating the relationship between the two months' sales before computing, making the proportional reasoning more transparent."
     },
     {
       "objective_content": "Given a mathematical problem requiring proportional reasoning, the model will interpret and solve ratios and proportions accurately with 100% accuracy.",
       "is_satisfied": true,
-      "feedback": "The student correctly interpreted the phrase 'half as many' as a proportional relationship and used division to compute the proportional value, demonstrating accurate proportional reasoning."
+      "reasoning": "WHY: The student correctly interpreted the phrase 'half as many' as a proportional relationship and used division to compute the proportional value, demonstrating accurate proportional reasoning. HOW: The student could elaborate by explicitly defining the proportion (e.g., 'second month = first month / 2') to make the reasoning structure more visible."
     },
     {
       "objective_content": "Given a mathematical solution, the model will verify its relevance and accuracy in the real-world context with 100% accuracy.",
       "is_satisfied": true,
-      "feedback": "The student verified the solution by checking that the operations (division and addition) were appropriate for the real-world context of selling clips over two months."
+      "reasoning": "WHY: The student verified the solution by checking that the operations (division and addition) were appropriate for the real-world context of selling clips over two months. HOW: The student could improve by adding a final sanity check (e.g., verifying that the total is greater than either individual month's sales)."
     }
   ]
 }
@@ -771,22 +771,22 @@ Case A: Independent Performance Mastery는 Feedback-Driven Elaboration 후의 **
     {
       "objective_content": "Given a mathematical problem requiring proportional reasoning, the model will interpret and solve ratios and proportions accurately with 100% accuracy.",
       "is_satisfied": false,
-      "feedback": "The problem does not involve ratios or proportions, so this objective is not applicable."
+      "reasoning": "WHY: The problem does not involve ratios or proportions, so this objective is not applicable. HOW: No improvement needed for this objective as it is outside the problem scope."
     },
     {
       "objective_content": "Given a ratio or proportion problem, the model will interpret and solve it accurately with 100% accuracy.",
       "is_satisfied": false,
-      "feedback": "The problem does not involve ratios or proportions, so this objective is not applicable."
+      "reasoning": "WHY: The problem does not involve ratios or proportions, so this objective is not applicable. HOW: No improvement needed for this objective as it is outside the problem scope."
     },
     {
       "objective_content": "Given a problem requiring scaling or converting measurements, the model will apply proportional reasoning to solve it accurately with 100% accuracy.",
       "is_satisfied": false,
-      "feedback": "The problem does not involve scaling or converting measurements, so this objective is not applicable."
+      "reasoning": "WHY: The problem does not involve scaling or converting measurements, so this objective is not applicable. HOW: No improvement needed for this objective as it is outside the problem scope."
     },
     {
       "objective_content": "Given a real-world scenario involving proportional reasoning, the model will apply proportional reasoning to solve the problem accurately with 100% accuracy.",
       "is_satisfied": false,
-      "feedback": "The problem does not involve proportional reasoning, so this objective is not applicable."
+      "reasoning": "WHY: The problem does not involve proportional reasoning, so this objective is not applicable. HOW: No improvement needed for this objective as it is outside the problem scope."
     }
   ]
 }
@@ -1146,106 +1146,76 @@ Scaffolding was provided to clarify the correct interpretation.
 
 #### Case C: Teacher Modeling Distillation Step 5b: Final Solution
 
-Teacher가 Student의 약점을 분석한 뒤, 정답(120)을 기반으로 교육적 풀이를 **평문 텍스트**로 생성합니다.
+Teacher가 전체 iteration history를 참고하여 정답(120)을 기반으로 Step 1과 동일한 형식의 풀이를 **평문 텍스트**로 생성합니다.
 
 ##### 실제 프롬프트
 
 **System Message** (`TEACHER_MODELING_SYSTEM_PROMPT`):
-```
-You are a teacher providing a complete, correct solution after the student failed to solve the problem after 5 attempts.
 
-The solution should be what an expert student would produce - clear, complete, and pedagogically valuable.
+> Placeholder: `{instructional_goal}` → Instructional Goal 텍스트, `{task_analysis}` → Task Analysis Tree (최대 1500자 제한)
+
+```
+The purpose of your response is to demonstrate the attainment of the Instructional Goal: [Instructional Goal 텍스트]
+
+You must adhere to the specific performance procedures and required knowledge/skills outlined in the Instructional Analysis results below. Ensure that your solution describes the full reasoning process using all provided steps and resources before arriving at the final answer.
+
+[Instructional Analysis]
+[Task Analysis Tree (최대 1500자)]
 ```
 
 **User Message** (`TEACHER_MODELING_USER_PROMPT`):
 
-> Placeholder: `{max_iterations}` → 5, `{problem_text}` → 문제 원문, `{ground_truth}` → "120", `{task_analysis}` → Task Analysis Tree (최대 1500자 제한), `{last_iteration_summary}` → 마지막 iteration의 summary 텍스트, `{student_weaknesses}` → `extract_student_weaknesses()`로 추출한 약점 목록 (최대 5개)
+> Placeholder: `{problem_text}` → 문제 원문, `{ground_truth}` → "120", `{iteration_history}` → `_format_iteration_history()`로 포맷된 전체 iteration history
 
 ```
 [Problem]
 Every hour Joanne has to collect the coins out of the fountain inside the mall. During the first hour, she collected 15 coins. For the next two hours, she collected 35 coins from the fountain. In the fourth hour, she collected 50 coins from the fountain but she gave 15 of them to her coworker so she could buy a soda. How many coins did she have after the fourth hour?
 
-[Correct Answer]
+[Ground Truth]
 120
 
-[Instructional Analysis]
-[Task Analysis Tree 전체]
-
-[Last Iteration Summary]
-The following is a summary of the student's last attempt and the scaffolding provided:
-[마지막 iteration의 summary 텍스트]
-
-[Student's Persistent Weaknesses]
-Based on the failed attempts, the student consistently struggled with:
-- Misinterpreting "for the next two hours, she collected 35 coins" as 35 total instead of 35 per hour
-- Failing to verify the solution against the problem constraints
+[Iteration History]
+The following is a summary of each iteration's student attempt and teacher scaffolding:
+Iter 1: The student attempted to solve the problem but misinterpreted "for the next two hours, she collected 35 coins" as 35 total instead of 35 per hour. The student's answer was 85. Scaffolding provided focused on clarifying the per-hour interpretation.
+Iter 2: The student corrected the per-hour interpretation but made an arithmetic error in the subtraction step. The student's answer was 125. Scaffolding provided guided the student to verify each calculation step.
+...
 
 [Instructions]
-Generate a complete, educational solution that:
-1. Directly addresses each of the student's identified weaknesses
-2. Demonstrates the correct reasoning process step by step
-3. Highlights the key concepts and strategies the student missed
-4. Explains WHY each step is necessary (not just WHAT to do)
-5. Serves as an ideal learning example for SFT training
+1. Identify which skills and sub-skills from the instructional analysis are relevant to this problem
+2. Plan your problem-solving strategy based on the instructional goal and subskills
+3. Execute each step systematically, demonstrating the required performance behaviors
+4. Ensure your solution describes the full reasoning process using all provided steps and resources
+5. Provide your final answer clearly
 
 [Output Format]
-Write your response as plain text (NOT JSON). Structure your solution clearly and end with the boxed answer.
-
-Example format:
-[Understanding the Problem]
-Let me analyze this problem step by step...
-
-[Key Concepts Applied]
-The key insight here is...
-
-[Step-by-Step Solution]
-Step 1: ...
-Step 2: ...
-
-The answer is \boxed{correct answer}
-
-Output ONLY the solution as plain text. Do not include any JSON, metadata, or commentary.
+- Instructional goal alignment: [how this solution demonstrates the instructional goal]
+- Step-by-step reasoning: [your detailed solution following the instructional structure]
+- Final answer: "The answer is \boxed{your final answer}"
 ```
 
 ##### Teacher 최종 풀이 결과
 
 ```
-[Understanding the Problem]
-Let me analyze this problem step by step to ensure I fully understand what is being asked.
-Joanne collects coins from a fountain over four hours. Each hour, she collects a certain
-number of coins, and in the fourth hour, she gives some away. The question is asking for
-the total number of coins she has after the fourth hour.
+- Instructional goal alignment: This solution demonstrates the instructional goal by systematically applying multi-step arithmetic operations with careful attention to per-unit interpretation and conditional deductions.
 
-[Key Concepts Applied]
-The key concepts here include:
-- **Accurate addition and subtraction**: We need to add up the coins collected each hour and
-  then account for the coins given away in the fourth hour.
-- **Order of operations**: We must ensure we apply the subtraction (for the coins given to
-  the coworker) only to the fourth hour's collection, not to the total.
-- **Real-world context understanding**: It's crucial to recognize that the 15 coins given to
-  the coworker only affect the fourth hour's total, not all the previous hours.
-- **Attention to detail**: A common mistake is to incorrectly apply deductions to the entire
-  total, rather than just the relevant time frame.
-
-[Step-by-Step Solution]
-Step 1: **Calculate the coins collected in the first hour**
+- Step-by-step reasoning:
+Step 1: Calculate the coins collected in the first hour
 Joanne collected 15 coins in the first hour.
 Total so far = 15 coins
 
-Step 2: **Calculate the coins collected in the next two hours**
+Step 2: Calculate the coins collected in the next two hours
 For the next two hours, she collected 35 coins each hour.
 Total for the second and third hours = 35 + 35 = 70 coins
 
-Step 3: **Calculate the coins collected in the fourth hour**
+Step 3: Calculate the coins collected in the fourth hour
 In the fourth hour, Joanne collected 50 coins, but she gave 15 of them to her coworker.
 Therefore, the number of coins she kept from the fourth hour = 50 – 15 = 35 coins
 
-Step 4: **Add up all the coins collected over the four hours**
+Step 4: Add up all the coins collected over the four hours
 Total coins = (First hour) + (Second and third hours) + (Fourth hour)
 Total coins = 15 + 70 + 35 = 120 coins
 
-[Final Answer]
-The answer is \boxed{120}
+- Final answer: "The answer is \boxed{120}"
 ```
 
 > **핵심 차이**: Teacher의 풀이는 "For the next two hours, she collected 35 coins"를 **매 시간 35개**로 해석하여 35 + 35 = 70으로 계산합니다. Student가 5회 반복 동안 고수한 "2시간 총 35개" 해석 오류를 명시적으로 교정하는 교육적 풀이입니다.
