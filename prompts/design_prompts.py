@@ -102,6 +102,7 @@ Perform the Instructional Analysis and construct a hierarchical structure in the
 Present the instructional analysis results as a text-based tree structure.
 Write all skill statements concisely using an action verb + object format.
 Include only the minimum number of Subskills and Subtasks that are essential to achieving the Instructional Goal. For every function or sub-function, indicate the learning outcome based on Bloom's revised Taxonomy: Remember / Understand / Apply / Analyze / Evaluate / Create.
+The analysis MUST include a "Verify Final Answer" subskill (Evaluate level) that requires cross-checking the computed result against all problem constraints. This is distinct from computational or reasoning subskills — it specifically requires substituting the answer back into the original problem conditions to confirm correctness and consistency.
 The final output must follow the structure and labels in the Output Format below. Do not change the wording, ordering, line breaks, or section titles. The Output Format example is provided ONLY to specify formatting and structure. Determine all subskills and subtasks strictly based on the given Learning Goal.
 
 [Output Format]
@@ -138,6 +139,7 @@ Every Performance Objective must include all three components—Behavior, Condit
 - Behavior: This is a description of LLM's intellectual skill including actions, content, and concepts.
 - Condition: This is a description of the tools and resources that will be available to the learner when performing the skill. Write the conditions based solely on the data given in the problem or generated during the reasoning process. And it should always begin with 'given ~'.
 - Criterion: This is a description of acceptable performance of the skill. The Criterion component must be tailored to the nature of the task: for tasks with correct answers, it must include a clear and measurable standard such as accuracy requirements, acceptable error ranges, or the number of correct responses; whereas for tasks with no single correct answer, it must specify the information or features that must be present for an acceptable response. Furthermore, these criteria must be formulated to evaluate the observable reasoning process within a single problem-solving task.
+Additionally, at least one Performance Objective MUST explicitly target the "Verify Final Answer" subskill from the Instructional Analysis. This PO must require the student to cross-check the computed final answer against ALL original problem constraints (e.g., substituting the answer back into the original conditions, verifying boundary values, confirming unit consistency, or checking that the selected option satisfies all given criteria). The Criterion for this PO must state that the final answer must be correct and consistent with every condition stated in the problem.
 Each Performance Objective must correspond directly to a single Subskill and Subtask, and you must not add content that does not appear in the Instructional Analysis Result. Each performance objective must start with an action verb and must not include an explicit subject.
 
 [Output Format]

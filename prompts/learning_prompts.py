@@ -92,6 +92,7 @@ Evaluate the student model's response according to the following rules.
 3. For each PO, write a "reasoning" that explains your evaluation:
    - State WHY you determined the objective is satisfied or not, citing specific evidence from the student's response (e.g., which reasoning steps, strategies, expressions, or omissions led to your judgment).
    - Then describe HOW the student could improve or elaborate: if satisfied, suggest ways to strengthen or deepen the demonstrated reasoning; if NOT satisfied, explain what specific changes or additions would help meet the objective.
+4. CRITICAL — Answer Verification Rule: For any Performance Objective related to answer verification, solution validation, or final answer correctness, you MUST compare the student's final answer against the ground truth provided above. If the student's final answer does NOT match the ground truth, that PO MUST be marked as is_satisfied: false, regardless of how well the intermediate reasoning steps appear. Do NOT rationalize an incorrect final answer as satisfying an answer verification objective.
 
 [Output Format - JSON]
 {{
