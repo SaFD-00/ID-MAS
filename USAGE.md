@@ -20,10 +20,10 @@ Teacher 모델은 교수 설계 및 Iterative Scaffolding 평가에 사용됩니
 
 | 유형 | 모델 | 비고 |
 |------|------|------|
-| **OpenAI API** | `gpt-5.2` | 기본값 (OPENAI_API_KEY 필요) |
+| **OpenAI API** | `gpt-5.2` | OPENAI_API_KEY 필요 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-0.6B` | GPU 직접 로드 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-1.7B` | GPU 직접 로드 |
-| **로컬 HuggingFace** | `Qwen/Qwen3-4B` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `Qwen/Qwen3-4B` | **기본값** |
 | **로컬 HuggingFace** | `Qwen/Qwen3-8B` | GPU 직접 로드 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-32B` | GPU 직접 로드 |
 
@@ -38,8 +38,8 @@ Student 모델은 Iterative Scaffolding 학습의 대상입니다.
 | 모델 | 비고 |
 |------|------|
 | `Qwen/Qwen3-0.6B` | Qwen3 0.6B |
-| `Qwen/Qwen3-1.7B` | **기본값** |
-| `Qwen/Qwen3-4B` | Qwen3 4B |
+| `Qwen/Qwen3-1.7B` | Qwen3 1.7B |
+| `Qwen/Qwen3-4B` | **기본값** |
 | `Qwen/Qwen3-8B` | Qwen3 8B |
 | `Qwen/Qwen3-32B` | Qwen3 32B |
 
@@ -101,8 +101,8 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 | 옵션 | 설명 | 값 |
 |------|------|-----|
 | `--mode` | 실행 모드 | `train`, `eval` (필수) |
-| `--student-model` | 학생 모델 선택 | `Qwen/Qwen3-1.7B` (기본값) |
-| `--teacher-model` | 교사/설계 모델 선택 | `gpt-5.2` (기본값) |
+| `--student-model` | 학생 모델 선택 | `Qwen/Qwen3-4B` (기본값) |
+| `--teacher-model` | 교사/설계 모델 선택 | `Qwen/Qwen3-4B` (기본값) |
 | `--student-gpu` | Student 모델 GPU | 단일(`0`) 또는 다중(`0,1,2`). 미지정 시 CUDA_VISIBLE_DEVICES 사용 |
 | `--teacher-gpu` | Teacher 모델 GPU | 단일(`1`) 또는 다중(`3,4,5,6`). 미지정 시 CUDA_VISIBLE_DEVICES 사용 (API 모델은 무시) |
 

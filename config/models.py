@@ -60,7 +60,7 @@ AVAILABLE_TEACHER_MODELS = [
 ]
 
 # 기본 교사 모델
-DEFAULT_TEACHER_MODEL = "gpt-5.2"
+DEFAULT_TEACHER_MODEL = "Qwen/Qwen3-4B"
 
 
 def create_teacher_config(
@@ -147,7 +147,7 @@ AVAILABLE_STUDENT_MODELS = [
 ]
 
 # 기본 학생 모델
-DEFAULT_STUDENT_MODEL = "Qwen/Qwen3-1.7B"
+DEFAULT_STUDENT_MODEL = "Qwen/Qwen3-4B"
 
 # 학생 모델 공통 설정
 STUDENT_MODEL_BASE_CONFIG = {
