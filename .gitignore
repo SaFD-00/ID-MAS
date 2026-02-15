@@ -87,7 +87,7 @@ logs/
 # ID-MAS specific
 # ============================================
 # Data and outputs (large files)
-data/
+# data/
 outputs/
 
 # Data preparation scripts (not for production)
