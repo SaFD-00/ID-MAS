@@ -38,7 +38,7 @@ Phase 2: Adaptive Scaffolding (문제별 반복)
   ├── Step 2: Teacher PO 평가 (평가 전용) → 성공이면 Case A: Independent Performance Mastery/Case B: Scaffolded & Coached Mastery
   ├── Step 3: Scaffolding Artifact + 서술형 피드백 생성
   ├── Step 4: Student 재응답 (Teacher 피드백 참조)
-  ├── (Step 2~4 반복, 최대 5회)
+  ├── (Step 2~4 반복, 최대 N회 — `--max-iterations`로 설정, 기본값 5)
   ├── Step 5a-1: Teacher Positive Reinforcement (Case A: Independent Performance Mastery/Case B: Scaffolded & Coached Mastery) — 강점 + 개선점
   ├── Step 5a-2: Student Feedback-Driven Elaboration (Case A: Independent Performance Mastery/Case B: Scaffolded & Coached Mastery) — 응답 개선
   ├── Step 5b: Final Solution (Case C: Teacher Modeling Distillation만) — 교육적 풀이 평문 텍스트 출력

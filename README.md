@@ -77,6 +77,7 @@ ID-MAS/
 | `--student-gpu` | Student 모델 GPU 인덱스 | 자동 (CUDA_VISIBLE_DEVICES) |
 | `--teacher-gpu` | Teacher 모델 GPU 인덱스 (API 모델은 무시) | 자동 (CUDA_VISIBLE_DEVICES) |
 | `--run-design` | 설계 단계 강제 재실행 (train 전용) | `False` |
+| `--max-iterations` | Iterative Scaffolding 최대 반복 횟수 (train 전용) | `5` |
 | `--resume` | 체크포인트에서 이어서 학습 (train 전용) | `True` |
 | `--eval-resume` | 기존 결과에서 이어서 평가 (eval 전용) | `True` |
 

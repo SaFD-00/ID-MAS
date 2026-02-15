@@ -95,7 +95,8 @@ class IDMASPipeline:
         teacher_config: Optional[Dict] = None,
         resume: bool = False,
         checkpoint_interval: int = 10,
-        student_gpu_ids=None
+        student_gpu_ids=None,
+        max_iterations: int = 5
     ):
         """IDMASPipeline 인스턴스를 초기화합니다.
 
@@ -108,12 +109,14 @@ class IDMASPipeline:
             checkpoint_interval: 체크포인트 저장 간격 (문제 수 기준)
             student_gpu_ids: Student GPU 인덱스 tuple (예: (0,), (0,1,2)).
                 None이면 자동 할당.
+            max_iterations: Iterative Scaffolding 최대 반복 횟수 (기본값: 5)
         """
         self.domain = domain.lower()
         self.train_dataset = train_dataset.lower()
         self.student_model_name = student_model_name or DEFAULT_STUDENT_MODEL
         self.teacher_config = teacher_config
         self.checkpoint_interval = checkpoint_interval
+        self.max_iterations = max_iterations
         self.resume = resume
 
         # 설계 파일용 식별자 (domain_dataset 형식)
@@ -452,7 +455,7 @@ class IDMASPipeline:
             output_dir=self.model_dir,
             checkpoint_interval=self.checkpoint_interval,
             use_iterative_scaffolding=True,
-            max_iterations=3,
+            max_iterations=self.max_iterations,
             thread_id=thread_id,
             resume=resume,
         )
@@ -858,6 +861,7 @@ def run_train_mode(args):
             - teacher_model: 교사 모델명 (선택)
             - resume: 이어서 학습 여부
             - run_design: 설계 단계 강제 실행 여부
+            - max_iterations: Iterative Scaffolding 최대 반복 횟수 (기본값: 5)
             - student_gpu: Student GPU 인덱스 (선택)
             - teacher_gpu: Teacher GPU 인덱스 (선택)
     """
@@ -881,6 +885,7 @@ def run_train_mode(args):
         print(f"Student GPU: {student_gpu_ids}")
     if teacher_gpu_ids is not None:
         print(f"Teacher GPU: {teacher_gpu_ids}")
+    print(f"Max Iterations: {args.max_iterations}")
     print(f"Resume: {args.resume}")
 
     # 로컬 모델인 경우 Teacher/Student 동일 여부 확인
@@ -900,6 +905,7 @@ def run_train_mode(args):
         resume=args.resume,
         checkpoint_interval=10,
         student_gpu_ids=student_gpu_ids,
+        max_iterations=args.max_iterations,
     )
 
     if pipeline.instructional_goal:
@@ -1145,6 +1151,13 @@ Examples:
         default="True",
         choices=["True", "False"],
         help="체크포인트에서 이어서 학습. 학습 모드 전용 (기본값: True)"
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=5,
+        dest="max_iterations",
+        help="Iterative Scaffolding 최대 반복 횟수. 학습 모드 전용 (기본값: 5)"
     )
 
     # ========================================
