@@ -21,6 +21,7 @@ Teacher 모델은 교수 설계 및 Iterative Scaffolding 평가에 사용됩니
 | 유형 | 모델 | 비고 |
 |------|------|------|
 | **OpenAI API** | `gpt-5.2` | 기본값 (OPENAI_API_KEY 필요) |
+| **로컬 HuggingFace** | `Qwen/Qwen3-0.6B` | GPU 직접 로드 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-1.7B` | GPU 직접 로드 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-4B` | GPU 직접 로드 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-8B` | GPU 직접 로드 |
@@ -36,6 +37,7 @@ Student 모델은 Iterative Scaffolding 학습의 대상입니다.
 
 | 모델 | 비고 |
 |------|------|
+| `Qwen/Qwen3-0.6B` | Qwen3 0.6B |
 | `Qwen/Qwen3-1.7B` | **기본값** |
 | `Qwen/Qwen3-4B` | Qwen3 4B |
 | `Qwen/Qwen3-8B` | Qwen3 8B |
@@ -49,6 +51,7 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 
 | 베이스 모델 | SFT 모델 | SFT_ID-MAS 모델 |
 |-------------|----------|-----------------|
+| `Qwen/Qwen3-0.6B` | `SaFD-00/qwen3-0.6b-{domain}` | `SaFD-00/qwen3-0.6b-{domain}_id-mas` |
 | `Qwen/Qwen3-1.7B` | `SaFD-00/qwen3-1.7b-{domain}` | `SaFD-00/qwen3-1.7b-{domain}_id-mas` |
 | `Qwen/Qwen3-4B` | `SaFD-00/qwen3-4b-{domain}` | `SaFD-00/qwen3-4b-{domain}_id-mas` |
 | `Qwen/Qwen3-8B` | `SaFD-00/qwen3-8b-{domain}` | `SaFD-00/qwen3-8b-{domain}_id-mas` |
@@ -176,6 +179,11 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 #### Math 도메인
 ```bash
 python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 0
+
+python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B \
     --student-gpu 0
@@ -194,6 +202,11 @@ python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
     --student-gpu 0,1,2
+
+python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 1
 
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-1.7B \
@@ -220,6 +233,11 @@ python main.py --mode train --domain math --train-dataset math \
 
 ```bash
 python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 0
+
+python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B \
     --student-gpu 0
@@ -243,6 +261,11 @@ python main.py --mode train --domain logical --train-dataset reclor \
 #### Commonsense 도메인
 
 ```bash
+python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 1
+
 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B \
@@ -272,6 +295,10 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
 # Baseline 평가 (In-Domain)
 python main.py --mode eval --method baseline \
     --domain math --eval-dataset gsm8k \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
+python main.py --mode eval --method baseline \
+    --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --method baseline \
@@ -289,6 +316,10 @@ python main.py --mode eval --method baseline \
 # SFT 평가 (In-Domain)
 python main.py --mode eval --method sft \
     --domain math --eval-dataset gsm8k \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
+python main.py --mode eval --method sft \
+    --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --method sft \
@@ -304,6 +335,10 @@ python main.py --mode eval --method sft \
     --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT_ID-MAS 평가 (In-Domain)
+python main.py --mode eval --method sft_id-mas \
+    --domain math --eval-dataset gsm8k \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
 python main.py --mode eval --method sft_id-mas \
     --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
@@ -340,6 +375,10 @@ python main.py --mode eval --method sft_id-mas \
 # Baseline 평가 (In-Domain)
 python main.py --mode eval --method baseline \
     --domain logical --eval-dataset reclor \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
+python main.py --mode eval --method baseline \
+    --domain logical --eval-dataset reclor \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --method baseline \
@@ -357,6 +396,10 @@ python main.py --mode eval --method baseline \
 # SFT 평가 (In-Domain)
 python main.py --mode eval --method sft \
     --domain logical --eval-dataset reclor \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
+python main.py --mode eval --method sft \
+    --domain logical --eval-dataset reclor \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --method sft \
@@ -372,6 +415,10 @@ python main.py --mode eval --method sft \
     --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT_ID-MAS 평가 (In-Domain)
+python main.py --mode eval --method sft_id-mas \
+    --domain logical --eval-dataset reclor \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
 python main.py --mode eval --method sft_id-mas \
     --domain logical --eval-dataset reclor \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
@@ -436,6 +483,10 @@ python main.py --mode eval --method sft_id-mas \
 # Baseline 평가 (In-Domain)
 python main.py --mode eval --method baseline \
     --domain commonsense --eval-dataset arc_c \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
+python main.py --mode eval --method baseline \
+    --domain commonsense --eval-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --method baseline \
@@ -453,6 +504,10 @@ python main.py --mode eval --method baseline \
 # SFT 평가 (In-Domain)
 python main.py --mode eval --method sft \
     --domain commonsense --eval-dataset arc_c \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
+python main.py --mode eval --method sft \
+    --domain commonsense --eval-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --method sft \
@@ -468,6 +523,10 @@ python main.py --mode eval --method sft \
     --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
 # SFT_ID-MAS 평가 (In-Domain)
+python main.py --mode eval --method sft_id-mas \
+    --domain commonsense --eval-dataset arc_c \
+    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+
 python main.py --mode eval --method sft_id-mas \
     --domain commonsense --eval-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
@@ -551,6 +610,27 @@ python main.py --mode eval --method baseline \
 ## 기타
 
 ```bash
+## [0] Student Model: Qwen3-0.6B / Teacher Model: Qwen3-0.6B
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 0,1
+
+python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 0,1
+
+python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 0,1
+
+python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen3-0.6B \
+    --teacher-model Qwen/Qwen3-0.6B \
+    --student-gpu 0,1
+
 ## [1] Student Model: Qwen3-1.7B / Teacher Model: Qwen3-1.7B
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B \
