@@ -14,6 +14,7 @@
 # 기본 모델명 → HuggingFace Hub 레포지토리용 짧은 이름 매핑
 # SaFD-00/{short_name}-{domain} 형식으로 사용됨
 MODEL_NAME_TO_SHORT = {
+    "Qwen/Qwen3-0.6B": "qwen3-0.6b",
     "Qwen/Qwen3-1.7B": "qwen3-1.7b",
     "Qwen/Qwen3-4B": "qwen3-4b",
     "Qwen/Qwen3-8B": "qwen3-8b",

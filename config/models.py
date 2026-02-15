@@ -52,6 +52,7 @@ AVAILABLE_TEACHER_MODELS = [
     # OpenAI API
     "gpt-5.2",
     # 로컬 HuggingFace 모델 (ModelCache를 통해 직접 로드)
+    "Qwen/Qwen3-0.6B",
     "Qwen/Qwen3-1.7B",
     "Qwen/Qwen3-4B",
     "Qwen/Qwen3-8B",
@@ -138,6 +139,7 @@ def create_teacher_config(
 
 # 지원하는 학생 모델 목록
 AVAILABLE_STUDENT_MODELS = [
+    "Qwen/Qwen3-0.6B",
     "Qwen/Qwen3-1.7B",
     "Qwen/Qwen3-4B",
     "Qwen/Qwen3-8B",
