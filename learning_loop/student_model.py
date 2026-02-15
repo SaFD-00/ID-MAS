@@ -24,6 +24,7 @@ Iterative Scaffolding Pipeline에서 학생 역할을 담당합니다.
     >>> response = student.generate_initial_response_with_scaffolding(...)
 """
 from models.student_wrapper import StudentModelWrapper
+from utils.prompt_helpers import strip_response_format
 from prompts.learning_prompts import (
     LEARNING_TASK_SYSTEM_PROMPT,
     LEARNING_TASK_USER_PROMPT,
@@ -130,7 +131,7 @@ class StudentModel:
             task_analysis=task_analysis
         )
         if dataset_prompt:
-            system_message = f"{dataset_prompt}\n\n{scaffolding_prompt}"
+            system_message = f"{strip_response_format(dataset_prompt)}\n\n{scaffolding_prompt}"
         else:
             system_message = scaffolding_prompt
 
@@ -179,7 +180,7 @@ class StudentModel:
             problem_text=problem_text,
         )
         if dataset_prompt:
-            system_message = f"{dataset_prompt}\n\n{system_prompt}"
+            system_message = f"{strip_response_format(dataset_prompt)}\n\n{system_prompt}"
         else:
             system_message = system_prompt
 
@@ -255,7 +256,7 @@ class StudentModel:
             task_analysis=task_analysis
         )
         if dataset_prompt:
-            return f"{dataset_prompt}\n\n{scaffolding_prompt}"
+            return f"{strip_response_format(dataset_prompt)}\n\n{scaffolding_prompt}"
         return scaffolding_prompt
 
     def get_feedback_system_message(
@@ -273,7 +274,7 @@ class StudentModel:
             ),
         )
         if dataset_prompt:
-            return f"{dataset_prompt}\n\n{system_prompt}"
+            return f"{strip_response_format(dataset_prompt)}\n\n{system_prompt}"
         return system_prompt
 
     def extract_db_references(self, response: str) -> List[str]:

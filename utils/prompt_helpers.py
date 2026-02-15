@@ -5,7 +5,10 @@
 함수:
     format_samples_for_prompt: 샘플 데이터를 프롬프트용 문자열로 변환
     get_instructional_goal_prompt: 완성된 학습목표 생성 프롬프트 구성
+    strip_response_format: instruction에서 '## Response Format' 섹션 제거
 """
+import re
+
 from prompts.design_prompts import INSTRUCTIONAL_GOAL_USER_PROMPT
 
 
@@ -73,3 +76,21 @@ def get_instructional_goal_prompt(
         sample_count=len(samples),
         train_data=train_data
     )
+
+
+def strip_response_format(instruction: str) -> str:
+    """instruction에서 '## Response Format' 섹션을 제거합니다.
+
+    데이터셋 instruction에 포함된 '## Response Format' 섹션은
+    LEARNING_TASK_SYSTEM_PROMPT의 [Output Format]과 중복되므로 제거합니다.
+
+    Args:
+        instruction: 원본 instruction 문자열
+
+    Returns:
+        '## Response Format' 섹션이 제거된 instruction 문자열
+    """
+    if not instruction:
+        return instruction
+    stripped = re.split(r'\n\n## Response Format\b', instruction, maxsplit=1)[0]
+    return stripped.rstrip()

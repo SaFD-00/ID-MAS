@@ -35,6 +35,7 @@ from learning_loop.graph.state import (
     get_statistics,
 )
 from prompts.learning_prompts import LEARNING_TASK_SYSTEM_PROMPT, LEARNING_TASK_USER_PROMPT
+from utils.prompt_helpers import strip_response_format
 
 
 # ==================== Scaffolding ====================
@@ -612,7 +613,7 @@ def _create_sft_entry(
             task_analysis=task_analysis
         )
         if original_instruction:
-            instruction = f"{original_instruction}\n\n{scaffolding_prompt}"
+            instruction = f"{strip_response_format(original_instruction)}\n\n{scaffolding_prompt}"
         else:
             instruction = scaffolding_prompt
     elif original_instruction:
