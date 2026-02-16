@@ -72,8 +72,8 @@ ID-MAS/
 | `--train-dataset` | 학습 데이터셋 (train 모드) | — |
 | `--eval-dataset` | 평가 데이터셋 (eval 모드) | — |
 | `--method` | 평가 방법 (`baseline` / `sft` / `sft_id-mas`) | — |
-| `--student-model` | Student 모델 | `Qwen/Qwen3-1.7B` |
-| `--teacher-model` | Teacher 모델 | `gpt-5.2` |
+| `--student-model` | Student 모델 | `Qwen/Qwen3-4B` |
+| `--teacher-model` | Teacher 모델 | `Qwen/Qwen3-4B` |
 | `--student-gpu` | Student 모델 GPU 인덱스 | 자동 (CUDA_VISIBLE_DEVICES) |
 | `--teacher-gpu` | Teacher 모델 GPU 인덱스 (API 모델은 무시) | 자동 (CUDA_VISIBLE_DEVICES) |
 | `--run-design` | 설계 단계 강제 재실행 (train 전용) | `False` |
