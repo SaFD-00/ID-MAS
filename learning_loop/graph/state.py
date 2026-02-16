@@ -40,6 +40,7 @@ class SFTCase(str, Enum):
     INDEPENDENT_PERFORMANCE_MASTERY = "case_a_independent_performance_mastery"
     SCAFFOLDED_COACHED_MASTERY = "case_b_scaffolded_coached_mastery"
     TEACHER_MODELING_DISTILLATION = "case_c_teacher_modeling_distillation"
+    SKIPPED = "skipped"  # 처리 실패로 건너뛴 문제
 
 
 class PipelineStep:
@@ -147,6 +148,9 @@ class QuestionResult(QuestionResultRequired, total=False):
     hot_count: Optional[int]  # HOT (High-Order Thinking) scaffolding count
     lot_count: Optional[int]  # LOT (Low-Order Thinking) scaffolding count
 
+    # Skip 정보
+    skip_reason: Optional[str]  # skip 사유 (에러 메시지)
+
 
 
 class DesignResult(TypedDict, total=False):
@@ -246,6 +250,7 @@ class IDMASState(TypedDict, total=False):
     # ==================== Scaffolding Artifact Statistics ====================
     hot_scaffolding_count: int  # HOT (High-Order Thinking) 스캐폴딩 생성 횟수
     lot_scaffolding_count: int  # LOT (Low-Order Thinking) 스캐폴딩 생성 횟수
+    skipped_count: int  # 처리 실패로 건너뛴 문제 수
 
     # ==================== SFT Data ====================
     sft_data: List[Dict[str, Any]]
@@ -329,6 +334,7 @@ def create_initial_state(
         # Scaffolding Artifact statistics
         hot_scaffolding_count=0,
         lot_scaffolding_count=0,
+        skipped_count=0,
 
         # SFT Data
         sft_data=[],
@@ -365,6 +371,8 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
     case_b = state.get("case_b_scaffolded_coached_mastery_count", 0)
     case_c = state.get("case_c_teacher_modeling_distillation_count", 0)
 
+    skipped = state.get("skipped_count", 0)
+
     # Scaffolding Artifact statistics
     hot_count = state.get("hot_scaffolding_count", 0)
     lot_count = state.get("lot_scaffolding_count", 0)
@@ -378,6 +386,7 @@ def get_statistics(state: IDMASState) -> Dict[str, Any]:
             "case_a_independent_performance_mastery": case_a,  # Case A: Independent Performance Mastery (독립적 수행 숙달)
             "case_b_scaffolded_coached_mastery": case_b,  # Case B: Scaffolded & Coached Mastery (스캐폴딩 기반 숙달)
             "case_c_teacher_modeling_distillation": case_c,  # Case C: Teacher Modeling Distillation (교사 모델링 증류)
+            "skipped": skipped,  # 처리 실패로 건너뛴 문제
             "success_total": case_a + case_b,
             "success_rate": (case_a + case_b) / processed if processed > 0 else 0,
         },
@@ -430,6 +439,7 @@ def load_checkpoint_from_logs(
         # Scaffolding Artifact statistics
         "hot_scaffolding_count": 0,
         "lot_scaffolding_count": 0,
+        "skipped_count": 0,
     }
 
     # Process scaffolding results (supports both old and new field names)
@@ -462,6 +472,8 @@ def load_checkpoint_from_logs(
                 checkpoint_data["scaffolding_correct_count"] += 1
             elif sft_case == SFTCase.TEACHER_MODELING_DISTILLATION.value:
                 checkpoint_data["case_c_teacher_modeling_distillation_count"] += 1
+            elif sft_case == SFTCase.SKIPPED.value:
+                checkpoint_data["skipped_count"] += 1
 
             # Count HOT/LOT scaffolding from scaffolding_artifacts
             scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []

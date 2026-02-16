@@ -273,6 +273,7 @@ class IDMASGraphRunner:
                     remaining = len(initial_state.get("questions", []))
                     print(f"[Resume] Remaining questions: {remaining}")
                     print(f"[Resume] Scaffolding correct: {initial_state.get('scaffolding_correct_count', 0)}")
+                    print(f"[Resume] Skipped: {initial_state.get('skipped_count', 0)}")
                     print(f"[Resume] Failed reconstructed: {initial_state.get('failed_reconstructed', 0)}")
 
                     if remaining == 0:

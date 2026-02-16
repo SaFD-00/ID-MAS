@@ -71,24 +71,40 @@ def process_question_scaffolding(
     qid = question["id"]
     print(f"\n[Scaffolding] Processing: {qid}")
 
-    if use_iterative:
-        result = _process_iterative_scaffolding(
-            question=question,
-            task_analysis=task_analysis,
-            student_model=student_model,
-            teacher_model=teacher_model,
-            answer_extractor=answer_extractor,
-            max_iterations=max_iterations,
-            performance_objectives=performance_objectives,
-            instructional_goal=instructional_goal,
-        )
-    else:
-        result = _process_single_shot(
-            question=question,
-            task_analysis=task_analysis,
-            student_model=student_model,
-            answer_extractor=answer_extractor,
-            instructional_goal=instructional_goal,
+    try:
+        if use_iterative:
+            result = _process_iterative_scaffolding(
+                question=question,
+                task_analysis=task_analysis,
+                student_model=student_model,
+                teacher_model=teacher_model,
+                answer_extractor=answer_extractor,
+                max_iterations=max_iterations,
+                performance_objectives=performance_objectives,
+                instructional_goal=instructional_goal,
+            )
+        else:
+            result = _process_single_shot(
+                question=question,
+                task_analysis=task_analysis,
+                student_model=student_model,
+                answer_extractor=answer_extractor,
+                instructional_goal=instructional_goal,
+            )
+    except Exception as e:
+        error_msg = str(e)
+        if len(error_msg) > 500:
+            error_msg = error_msg[:500] + "..."
+        print(f"  [SKIP] Error processing {qid}: {error_msg[:200]}")
+
+        result = QuestionResult(
+            id=question["id"],
+            instruction=question.get("instruction", ""),
+            input=question["input"],
+            output=question["output"],
+            scaffolding_correct=False,
+            sft_case=SFTCase.SKIPPED.value,
+            skip_reason=error_msg,
         )
 
     # Build state updates
@@ -99,7 +115,10 @@ def process_question_scaffolding(
     }
 
     sft_case = result.get("sft_case")
-    if sft_case == SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value:
+    if sft_case == SFTCase.SKIPPED.value:
+        updates["skipped_count"] = state.get("skipped_count", 0) + 1
+        print(f"  -> Skipped: Error during processing (see skip_reason)")
+    elif sft_case == SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value:
         updates["case_a_independent_performance_mastery_count"] = state.get("case_a_independent_performance_mastery_count", 0) + 1
         updates["scaffolding_correct_count"] = state.get("scaffolding_correct_count", 0) + 1
         print(f"  -> Case A: Independent Performance Mastery — 독립적 수행 숙달 (PO satisfied at iteration 1)")
