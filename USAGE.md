@@ -201,7 +201,7 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0,1,2
+    --student-gpu 0,1
 
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-0.6B \
@@ -226,7 +226,7 @@ python main.py --mode train --domain math --train-dataset math \
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0,1,2
+    --student-gpu 0,1
 ```
 
 #### Logical 도메인
@@ -255,7 +255,7 @@ python main.py --mode train --domain logical --train-dataset reclor \
 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0,1,2
+    --student-gpu 0,1
 ```
 
 #### Commonsense 도메인
@@ -284,7 +284,7 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-32B \
     --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0,1,2
+    --student-gpu 0,1
 ```
 
 ### 평가
@@ -592,12 +592,12 @@ python main.py --mode train --domain math --train-dataset gsm8k \
 # 시나리오 E: 대형 모델 단독 (3-GPU tensor parallel) + API Teacher
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-32B --teacher-model gpt-5.2 \
-    --student-gpu 0,1,2
+    --student-gpu 0,1
 
 # 같은 대형 모델을 Teacher/Student로 공유 (ModelCache 공유)
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-32B --teacher-model Qwen/Qwen3-32B \
-    --student-gpu 0,1,2
+    --student-gpu 0,1
 
 # 평가 시 다중 GPU
 python main.py --mode eval --method baseline \
@@ -610,49 +610,49 @@ python main.py --mode eval --method baseline \
 ## 기타
 
 ```bash
-## [0] Student Model: Qwen3-0.6B / Teacher Model: Qwen3-0.6B
+## [1] Student Model: Qwen3-0.6B / Teacher Model: Qwen3-0.6B
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-0.6B \
     --teacher-model Qwen/Qwen3-0.6B \
-    --student-gpu 0,1
+    --student-gpu 0
 
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-0.6B \
     --teacher-model Qwen/Qwen3-0.6B \
-    --student-gpu 0,1
+    --student-gpu 0
 
 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-0.6B \
     --teacher-model Qwen/Qwen3-0.6B \
-    --student-gpu 0,1
+    --student-gpu 0
 
 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-0.6B \
     --teacher-model Qwen/Qwen3-0.6B \
-    --student-gpu 0,1
+    --student-gpu 0
 
-## [1] Student Model: Qwen3-1.7B / Teacher Model: Qwen3-1.7B
+## [2] Student Model: Qwen3-1.7B / Teacher Model: Qwen3-1.7B
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B \
-    --student-gpu 0,1
+    --student-gpu 1
 
 python main.py --mode train --domain math --train-dataset math \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B \
-    --student-gpu 0,1
+    --student-gpu 1
 
 python main.py --mode train --domain logical --train-dataset reclor \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B \
-    --student-gpu 0,1
+    --student-gpu 1
 
 python main.py --mode train --domain commonsense --train-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B \
     --teacher-model Qwen/Qwen3-1.7B \
-    --student-gpu 0,1
+    --student-gpu 1
 
-## [2] Student Model: Qwen3-4B / Teacher Model: Qwen3-4B
+## [3] Student Model: Qwen3-4B / Teacher Model: Qwen3-4B
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-4B \
@@ -673,7 +673,7 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
     --teacher-model Qwen/Qwen3-4B \
     --student-gpu 0,1
 
-## [3] Student Model: Qwen3-8B / Teacher Model: Qwen3-8B
+## [4] Student Model: Qwen3-8B / Teacher Model: Qwen3-8B
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-8B \
@@ -694,7 +694,28 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
     --teacher-model Qwen/Qwen3-8B \
     --student-gpu 0,1
 
-## [4] Student Model: Qwen3-4B / Teacher Model: Qwen3-32B
+## [5] Student Model: Qwen3-32B / Teacher Model: Qwen3-32B
+python main.py --mode train --domain math --train-dataset gsm8k \
+    --student-model Qwen/Qwen3-32B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0,1
+
+python main.py --mode train --domain math --train-dataset math \
+    --student-model Qwen/Qwen3-32B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0,1
+
+python main.py --mode train --domain logical --train-dataset reclor \
+    --student-model Qwen/Qwen3-32B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0,1
+
+python main.py --mode train --domain commonsense --train-dataset arc_c \
+    --student-model Qwen/Qwen3-32B \
+    --teacher-model Qwen/Qwen3-32B \
+    --student-gpu 0,1
+
+## [6] Student Model: Qwen3-4B / Teacher Model: Qwen3-32B
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B \
     --teacher-model Qwen/Qwen3-32B \
@@ -715,7 +736,7 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
     --teacher-model Qwen/Qwen3-32B \
     --student-gpu 0 --teacher-gpu 1
 
-## [5] Student Model: Qwen3-8B / Teacher Model: Qwen3-32B
+## [7] Student Model: Qwen3-8B / Teacher Model: Qwen3-32B
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
     --teacher-model Qwen/Qwen3-32B \
@@ -736,7 +757,7 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
     --teacher-model Qwen/Qwen3-32B \
     --student-gpu 0 --teacher-gpu 1
 
-## [6] Student Model: Qwen3-4B / Teacher Model: gpt-5.2
+## [8] Student Model: Qwen3-4B / Teacher Model: gpt-5.2
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-4B \
     --teacher-model gpt-5.2 \
@@ -757,7 +778,7 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
     --teacher-model gpt-5.2 \
     --student-gpu 0
 
-## [7] Student Model: Qwen3-8B / Teacher Model: gpt-5.2
+## [9] Student Model: Qwen3-8B / Teacher Model: gpt-5.2
 python main.py --mode train --domain math --train-dataset gsm8k \
     --student-model Qwen/Qwen3-8B \
     --teacher-model gpt-5.2 \
