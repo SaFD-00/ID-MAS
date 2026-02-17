@@ -570,6 +570,8 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
 
     Case A: Independent Performance Mastery, Case B: Scaffolded & Coached Mastery, Case C: Teacher Modeling Distillation 결과를 SFT 데이터 형식으로 변환합니다.
 
+    결과는 로그 파일에서 로드합니다 (메모리 절약).
+
     Args:
         state: 현재 파이프라인 상태
 
@@ -581,8 +583,16 @@ def generate_sft_data(state: IDMASState) -> Dict[str, Any]:
     instructional_goal = state.get("instructional_goal", "")
     task_analysis = state.get("task_analysis", "")
 
+    # 로그 파일에서 결과 로드 (메모리 절약)
+    logs_file_path = state.get("logs_file_path")
+    if logs_file_path and Path(logs_file_path).exists():
+        with open(logs_file_path, "r", encoding="utf-8") as f:
+            all_results = json.load(f).get("scaffolding_results", [])
+    else:
+        all_results = state.get("scaffolding_results", [])  # fallback
+
     # Scaffolding results: Case A: Independent Performance Mastery, Case B: Scaffolded & Coached Mastery, Case C: Teacher Modeling Distillation
-    for result in state.get("scaffolding_results", []):
+    for result in all_results:
         if result.get("sft_case") in (SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value, SFTCase.SCAFFOLDED_COACHED_MASTERY.value, SFTCase.TEACHER_MODELING_DISTILLATION.value):
             entry = _create_sft_entry(result, instructional_goal, task_analysis)
             if entry:
@@ -713,6 +723,9 @@ def save_results(
 ) -> Tuple[Path, Path]:
     """파이프라인 결과와 SFT 데이터를 파일에 저장합니다.
 
+    로그 파일은 이미 incremental checkpoint로 최신 상태이므로,
+    statistics와 is_complete만 업데이트합니다.
+
     Args:
         state: 현재 파이프라인 상태
         output_dir: 출력 디렉토리
@@ -724,16 +737,28 @@ def save_results(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save detailed results (filter internal fields and reorder)
-    results = {
-        "scaffolding_results": _prepare_results_for_save(state.get("scaffolding_results", [])),
-        "statistics": get_statistics(state),
-        "timestamp": datetime.now().isoformat(),
-    }
-
     results_path = output_dir / logs_filename
+
+    if results_path.exists():
+        # 기존 파일 읽기 → statistics만 업데이트
+        with open(results_path, "r", encoding="utf-8") as f:
+            existing_data = json.load(f)
+        existing_data["statistics"] = get_statistics(state)
+        existing_data["is_complete"] = True
+        existing_data["timestamp"] = datetime.now().isoformat()
+    else:
+        # fallback (output_dir 없이 시작한 경우)
+        existing_data = {
+            "scaffolding_results": _prepare_results_for_save(
+                state.get("scaffolding_results", [])
+            ),
+            "statistics": get_statistics(state),
+            "is_complete": True,
+            "timestamp": datetime.now().isoformat(),
+        }
+
     with open(results_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+        json.dump(existing_data, f, ensure_ascii=False, indent=2)
 
     # Save SFT data
     sft_path = output_dir / sft_filename
@@ -747,32 +772,48 @@ def save_incremental_checkpoint(
     state: IDMASState,
     output_dir: Path,
     logs_filename: str,
+    new_result: QuestionResult,
 ) -> Path:
     """각 문제 처리 후 증분 체크포인트를 저장합니다.
 
-    현재 상태를 로그 파일에 저장하여 파일 기반 재개를 지원합니다.
-    각 문제 처리 후 호출되어야 합니다.
+    새 결과 1개만 직렬화하여 기존 로그 파일에 append합니다.
+    파일 기반 재개를 지원합니다.
 
     Args:
         state: 현재 파이프라인 상태
         output_dir: 출력 디렉토리
         logs_filename: 로그 파일명
+        new_result: 새로 처리된 결과 1개
 
     Returns:
         저장된 로그 파일 경로
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    results_path = output_dir / logs_filename
 
-    # Save detailed results with current progress (filter internal fields and reorder)
-    results = {
-        "scaffolding_results": _prepare_results_for_save(state.get("scaffolding_results", [])),
+    # 기존 로그 파일 읽기 (있으면)
+    existing_results = []
+    if results_path.exists():
+        try:
+            with open(results_path, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+            existing_results = existing_data.get("scaffolding_results", [])
+        except (json.JSONDecodeError, IOError):
+            existing_results = []
+
+    # 새 결과 1개만 직렬화하여 추가
+    serialized_new = _prepare_results_for_save([new_result])
+    existing_results.extend(serialized_new)
+
+    # statistics + timestamp 업데이트 후 쓰기
+    checkpoint = {
+        "scaffolding_results": existing_results,
         "statistics": get_statistics(state),
         "is_complete": state.get("is_complete", False),
         "timestamp": datetime.now().isoformat(),
     }
 
-    results_path = output_dir / logs_filename
     with open(results_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+        json.dump(checkpoint, f, ensure_ascii=False, indent=2)
 
     return results_path

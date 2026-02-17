@@ -5,7 +5,7 @@ ID-MAS Iterative Scaffolding Pipeline의 완전한 LangGraph 워크플로우를 
 주요 기능:
     - 조건부 라우팅을 포함한 StateGraph 구성
     - 파이프라인 실행을 위한 IDMASGraphRunner
-    - MemorySaver를 통한 체크포인트 지원
+    - 파일 기반 체크포인트 지원
 
 주요 클래스:
     IDMASGraphRunner: 파이프라인 실행기
@@ -20,16 +20,13 @@ ID-MAS Iterative Scaffolding Pipeline의 완전한 LangGraph 워크플로우를 
 """
 from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 
 from learning_loop.graph.state import (
     IDMASState,
-    QuestionResult,
     DesignResult,
     create_initial_state,
     get_statistics,
@@ -133,7 +130,7 @@ class IDMASGraphRunner:
     """ID-MAS Iterative Scaffolding Pipeline 실행기 클래스.
 
     주요 기능:
-        - 체크포인팅을 포함한 그래프 컴파일
+        - 파일 기반 체크포인팅을 포함한 그래프 컴파일
         - 파이프라인 실행
         - 결과 저장
 
@@ -143,7 +140,7 @@ class IDMASGraphRunner:
         answer_extractor: AnswerExtractor 인스턴스
         workflow: StateGraph 워크플로우
         graph: 컴파일된 그래프
-        checkpointer: 체크포인터 (MemorySaver)
+        graph: 컴파일된 LangGraph 그래프
 
     Example:
         >>> runner = IDMASGraphRunner(
@@ -163,7 +160,6 @@ class IDMASGraphRunner:
         student_model,
         teacher_model,
         answer_extractor,
-        checkpoint_dir: Optional[Path] = None,
     ):
         """IDMASGraphRunner를 초기화합니다.
 
@@ -171,12 +167,10 @@ class IDMASGraphRunner:
             student_model: StudentModel 인스턴스
             teacher_model: TeacherModel 인스턴스
             answer_extractor: AnswerExtractor 인스턴스
-            checkpoint_dir: 체크포인트 디렉토리. None이면 메모리 사용.
         """
         self.student_model = student_model
         self.teacher_model = teacher_model
         self.answer_extractor = answer_extractor
-        self.checkpoint_dir = checkpoint_dir
 
         # Build graph
         self.workflow = create_idmas_graph(
@@ -185,11 +179,8 @@ class IDMASGraphRunner:
             answer_extractor=answer_extractor,
         )
 
-        # Setup checkpointer
-        self.checkpointer = MemorySaver()
-
-        # Compile graph
-        self.graph = self.workflow.compile(checkpointer=self.checkpointer)
+        # Compile graph (checkpointer 없이 — 파일 기반 체크포인트 사용)
+        self.graph = self.workflow.compile()
 
     def run(
         self,
@@ -205,7 +196,6 @@ class IDMASGraphRunner:
         checkpoint_interval: int = 10,
         use_iterative_scaffolding: bool = True,
         max_iterations: int = 3,
-        thread_id: str = "default",
         resume: bool = True,
     ) -> Dict[str, Any]:
         """전체 파이프라인을 실행합니다.
@@ -223,7 +213,6 @@ class IDMASGraphRunner:
             checkpoint_interval: 체크포인트 저장 간격. 기본값: 10
             use_iterative_scaffolding: Iterative Scaffolding 사용 여부. 기본값: True
             max_iterations: 최대 반복 횟수. 기본값: 3
-            thread_id: 체크포인팅용 스레드 ID. 기본값: "default"
             resume: 기존 로그에서 재개 여부. 기본값: True
 
         Returns:
@@ -281,6 +270,7 @@ class IDMASGraphRunner:
                         # Early return - 이미 완료된 경우 그래프 실행 건너뛰기
                         final_state = dict(initial_state)
                         final_state["is_complete"] = True
+                        final_state["logs_file_path"] = str(logs_path)
 
                         # Print summary
                         stats = get_statistics(final_state)
@@ -309,46 +299,53 @@ class IDMASGraphRunner:
         # Configuration for the run
         # recursion_limit: 문제 수 * 최대 iteration(5) * 안전 마진
         recursion_limit = max(100, len(questions) * 10)
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": recursion_limit}
+        config = {"recursion_limit": recursion_limit}
 
-        # Prepare logs filename for incremental saving
+        # Prepare logs filename and path for incremental saving
         logs_filename = f"{train_dataset}_train_id-mas_{model_short}_logs.json"
+        logs_path = output_dir / logs_filename if output_dir else None
+        initial_state["logs_file_path"] = str(logs_path) if logs_path else None
 
         # Run the graph
         print("\n[Starting Pipeline Execution]")
         final_state = None
         accumulated_state = dict(initial_state)
+        new_result = None  # scaffolding 노드에서 나온 최신 결과
 
         for event in self.graph.stream(initial_state, config):
             # event is a dict with node name as key
             for node_name, node_output in event.items():
-                # Merge node output into accumulated state
+                # scaffolding 노드에서 결과 추출
+                if "scaffolding_results" in node_output:
+                    results_list = node_output["scaffolding_results"]
+                    if results_list:
+                        new_result = results_list[0]
+
+                # Merge node output into accumulated state (scaffolding_results 제외)
                 for key, value in node_output.items():
-                    if key in accumulated_state and isinstance(accumulated_state[key], list) and isinstance(value, list):
-                        # Extend lists (for phase1_results, etc.)
+                    if key == "scaffolding_results":
+                        continue  # 파일에 저장하므로 누적 안 함
+                    elif key in accumulated_state and isinstance(accumulated_state[key], list) and isinstance(value, list):
                         accumulated_state[key] = accumulated_state[key] + value
                     else:
                         accumulated_state[key] = value
 
-                # Save incremental checkpoint after question processing
-                if node_name == "advance" and output_dir:
+                # advance 후 저장 + 메모리 해제
+                if node_name == "advance" and output_dir and new_result is not None:
                     save_incremental_checkpoint(
                         state=accumulated_state,
                         output_dir=output_dir,
                         logs_filename=logs_filename,
+                        new_result=new_result,
                     )
+                    new_result = None  # 참조 해제
 
                 if node_name == "finalize":
                     final_state = accumulated_state
                     break
 
-        # Get final state from checkpointer if not captured
         if final_state is None:
-            checkpoint = self.checkpointer.get(config)
-            if checkpoint:
-                final_state = checkpoint.get("channel_values", accumulated_state)
-            else:
-                final_state = accumulated_state
+            final_state = accumulated_state
 
         # Print summary
         stats = get_statistics(final_state)
@@ -404,71 +401,6 @@ class IDMASGraphRunner:
 
             final_state["results_path"] = str(results_path)
             final_state["sft_path"] = str(sft_path)
-
-        return final_state
-
-    def resume(
-        self,
-        thread_id: str,
-        output_dir: Optional[Path] = None,
-    ) -> Dict[str, Any]:
-        """체크포인트에서 파이프라인을 재개합니다.
-
-        Args:
-            thread_id: 재개할 스레드 ID
-            output_dir: 결과 저장 디렉토리. 기본값: None
-
-        Returns:
-            결과가 포함된 최종 상태 딕셔너리
-
-        Raises:
-            ValueError: 해당 thread_id에 체크포인트가 없는 경우
-        """
-        config = {"configurable": {"thread_id": thread_id}}
-
-        # Get checkpoint state
-        checkpoint = self.checkpointer.get(config)
-        if not checkpoint:
-            raise ValueError(f"No checkpoint found for thread_id: {thread_id}")
-
-        state = checkpoint.get("channel_values", {})
-        print(f"\n[Resuming from checkpoint]")
-        print(f"Scaffolding processed: {state.get('scaffolding_processed', 0)}/{state.get('total_questions', 0)}")
-
-        # recursion_limit 설정
-        total_questions = state.get('total_questions', 100)
-        config["recursion_limit"] = max(100, total_questions * 10)
-
-        # Continue execution
-        final_state = None
-        for event in self.graph.stream(None, config):
-            for node_name, node_output in event.items():
-                if node_name == "finalize":
-                    final_state = {**state, **node_output}
-                    break
-
-        if final_state is None:
-            checkpoint = self.checkpointer.get(config)
-            if checkpoint:
-                final_state = checkpoint.get("channel_values", state)
-            else:
-                final_state = state
-
-        # Save results if output_dir provided
-        if output_dir and final_state.get("is_complete"):
-            model_short = final_state.get("model_short", "unknown")
-            train_dataset = final_state.get("train_dataset", "unknown")
-            sft_filename = f"{train_dataset}_train_id-mas_{model_short}.json"
-            logs_filename = f"{train_dataset}_train_id-mas_{model_short}_logs.json"
-
-            results_path, sft_path = save_results(
-                state=final_state,
-                output_dir=output_dir,
-                sft_filename=sft_filename,
-                logs_filename=logs_filename,
-            )
-            print(f"\nResults saved to: {results_path}")
-            print(f"SFT data saved to: {sft_path}")
 
         return final_state
 

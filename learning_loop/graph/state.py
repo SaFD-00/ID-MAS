@@ -23,10 +23,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TypedDict, Optional, List, Dict, Any, Annotated, Set, Tuple
+from typing import TypedDict, Optional, List, Dict, Any, Set, Tuple
 from datetime import datetime
 from enum import Enum
-import operator
 
 
 class SFTCase(str, Enum):
@@ -176,24 +175,6 @@ class DesignResult(TypedDict, total=False):
     timestamp: str
 
 
-def add_to_list(existing: List, new: Any) -> List:
-    """리스트에 항목을 추가하는 reducer 함수.
-
-    LangGraph의 Annotated 타입과 함께 사용되어
-    상태 업데이트 시 리스트를 누적합니다.
-
-    Args:
-        existing: 기존 리스트
-        new: 추가할 항목 (단일 항목 또는 리스트)
-
-    Returns:
-        병합된 리스트
-    """
-    if isinstance(new, list):
-        return existing + new
-    return existing + [new]
-
-
 class IDMASState(TypedDict, total=False):
     """ID-MAS LangGraph 파이프라인 메인 상태 스키마.
 
@@ -237,8 +218,7 @@ class IDMASState(TypedDict, total=False):
     current_question: Optional[Dict[str, Any]]
 
     # ==================== Scaffolding Results ====================
-    # Using Annotated with reducer for accumulating results
-    scaffolding_results: Annotated[List[QuestionResult], add_to_list]
+    scaffolding_results: List[QuestionResult]
     scaffolding_processed: int
     scaffolding_correct_count: int
 
@@ -267,6 +247,7 @@ class IDMASState(TypedDict, total=False):
     # ==================== Checkpoint ====================
     checkpoint_path: Optional[str]
     last_checkpoint_at: Optional[str]
+    logs_file_path: Optional[str]  # finalize에서 결과 로드용 로그 파일 경로
 
 
 def create_initial_state(
@@ -351,6 +332,7 @@ def create_initial_state(
         # Checkpoint
         checkpoint_path=None,
         last_checkpoint_at=None,
+        logs_file_path=None,
     )
 
 
@@ -430,7 +412,6 @@ def load_checkpoint_from_logs(
 
     processed_ids = set()
     checkpoint_data = {
-        "scaffolding_results": [],
         "scaffolding_processed": 0,
         "scaffolding_correct_count": 0,
         "case_a_independent_performance_mastery_count": 0,
@@ -448,7 +429,6 @@ def load_checkpoint_from_logs(
         qid = result.get("id")
         if qid:
             processed_ids.add(qid)
-            checkpoint_data["scaffolding_results"].append(result)
             checkpoint_data["scaffolding_processed"] += 1
 
             # Support both old and new field names
@@ -518,8 +498,8 @@ def restore_state_from_checkpoint(
     # Merge checkpoint data into initial state
     restored = dict(initial_state)
 
-    # Restore scaffolding results
-    restored["scaffolding_results"] = checkpoint_data.get("scaffolding_results", [])
+    # Scaffolding results는 파일에만 보관, 메모리에서는 비어있음
+    restored["scaffolding_results"] = []
 
     # Restore counters
     restored["scaffolding_processed"] = checkpoint_data.get("scaffolding_processed", 0)

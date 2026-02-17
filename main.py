@@ -164,7 +164,6 @@ class IDMASPipeline:
             student_model=self.student_model,
             teacher_model=self.teacher_model,
             answer_extractor=self.answer_extractor,
-            checkpoint_dir=self.model_dir,
         )
 
     def run_design_phase(
@@ -441,8 +440,6 @@ class IDMASPipeline:
             })
 
         # LangGraph 파이프라인 실행
-        thread_id = f"{self.domain}_{self.train_dataset}_{self.model_short}"
-
         final_state = self.graph_runner.run(
             domain=self.domain,
             train_dataset=self.train_dataset,
@@ -456,7 +453,6 @@ class IDMASPipeline:
             checkpoint_interval=self.checkpoint_interval,
             use_iterative_scaffolding=True,
             max_iterations=self.max_iterations,
-            thread_id=thread_id,
             resume=resume,
         )
 
