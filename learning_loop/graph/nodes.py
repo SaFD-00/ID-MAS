@@ -723,8 +723,8 @@ def save_results(
 ) -> Tuple[Path, Path]:
     """파이프라인 결과와 SFT 데이터를 파일에 저장합니다.
 
-    로그 파일은 이미 incremental checkpoint로 최신 상태이므로,
-    statistics와 is_complete만 업데이트합니다.
+    JSONL이 존재하면 스트리밍으로 최종 JSON 변환 (메모리 O(1 line)).
+    레거시 JSON만 있으면 statistics만 업데이트합니다.
 
     Args:
         state: 현재 파이프라인 상태
@@ -738,27 +738,37 @@ def save_results(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results_path = output_dir / logs_filename
+    jsonl_path = output_dir / logs_filename.replace(".json", ".jsonl")
+    meta_path = output_dir / logs_filename.replace(".json", "_meta.json")
+    statistics = get_statistics(state)
 
-    if results_path.exists():
-        # 기존 파일 읽기 → statistics만 업데이트
+    if jsonl_path.exists():
+        # JSONL → 최종 JSON 스트리밍 변환 (메모리 O(1 line))
+        _convert_jsonl_to_json(jsonl_path, results_path, statistics)
+        # 임시 파일 정리
+        jsonl_path.unlink(missing_ok=True)
+        meta_path.unlink(missing_ok=True)
+    elif results_path.exists():
+        # 레거시: statistics만 업데이트
         with open(results_path, "r", encoding="utf-8") as f:
             existing_data = json.load(f)
-        existing_data["statistics"] = get_statistics(state)
+        existing_data["statistics"] = statistics
         existing_data["is_complete"] = True
         existing_data["timestamp"] = datetime.now().isoformat()
+        with open(results_path, "w", encoding="utf-8") as f:
+            json.dump(existing_data, f, ensure_ascii=False, indent=2)
     else:
         # fallback (output_dir 없이 시작한 경우)
         existing_data = {
             "scaffolding_results": _prepare_results_for_save(
                 state.get("scaffolding_results", [])
             ),
-            "statistics": get_statistics(state),
+            "statistics": statistics,
             "is_complete": True,
             "timestamp": datetime.now().isoformat(),
         }
-
-    with open(results_path, "w", encoding="utf-8") as f:
-        json.dump(existing_data, f, ensure_ascii=False, indent=2)
+        with open(results_path, "w", encoding="utf-8") as f:
+            json.dump(existing_data, f, ensure_ascii=False, indent=2)
 
     # Save SFT data
     sft_path = output_dir / sft_filename
@@ -766,6 +776,44 @@ def save_results(
         json.dump(state.get("sft_data", []), f, ensure_ascii=False, indent=2)
 
     return results_path, sft_path
+
+
+def _convert_jsonl_to_json(
+    jsonl_path: Path,
+    json_path: Path,
+    statistics: Dict[str, Any],
+) -> None:
+    """JSONL을 스트리밍으로 최종 JSON에 변환합니다.
+
+    한 줄씩 읽어 바로 출력하므로 메모리 O(1 line)입니다.
+
+    Args:
+        jsonl_path: 입력 JSONL 파일 경로
+        json_path: 출력 JSON 파일 경로
+        statistics: 파이프라인 통계
+    """
+    with open(json_path, "w", encoding="utf-8") as out:
+        out.write('{\n  "scaffolding_results": [\n')
+
+        first = True
+        with open(jsonl_path, "r", encoding="utf-8") as inp:
+            for line in inp:
+                line = line.strip()
+                if not line:
+                    continue
+                if not first:
+                    out.write(",\n")
+                out.write("    " + line)
+                first = False
+
+        out.write("\n  ],\n")
+        stats_json = json.dumps(statistics, ensure_ascii=False, indent=2)
+        # indent statistics block
+        stats_indented = stats_json.replace("\n", "\n  ")
+        out.write(f'  "statistics": {stats_indented},\n')
+        out.write(f'  "is_complete": true,\n')
+        out.write(f'  "timestamp": "{datetime.now().isoformat()}"\n')
+        out.write("}\n")
 
 
 def save_incremental_checkpoint(
@@ -776,44 +824,37 @@ def save_incremental_checkpoint(
 ) -> Path:
     """각 문제 처리 후 증분 체크포인트를 저장합니다.
 
-    새 결과 1개만 직렬화하여 기존 로그 파일에 append합니다.
-    파일 기반 재개를 지원합니다.
+    JSONL append 방식으로 결과 1개를 파일 끝에 추가합니다.
+    메타데이터(통계, 타임스탬프)는 별도 파일에 저장합니다.
+    메모리 사용: O(단일 결과) — 기존 결과를 읽지 않습니다.
 
     Args:
         state: 현재 파이프라인 상태
         output_dir: 출력 디렉토리
-        logs_filename: 로그 파일명
+        logs_filename: 로그 파일명 (*.json → *.jsonl로 변환)
         new_result: 새로 처리된 결과 1개
 
     Returns:
-        저장된 로그 파일 경로
+        저장된 JSONL 파일 경로
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    results_path = output_dir / logs_filename
 
-    # 기존 로그 파일 읽기 (있으면)
-    existing_results = []
-    if results_path.exists():
-        try:
-            with open(results_path, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
-            existing_results = existing_data.get("scaffolding_results", [])
-        except (json.JSONDecodeError, IOError):
-            existing_results = []
+    # JSONL 파일에 결과 1건 append (O(1) 메모리)
+    jsonl_filename = logs_filename.replace(".json", ".jsonl")
+    jsonl_path = output_dir / jsonl_filename
+    serialized = _prepare_results_for_save([new_result])[0]
+    with open(jsonl_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(serialized, ensure_ascii=False) + "\n")
 
-    # 새 결과 1개만 직렬화하여 추가
-    serialized_new = _prepare_results_for_save([new_result])
-    existing_results.extend(serialized_new)
-
-    # statistics + timestamp 업데이트 후 쓰기
-    checkpoint = {
-        "scaffolding_results": existing_results,
+    # 메타데이터 파일 업데이트 (~1KB)
+    meta_filename = logs_filename.replace(".json", "_meta.json")
+    meta_path = output_dir / meta_filename
+    meta = {
         "statistics": get_statistics(state),
         "is_complete": state.get("is_complete", False),
         "timestamp": datetime.now().isoformat(),
     }
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    with open(results_path, "w", encoding="utf-8") as f:
-        json.dump(checkpoint, f, ensure_ascii=False, indent=2)
-
-    return results_path
+    return jsonl_path

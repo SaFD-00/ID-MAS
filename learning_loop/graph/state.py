@@ -385,17 +385,150 @@ def load_checkpoint_from_logs(
 ) -> Tuple[Dict[str, Any], Set[str]]:
     """기존 로그 파일에서 체크포인트 상태를 로드합니다.
 
+    JSONL (신규) → JSON (레거시) 순으로 시도합니다.
+    JSONL은 한 줄씩 스트리밍 읽기하여 메모리 O(processed_ids)만 사용합니다.
+
     Args:
-        logs_path: 로그 JSON 파일 경로
+        logs_path: 로그 JSON 파일 경로 (*.json)
+                   내부에서 *.jsonl 존재 여부를 먼저 확인합니다.
 
     Returns:
         튜플 (checkpoint_data, processed_question_ids):
             - checkpoint_data: 스캐폴딩 결과 및 통계 딕셔너리
             - processed_question_ids: 이미 처리된 문제 ID 집합
     """
+    # JSONL 형식 우선 시도 (신규 포맷, 스트리밍 읽기)
+    jsonl_path = logs_path.with_suffix(".jsonl")
+    if jsonl_path.exists():
+        return _load_checkpoint_from_jsonl(jsonl_path)
+
+    # 레거시 JSON 폴백
     if not logs_path.exists():
         return {}, set()
 
+    return _load_checkpoint_from_json(logs_path)
+
+
+def _accumulate_result_stats(
+    result: Dict[str, Any],
+    checkpoint_data: Dict[str, Any],
+    processed_ids: Set[str],
+) -> None:
+    """단일 결과에서 통계를 추출하여 checkpoint_data에 누적합니다.
+
+    JSONL 스트리밍과 레거시 JSON 양쪽에서 공통 사용합니다.
+    """
+    LEGACY_CASE_MAP = {
+        "A": SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value,
+        "B": SFTCase.SCAFFOLDED_COACHED_MASTERY.value,
+        "C": SFTCase.TEACHER_MODELING_DISTILLATION.value,
+    }
+
+    qid = result.get("id")
+    if not qid:
+        return
+
+    processed_ids.add(qid)
+    checkpoint_data["scaffolding_processed"] += 1
+
+    # Support both old and new field names
+    is_correct = result.get("scaffolding_correct") or result.get("phase1_correct")
+    sft_case = result.get("sft_case")
+
+    # Legacy compatibility: old "B" case (재구성) → Teacher Modeling Distillation로 매핑
+    if sft_case == "B" and not is_correct:
+        sft_case = SFTCase.TEACHER_MODELING_DISTILLATION.value
+
+    # Legacy case value mapping (기존 "A"/"B"/"C" → 새 값)
+    if sft_case in LEGACY_CASE_MAP:
+        sft_case = LEGACY_CASE_MAP[sft_case]
+
+    # Count by case
+    if sft_case == SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value:
+        checkpoint_data["case_a_independent_performance_mastery_count"] += 1
+        checkpoint_data["scaffolding_correct_count"] += 1
+    elif sft_case == SFTCase.SCAFFOLDED_COACHED_MASTERY.value:
+        checkpoint_data["case_b_scaffolded_coached_mastery_count"] += 1
+        checkpoint_data["scaffolding_correct_count"] += 1
+    elif sft_case == SFTCase.TEACHER_MODELING_DISTILLATION.value:
+        checkpoint_data["case_c_teacher_modeling_distillation_count"] += 1
+    elif sft_case == SFTCase.SKIPPED.value:
+        checkpoint_data["skipped_count"] += 1
+
+    # Count HOT/LOT scaffolding from scaffolding_artifacts
+    scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
+    for artifact_entry in scaffolding_artifacts_data:
+        for artifact in artifact_entry.get("artifacts", []):
+            skill_type = artifact.get("skill_type", "")
+            if skill_type == "HOT":
+                checkpoint_data["hot_scaffolding_count"] += 1
+            elif skill_type == "LOT":
+                checkpoint_data["lot_scaffolding_count"] += 1
+
+
+def _new_checkpoint_data() -> Dict[str, Any]:
+    """빈 체크포인트 데이터를 생성합니다."""
+    return {
+        "scaffolding_processed": 0,
+        "scaffolding_correct_count": 0,
+        "case_a_independent_performance_mastery_count": 0,
+        "case_b_scaffolded_coached_mastery_count": 0,
+        "case_c_teacher_modeling_distillation_count": 0,
+        "hot_scaffolding_count": 0,
+        "lot_scaffolding_count": 0,
+        "skipped_count": 0,
+    }
+
+
+def _load_checkpoint_from_jsonl(
+    jsonl_path: Path,
+) -> Tuple[Dict[str, Any], Set[str]]:
+    """JSONL 파일에서 스트리밍으로 체크포인트를 로드합니다.
+
+    한 줄씩 읽어 ID와 통계만 추출합니다.
+    메모리 사용: O(processed_ids) — 결과 데이터는 메모리에 유지하지 않습니다.
+
+    Args:
+        jsonl_path: JSONL 파일 경로
+
+    Returns:
+        튜플 (checkpoint_data, processed_ids)
+    """
+    processed_ids: Set[str] = set()
+    checkpoint_data = _new_checkpoint_data()
+
+    try:
+        with open(jsonl_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    result = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                _accumulate_result_stats(result, checkpoint_data, processed_ids)
+    except IOError as e:
+        print(f"Warning: Could not load JSONL from {jsonl_path}: {e}")
+        return {}, set()
+
+    return checkpoint_data, processed_ids
+
+
+def _load_checkpoint_from_json(
+    logs_path: Path,
+) -> Tuple[Dict[str, Any], Set[str]]:
+    """레거시 JSON 파일에서 체크포인트를 로드합니다.
+
+    기존 동작과 동일: 전체 JSON을 메모리에 로드합니다.
+    마이그레이션 전 또는 레거시 파일 지원용입니다.
+
+    Args:
+        logs_path: JSON 파일 경로
+
+    Returns:
+        튜플 (checkpoint_data, processed_ids)
+    """
     try:
         with open(logs_path, "r", encoding="utf-8") as f:
             logs = json.load(f)
@@ -403,67 +536,13 @@ def load_checkpoint_from_logs(
         print(f"Warning: Could not load logs from {logs_path}: {e}")
         return {}, set()
 
-    # Legacy case value mapping (기존 "A"/"B"/"C" → 새 enum 값)
-    LEGACY_CASE_MAP = {
-        "A": SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value,
-        "B": SFTCase.SCAFFOLDED_COACHED_MASTERY.value,
-        "C": SFTCase.TEACHER_MODELING_DISTILLATION.value,
-    }
-
-    processed_ids = set()
-    checkpoint_data = {
-        "scaffolding_processed": 0,
-        "scaffolding_correct_count": 0,
-        "case_a_independent_performance_mastery_count": 0,
-        "case_b_scaffolded_coached_mastery_count": 0,
-        "case_c_teacher_modeling_distillation_count": 0,
-        # Scaffolding Artifact statistics
-        "hot_scaffolding_count": 0,
-        "lot_scaffolding_count": 0,
-        "skipped_count": 0,
-    }
+    processed_ids: Set[str] = set()
+    checkpoint_data = _new_checkpoint_data()
 
     # Process scaffolding results (supports both old and new field names)
     results_key = "scaffolding_results" if "scaffolding_results" in logs else "phase1_results"
     for result in logs.get(results_key, []):
-        qid = result.get("id")
-        if qid:
-            processed_ids.add(qid)
-            checkpoint_data["scaffolding_processed"] += 1
-
-            # Support both old and new field names
-            is_correct = result.get("scaffolding_correct") or result.get("phase1_correct")
-            sft_case = result.get("sft_case")
-
-            # Legacy compatibility: old "B" case (재구성) → Teacher Modeling Distillation로 매핑
-            if sft_case == "B" and not is_correct:
-                sft_case = SFTCase.TEACHER_MODELING_DISTILLATION.value
-
-            # Legacy case value mapping (기존 "A"/"B"/"C" → 새 값)
-            if sft_case in LEGACY_CASE_MAP:
-                sft_case = LEGACY_CASE_MAP[sft_case]
-
-            # Count by case
-            if sft_case == SFTCase.INDEPENDENT_PERFORMANCE_MASTERY.value:
-                checkpoint_data["case_a_independent_performance_mastery_count"] += 1
-                checkpoint_data["scaffolding_correct_count"] += 1
-            elif sft_case == SFTCase.SCAFFOLDED_COACHED_MASTERY.value:
-                checkpoint_data["case_b_scaffolded_coached_mastery_count"] += 1
-                checkpoint_data["scaffolding_correct_count"] += 1
-            elif sft_case == SFTCase.TEACHER_MODELING_DISTILLATION.value:
-                checkpoint_data["case_c_teacher_modeling_distillation_count"] += 1
-            elif sft_case == SFTCase.SKIPPED.value:
-                checkpoint_data["skipped_count"] += 1
-
-            # Count HOT/LOT scaffolding from scaffolding_artifacts
-            scaffolding_artifacts_data = result.get("scaffolding_artifacts") or []
-            for artifact_entry in scaffolding_artifacts_data:
-                for artifact in artifact_entry.get("artifacts", []):
-                    skill_type = artifact.get("skill_type", "")
-                    if skill_type == "HOT":
-                        checkpoint_data["hot_scaffolding_count"] += 1
-                    elif skill_type == "LOT":
-                        checkpoint_data["lot_scaffolding_count"] += 1
+        _accumulate_result_stats(result, checkpoint_data, processed_ids)
 
     return checkpoint_data, processed_ids
 

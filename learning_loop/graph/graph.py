@@ -245,13 +245,15 @@ class IDMASGraphRunner:
             design_result=design_result,
         )
 
-        # File-based resume: load checkpoint from logs file
+        # File-based resume: load checkpoint from logs file (JSONL 우선, JSON 폴백)
         if resume and output_dir:
             logs_filename = f"{train_dataset}_train_id-mas_{model_short}_logs.json"
             logs_path = output_dir / logs_filename
+            jsonl_path = logs_path.with_suffix(".jsonl")
 
-            if logs_path.exists():
-                print(f"\n[Resume] Loading checkpoint from: {logs_path}")
+            if jsonl_path.exists() or logs_path.exists():
+                source = jsonl_path if jsonl_path.exists() else logs_path
+                print(f"\n[Resume] Loading checkpoint from: {source}")
                 checkpoint_data, processed_ids = load_checkpoint_from_logs(logs_path)
 
                 if processed_ids:
