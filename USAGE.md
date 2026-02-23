@@ -25,6 +25,7 @@ Teacher 모델은 교수 설계 및 Iterative Scaffolding 평가에 사용됩니
 | **로컬 HuggingFace** | `Qwen/Qwen3-1.7B` | GPU 직접 로드 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-4B` | **기본값** |
 | **로컬 HuggingFace** | `Qwen/Qwen3-8B` | GPU 직접 로드 |
+| **로컬 HuggingFace** | `Qwen/Qwen3-14B` | GPU 직접 로드 |
 | **로컬 HuggingFace** | `Qwen/Qwen3-32B` | GPU 직접 로드 |
 
 **모델 선택 로직**:
@@ -41,6 +42,7 @@ Student 모델은 Iterative Scaffolding 학습의 대상입니다.
 | `Qwen/Qwen3-1.7B` | Qwen3 1.7B |
 | `Qwen/Qwen3-4B` | **기본값** |
 | `Qwen/Qwen3-8B` | Qwen3 8B |
+| `Qwen/Qwen3-14B` | Qwen3 14B |
 | `Qwen/Qwen3-32B` | Qwen3 32B |
 
 **메모리 공유**: Teacher/Student 동일 모델 사용 시 `ModelCache`가 메모리를 공유합니다.
@@ -55,6 +57,7 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 | `Qwen/Qwen3-1.7B` | `SaFD-00/qwen3-1.7b-{domain}` | `SaFD-00/qwen3-1.7b-{domain}_id-mas` |
 | `Qwen/Qwen3-4B` | `SaFD-00/qwen3-4b-{domain}` | `SaFD-00/qwen3-4b-{domain}_id-mas` |
 | `Qwen/Qwen3-8B` | `SaFD-00/qwen3-8b-{domain}` | `SaFD-00/qwen3-8b-{domain}_id-mas` |
+| `Qwen/Qwen3-14B` | `SaFD-00/qwen3-14b-{domain}` | `SaFD-00/qwen3-14b-{domain}_id-mas` |
 | `Qwen/Qwen3-32B` | `SaFD-00/qwen3-32b-{domain}` | `SaFD-00/qwen3-32b-{domain}_id-mas` |
 
 ---
