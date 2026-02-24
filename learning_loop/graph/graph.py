@@ -20,6 +20,7 @@ ID-MAS Iterative Scaffolding Pipeline의 완전한 LangGraph 워크플로우를 
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Literal
 
@@ -269,10 +270,35 @@ class IDMASGraphRunner:
 
                     if remaining == 0:
                         print("[Resume] All questions processed. Finalizing...")
-                        # Early return - 이미 완료된 경우 그래프 실행 건너뛰기
                         final_state = dict(initial_state)
                         final_state["is_complete"] = True
                         final_state["logs_file_path"] = str(logs_path)
+
+                        # Finalize: save_results → generate_sft_data → SFT 재저장
+                        if output_dir:
+                            sft_filename = f"{train_dataset}_train_id-mas_{model_short}.json"
+                            logs_filename_for_save = f"{train_dataset}_train_id-mas_{model_short}_logs.json"
+
+                            # Step 1: JSONL→JSON 변환 + 임시파일 정리
+                            results_path, sft_path = save_results(
+                                state=final_state,
+                                output_dir=output_dir,
+                                sft_filename=sft_filename,
+                                logs_filename=logs_filename_for_save,
+                            )
+                            final_state["results_path"] = str(results_path)
+                            final_state["sft_path"] = str(sft_path)
+
+                            # Step 2: JSON에서 결과를 읽어 SFT 데이터 생성
+                            sft_update = generate_sft_data(final_state)
+                            final_state.update(sft_update)
+
+                            # Step 3: 생성된 SFT 데이터로 SFT 파일 재저장
+                            with open(sft_path, "w", encoding="utf-8") as f:
+                                json.dump(final_state.get("sft_data", []), f, ensure_ascii=False, indent=2)
+
+                            print(f"\nResults saved to: {results_path}")
+                            print(f"SFT data saved to: {sft_path} ({len(final_state.get('sft_data', []))} entries)")
 
                         # Print summary
                         stats = get_statistics(final_state)

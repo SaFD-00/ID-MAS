@@ -418,6 +418,50 @@ class IDMASPipeline:
             - sft_data_count: 총 SFT 데이터 수
             - sft_data_path: SFT 데이터 저장 경로
         """
+        # === Fast-path: 이미 완료된 결과가 있으면 skip (상태 A) ===
+        if resume and self.model_dir:
+            logs_filename = f"{self.train_dataset}_train_id-mas_{self.model_short}_logs.json"
+            sft_filename = f"{self.train_dataset}_train_id-mas_{self.model_short}.json"
+            logs_path = self.model_dir / logs_filename
+            sft_path = self.model_dir / sft_filename
+            jsonl_path = logs_path.with_suffix(".jsonl")
+
+            # 최종 JSON 존재 + JSONL 없음 (완전 완료) + SFT 존재
+            if logs_path.exists() and not jsonl_path.exists() and sft_path.exists():
+                with open(logs_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                if data.get("is_complete", False):
+                    stats = data.get("statistics", {})
+                    with open(sft_path, 'r', encoding='utf-8') as f:
+                        sft_data = json.load(f)
+                    print("\n[Skip] Learning phase already completed. Using existing results.")
+                    print(f"[Skip] Results: {logs_path}")
+                    print(f"[Skip] SFT data: {sft_path} ({len(sft_data)} entries)")
+
+                    case_stats = stats.get('case_statistics', {})
+                    learning_results = {
+                        "domain": self.domain,
+                        "train_dataset": self.train_dataset,
+                        "instructional_goal": self.instructional_goal,
+                        "total_questions": stats.get('total_questions', 0),
+                        "scaffolding_processed": stats.get('scaffolding_processed', 0),
+                        "scaffolding_correct": case_stats.get('success_total', 0),
+                        "case_a_independent_performance_mastery": case_stats.get('case_a_independent_performance_mastery', 0),
+                        "case_c_teacher_modeling_distillation": case_stats.get('case_c_teacher_modeling_distillation', 0),
+                        "case_statistics": case_stats,
+                        "sft_data_count": len(sft_data),
+                        "sft_data_path": str(sft_path),
+                        "results_path": str(logs_path),
+                        "timestamp": datetime.now().isoformat()
+                    }
+
+                    # summary 저장 (최신 타임스탬프로 갱신)
+                    summary_path = self.model_dir / f"{self.train_dataset}_train_summary_{self.model_short}.json"
+                    with open(summary_path, 'w', encoding='utf-8') as f:
+                        json.dump(learning_results, f, ensure_ascii=False, indent=2)
+
+                    return learning_results
+
         # Enhanced 학습 데이터 로드
         print(f"\n[Enhanced Data] Loading enhanced training data...")
         print(f"  Enhanced data dir: {self.enhanced_data_dir}")
