@@ -55,26 +55,19 @@ class StudentModel:
     def __init__(
         self,
         model_name: str = None,
-        use_sft_model: bool = False,
-        use_sft_idmas_model: bool = False,
-        sft_domain: str = None,
         gpu_ids=None
     ):
         """StudentModel을 초기화합니다.
 
         Args:
-            model_name: 사용할 모델 이름. None이면 기본 모델 사용.
-            use_sft_model: True면 SFT fine-tuned 모델 사용
-            use_sft_idmas_model: True면 SFT_ID-MAS fine-tuned 모델 사용
-            sft_domain: SFT/SFT_ID-MAS 모델의 도메인 (예: "math")
+            model_name: 사용할 모델 이름 (HuggingFace Hub 모델 ID).
+                None이면 기본 모델 사용.
+                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-math-gsm8k"
             gpu_ids: GPU 인덱스 tuple (예: (0,), (0,1,2)).
                 None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
         """
         self.model = StudentModelWrapper(
             model_name=model_name,
-            use_sft_model=use_sft_model,
-            use_sft_idmas_model=use_sft_idmas_model,
-            sft_domain=sft_domain,
             gpu_ids=gpu_ids,
         )
         self.model_name = self.model.model_name

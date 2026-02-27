@@ -92,3 +92,6 @@ outputs/
 
 # Data preparation scripts (not for production)
 ID-MAS/utils/reparse_eval_results.py
+
+# External libraries
+LlamaFactory/

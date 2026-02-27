@@ -185,18 +185,9 @@ def get_student_model_config(
         - do_sample: 샘플링 활성화 여부
         - gpu_ids: 정규화된 GPU ID tuple (None이면 자동)
         - tensor_parallel_size: GPU 수에 연동
-
-    Raises:
-        ValueError: 지원하지 않는 모델명인 경우
     """
     if model_name is None:
         model_name = DEFAULT_STUDENT_MODEL
-
-    if model_name not in AVAILABLE_STUDENT_MODELS:
-        raise ValueError(
-            f"지원하지 않는 모델입니다: {model_name}\n"
-            f"지원 모델: {AVAILABLE_STUDENT_MODELS}"
-        )
 
     # GPU ID 정규화
     normalized = normalize_gpu_ids(gpu_ids)

@@ -10,7 +10,7 @@ LangGraph 기반 Iterative Scaffolding Pipeline을 사용하여:
 
 주요 클래스:
     IDMASPipeline: 학습 모드 파이프라인 (설계 → 학습 → SFT 데이터 생성)
-    IDMASEvaluator: 평가 모드 실행기 (Baseline, SFT, SFT_ID-MAS)
+    IDMASEvaluator: 평가 모드 실행기 (HuggingFace Hub 모델 직접 지정)
 
 주요 함수:
     run_train_mode: 학습 모드 실행
@@ -22,7 +22,7 @@ LangGraph 기반 Iterative Scaffolding Pipeline을 사용하여:
     python main.py --mode train --domain math --train-dataset gsm8k
 
     # 평가 모드
-    python main.py --mode eval --method baseline --domain math --eval-dataset gsm8k
+    python main.py --mode eval --domain math --eval-dataset gsm8k --student-model Qwen/Qwen3-0.6B
 """
 import sys
 import os
@@ -52,7 +52,7 @@ from config import (
     DATA_DIR, TRAINING_DATASETS,
     AVAILABLE_STUDENT_MODELS, DEFAULT_STUDENT_MODEL,
     AVAILABLE_TEACHER_MODELS, DEFAULT_TEACHER_MODEL,
-    create_teacher_config, MODEL_NAME_TO_SHORT, get_model_short_name,
+    create_teacher_config, get_model_short_name,
     get_domain_data_dirs, get_available_domains, get_eval_datasets_for_domain,
     get_training_datasets_for_domain, get_instructional_goal,
     get_design_output_dir, normalize_gpu_ids
@@ -531,16 +531,13 @@ class IDMASPipeline:
 class IDMASEvaluator:
     """ID-MAS 평가 전용 클래스.
 
-    세 가지 평가 방법을 지원합니다:
-    - baseline: 파인튜닝 없는 기본 모델 평가
-    - sft: SFT 파인튜닝 모델 평가 (HuggingFace Hub)
-    - sft_id-mas: ID-MAS 방식 SFT 모델 평가 (HuggingFace Hub)
+    --student-model로 지정된 HuggingFace Hub 모델을 직접 로드하여 평가합니다.
+    Baseline(원본 모델)과 SFT(파인튜닝) 모델 모두 동일한 방식으로 처리됩니다.
 
     Attributes:
         domain: 도메인명
         eval_dataset: 평가 데이터셋명
-        student_model_name: 평가할 학생 모델명
-        eval_method: 평가 방법
+        student_model_name: 평가할 학생 모델명 (HuggingFace Hub 모델 ID)
         loader: 도메인 데이터 로더
         answer_extractor: 답변 추출기
         student_model: 초기화된 학생 모델
@@ -549,7 +546,7 @@ class IDMASEvaluator:
         >>> evaluator = IDMASEvaluator(
         ...     domain="math",
         ...     eval_dataset="gsm8k",
-        ...     eval_method="sft_id-mas"
+        ...     student_model_name="SaFD-00/qwen3-0.6b-math-gsm8k"
         ... )
         >>> result = evaluator.evaluate()
         >>> print(f"Accuracy: {result['accuracy']:.2%}")
@@ -560,7 +557,6 @@ class IDMASEvaluator:
         domain: str,
         eval_dataset: str,
         student_model_name: Optional[str] = None,
-        eval_method: str = "baseline",
         student_gpu_ids=None
     ):
         """IDMASEvaluator 인스턴스를 초기화합니다.
@@ -568,15 +564,15 @@ class IDMASEvaluator:
         Args:
             domain: 도메인명 (예: "math", "logical", "commonsense")
             eval_dataset: 평가 데이터셋명 (예: "gsm8k", "svamp")
-            student_model_name: 학생 모델명. None이면 기본 모델 사용
-            eval_method: 평가 방법. "baseline", "sft", "sft_id-mas" 중 하나
+            student_model_name: 학생 모델명 (HuggingFace Hub 모델 ID).
+                None이면 기본 모델 사용.
+                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-math-gsm8k"
             student_gpu_ids: Student GPU 인덱스 tuple (예: (0,), (0,1,2)).
                 None이면 자동 할당.
         """
         self.domain = domain.lower()
         self.eval_dataset = eval_dataset.lower()
         self.student_model_name = student_model_name or DEFAULT_STUDENT_MODEL
-        self.eval_method = eval_method
 
         # 도메인 데이터 로더 초기화
         self.loader = DomainLoader(domain)
@@ -584,23 +580,16 @@ class IDMASEvaluator:
         # 도메인 기반 답변 추출기 초기화
         self.answer_extractor = get_extractor(self.loader.answer_type)
 
-        # 평가 방법에 따른 학생 모델 초기화
-        use_sft = (eval_method == "sft")
-        use_sft_idmas = (eval_method == "sft_id-mas")
-
+        # 학생 모델 초기화 (모델명을 직접 전달)
         self.student_model = StudentModel(
             model_name=self.student_model_name,
-            use_sft_model=use_sft,
-            use_sft_idmas_model=use_sft_idmas,
-            sft_domain=domain,
             gpu_ids=student_gpu_ids,
         )
 
         # 파일명용 모델 약칭
-        from config.models import get_model_short_name
         self.model_short = get_model_short_name(self.student_model_name)
 
-        # 평가 결과 디렉토리 (data/{domain}/eval/{Model}/)
+        # 평가 결과 디렉토리 (outputs/{domain}/eval/{model_short}/)
         self.model_dirs = get_domain_data_dirs(domain, self.student_model_name, self.eval_dataset, mode="eval")
         self.eval_results_dir = self.model_dirs["model_dir"]
 
@@ -622,28 +611,19 @@ class IDMASEvaluator:
             평가 결과 딕셔너리. 키:
             - domain: 도메인명
             - eval_dataset: 데이터셋명
-            - method: 평가 방법명
+            - student_model: 사용된 모델명
             - total_questions: 전체 문제 수
             - correct_count: 정답 수
             - accuracy: 정확도 (0~1)
             - question_results: 문제별 상세 결과 리스트
         """
-        # 파일명용 방법명 매핑
-        method_name_map = {
-            "baseline": "Baseline",
-            "sft": "SFT",
-            "sft_id-mas": "SFT_ID-MAS"
-        }
-        method_name = method_name_map.get(self.eval_method, self.eval_method.upper())
-
         print("\n" + "=" * 60)
-        print(f"EVALUATION PHASE ({method_name})")
+        print(f"EVALUATION PHASE")
         print("=" * 60)
 
         print(f"\n Domain: {self.domain}")
         print(f"  Eval dataset: {self.eval_dataset}")
         print(f"  Student model: {self.student_model_name}")
-        print(f"  Method: {method_name}")
 
         # 평가 데이터 로드
         questions = self.loader.load_eval_data(self.eval_dataset, limit=num_questions)
@@ -655,7 +635,6 @@ class IDMASEvaluator:
         eval_results = {
             "domain": self.domain,
             "eval_dataset": self.eval_dataset,
-            "method": method_name,
             "student_model": self.student_model_name,
             "answer_type": self.loader.answer_type.value,
             "total_questions": len(questions),
@@ -664,7 +643,7 @@ class IDMASEvaluator:
         }
 
         correct_count = 0
-        result_path = self.eval_results_dir / f"{self.eval_dataset}_eval_results-{method_name}.json"
+        result_path = self.eval_results_dir / f"{self.eval_dataset}_eval_results.json"
 
         # Resume 모드: 기존 결과에서 완료된 문제 복원
         processed_question_ids = set()
@@ -1016,17 +995,17 @@ def run_train_mode(args):
 def run_eval_mode(args):
     """평가 모드를 실행합니다.
 
-    Baseline, SFT, SFT_ID-MAS 세 가지 방법으로 평가합니다.
+    --student-model로 지정된 HuggingFace Hub 모델을 직접 로드하여 평가합니다.
 
     Args:
         args: argparse로 파싱된 CLI 인자. 필수 속성:
             - domain: 도메인명
             - eval_dataset: 평가 데이터셋명
-            - method: 평가 방법
-            - student_model: 학생 모델명 (선택)
+            - student_model: 학생 모델명 (HuggingFace Hub 모델 ID)
             - eval_resume: 이어서 평가 여부
             - student_gpu: Student GPU 인덱스 (선택)
     """
+    student_model_name = args.student_model or DEFAULT_STUDENT_MODEL
     raw_student_gpu = getattr(args, 'student_gpu', None)
     student_gpu_ids = normalize_gpu_ids(raw_student_gpu)
 
@@ -1037,12 +1016,12 @@ def run_eval_mode(args):
         print(f"[GPU] CUDA_VISIBLE_DEVICES set to: {cuda_visible}")
 
     print(f"\n{'=' * 60}")
-    print(f"ID-MAS: EVAL MODE ({args.method.upper()})")
+    print(f"ID-MAS: EVAL MODE")
     print(f"{'=' * 60}")
 
     print(f"Domain: {args.domain}")
     print(f"Eval Dataset: {args.eval_dataset}")
-    print(f"Model: {args.student_model or DEFAULT_STUDENT_MODEL}")
+    print(f"Model: {student_model_name}")
     if student_gpu_ids is not None:
         print(f"Student GPU: {student_gpu_ids}")
     print(f"{'=' * 60}\n")
@@ -1051,8 +1030,7 @@ def run_eval_mode(args):
     evaluator = IDMASEvaluator(
         domain=args.domain,
         eval_dataset=args.eval_dataset,
-        student_model_name=args.student_model,
-        eval_method=args.method,
+        student_model_name=student_model_name,
         student_gpu_ids=student_gpu_ids,
     )
 
@@ -1061,7 +1039,7 @@ def run_eval_mode(args):
 
     print("\n" + "=" * 60)
     print("EVAL MODE COMPLETED")
-    print(f"Method: {args.method.upper()}")
+    print(f"Model: {student_model_name}")
     print(f"Eval Dataset: {args.eval_dataset}")
     print(f"Accuracy: {eval_result['accuracy'] * 100:.2f}%")
     print(f"Correct: {eval_result['correct_count']}/{eval_result['total_questions']}")
@@ -1097,35 +1075,20 @@ Examples:
       --student-model Qwen/Qwen3-4B
 
   # ========================================
-  # EVAL MODE - Baseline (Base Model)
+  # EVAL MODE (HuggingFace Hub 모델 직접 지정)
   # ========================================
 
-  # GSM8K Baseline 평가
-  python main.py --mode eval --method baseline \\
-      --domain math --eval-dataset gsm8k
+  # Baseline 평가 (원본 모델)
+  python main.py --mode eval --domain math --eval-dataset gsm8k \\
+      --student-model Qwen/Qwen3-0.6B
 
-  # ========================================
-  # EVAL MODE - SFT (Fine-tuned Model)
-  # ========================================
+  # SFT 모델 평가 (HF Hub에서 로드)
+  python main.py --mode eval --domain math --eval-dataset gsm8k \\
+      --student-model SaFD-00/qwen3-0.6b-math-gsm8k
 
-  # GSM8K SFT 평가
-  python main.py --mode eval --method sft \\
-      --domain math --eval-dataset gsm8k \\
-      --student-model Qwen/Qwen3-1.7B
-
-  # ========================================
-  # EVAL MODE - SFT_ID-MAS (ID-MAS Fine-tuned)
-  # ========================================
-
-  # GSM8K SFT_ID-MAS 평가
-  python main.py --mode eval --method sft_id-mas \\
-      --domain math --eval-dataset gsm8k \\
-      --student-model Qwen/Qwen3-1.7B
-
-  # Cross-dataset SFT_ID-MAS 평가
-  python main.py --mode eval --method sft_id-mas \\
-      --domain math --eval-dataset svamp \\
-      --student-model Qwen/Qwen3-4B
+  # Cross-dataset 평가
+  python main.py --mode eval --domain math --eval-dataset svamp \\
+      --student-model SaFD-00/qwen3-4b-math-gsm8k
 
   # ========================================
   # GPU 할당 (단일/다중 GPU)
@@ -1204,12 +1167,6 @@ Examples:
     # 평가 모드 옵션
     # ========================================
     parser.add_argument(
-        "--method",
-        type=str,
-        choices=["baseline", "sft", "sft_id-mas"],
-        help="평가 방법. 평가 모드에서 필수"
-    )
-    parser.add_argument(
         "--eval-dataset",
         type=str,
         help="평가 데이터셋. 평가 모드에서 필수"
@@ -1229,9 +1186,8 @@ Examples:
         "--student-model",
         type=str,
         default=None,
-        choices=AVAILABLE_STUDENT_MODELS,
         dest="student_model",
-        help=f"학생 모델. 기본값: {DEFAULT_STUDENT_MODEL}"
+        help=f"학생 모델 (HuggingFace Hub 모델 ID). 기본값: {DEFAULT_STUDENT_MODEL}"
     )
     parser.add_argument(
         "--teacher-model",
@@ -1282,10 +1238,15 @@ Examples:
             )
 
         # 학습 모드에서 사용할 수 없는 옵션 검증
-        if args.method:
-            parser.error("--method는 학습 모드에서 사용할 수 없습니다")
         if args.eval_dataset:
             parser.error("--eval-dataset은 학습 모드에서 사용할 수 없습니다")
+
+        # 학습 모드에서는 기본 모델만 허용
+        if args.student_model and args.student_model not in AVAILABLE_STUDENT_MODELS:
+            parser.error(
+                f"학습 모드에서는 기본 모델만 사용 가능합니다: {AVAILABLE_STUDENT_MODELS}\n"
+                f"지정된 모델: {args.student_model}"
+            )
 
         # --resume 문자열을 boolean으로 변환
         args.resume = args.resume == "True"
@@ -1295,8 +1256,6 @@ Examples:
 
     elif args.mode == "eval":
         # 평가 모드 검증
-        if not args.method:
-            parser.error("--method는 평가 모드에서 필수입니다")
         if not args.eval_dataset:
             parser.error("--eval-dataset은 평가 모드에서 필수입니다")
         if not args.domain:
@@ -1315,15 +1274,6 @@ Examples:
                 f"--eval-dataset '{args.eval_dataset}'은(는) {args.domain} 도메인에서 "
                 f"사용할 수 없습니다. 가능한 데이터셋: {available_eval}"
             )
-
-        # SFT/SFT_ID-MAS 모델 지원 여부 검증
-        if args.method in ["sft", "sft_id-mas"]:
-            model_to_check = args.student_model or DEFAULT_STUDENT_MODEL
-            if model_to_check not in MODEL_NAME_TO_SHORT:
-                parser.error(
-                    f"모델 '{model_to_check}'은(는) {args.method.upper()} 평가를 지원하지 않습니다.\n"
-                    f"지원 모델: {list(MODEL_NAME_TO_SHORT.keys())}"
-                )
 
         # --eval-resume 문자열을 boolean으로 변환
         args.eval_resume = args.eval_resume == "True"

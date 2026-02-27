@@ -49,16 +49,13 @@ Student 모델은 Iterative Scaffolding 학습의 대상입니다.
 
 ### SFT 모델 (HuggingFace Hub)
 
-Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
+Fine-tuning된 모델은 HuggingFace Hub에서 직접 로드됩니다.
+`--student-model`에 HuggingFace Hub 모델 ID를 직접 지정합니다.
 
-| 베이스 모델 | SFT 모델 | SFT_ID-MAS 모델 |
-|-------------|----------|-----------------|
-| `Qwen/Qwen3-0.6B` | `SaFD-00/qwen3-0.6b-{domain}` | `SaFD-00/qwen3-0.6b-{domain}_id-mas` |
-| `Qwen/Qwen3-1.7B` | `SaFD-00/qwen3-1.7b-{domain}` | `SaFD-00/qwen3-1.7b-{domain}_id-mas` |
-| `Qwen/Qwen3-4B` | `SaFD-00/qwen3-4b-{domain}` | `SaFD-00/qwen3-4b-{domain}_id-mas` |
-| `Qwen/Qwen3-8B` | `SaFD-00/qwen3-8b-{domain}` | `SaFD-00/qwen3-8b-{domain}_id-mas` |
-| `Qwen/Qwen3-14B` | `SaFD-00/qwen3-14b-{domain}` | `SaFD-00/qwen3-14b-{domain}_id-mas` |
-| `Qwen/Qwen3-32B` | `SaFD-00/qwen3-32b-{domain}` | `SaFD-00/qwen3-32b-{domain}_id-mas` |
+| 케이스 | 네이밍 패턴 | 예시 |
+|--------|-----------|------|
+| Teacher=Student | `SaFD-00/{short}-{domain}-{dataset}` | `SaFD-00/qwen3-0.6b-math-gsm8k` |
+| Teacher=gpt-5.2 | `SaFD-00/{short}-{domain}-{dataset}-gpt52` | `SaFD-00/qwen3-4b-math-gsm8k-gpt52` |
 
 ---
 
@@ -104,7 +101,7 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 | 옵션 | 설명 | 값 |
 |------|------|-----|
 | `--mode` | 실행 모드 | `train`, `eval` (필수) |
-| `--student-model` | 학생 모델 선택 | `Qwen/Qwen3-4B` (기본값) |
+| `--student-model` | 학생 모델 (HuggingFace Hub 모델 ID) | `Qwen/Qwen3-4B` (기본값) |
 | `--teacher-model` | 교사/설계 모델 선택 | `Qwen/Qwen3-4B` (기본값) |
 | `--student-gpu` | Student 모델 GPU | 단일(`0`) 또는 다중(`0,1,2`). 미지정 시 CUDA_VISIBLE_DEVICES 사용 |
 | `--teacher-gpu` | Teacher 모델 GPU | 단일(`1`) 또는 다중(`3,4,5,6`). 미지정 시 CUDA_VISIBLE_DEVICES 사용 (API 모델은 무시) |
@@ -160,18 +157,20 @@ Fine-tuning된 모델은 HuggingFace Hub에서 로드됩니다.
 
 | 옵션 | 설명 | 기본값 |
 |------|------|--------|
-| `--method` | 평가 방법 | `baseline`, `sft`, `sft_id-mas` (필수) |
 | `--domain` | 도메인 (데이터셋 검증용) | (필수) |
 | `--eval-dataset` | 평가 데이터셋 | (필수) |
+| `--student-model` | 평가할 모델 (HuggingFace Hub 모델 ID) | `Qwen/Qwen3-4B` |
 | `--eval-resume` | 기존 결과에서 이어서 평가 | `True` |
 
 ### 평가 방법
 
-| Method | 설명 |
-|--------|------|
-| `baseline` | 베이스 모델로 평가 (순수 성능 측정) |
-| `sft` | HuggingFace Hub에서 SFT 모델 로드하여 평가 |
-| `sft_id-mas` | ID-MAS Pipeline으로 학습된 SFT 모델 평가 |
+`--student-model`에 HuggingFace Hub 모델 ID를 직접 지정하여 평가합니다.
+
+| 평가 유형 | --student-model 예시 | 설명 |
+|-----------|---------------------|------|
+| Baseline | `Qwen/Qwen3-0.6B` | 원본 모델 평가 |
+| SFT | `SaFD-00/qwen3-0.6b-math-gsm8k` | SFT 파인튜닝 모델 평가 |
+| SFT (gpt-5.2 Teacher) | `SaFD-00/qwen3-4b-math-gsm8k-gpt52` | gpt-5.2 Teacher 기반 SFT 모델 평가 |
 
 ---
 
@@ -315,187 +314,72 @@ python main.py --mode train --domain commonsense --train-dataset arc_c \
 #### Math 도메인
 
 ```bash
-# Baseline 평가 (In-Domain)
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+# Baseline 평가 (원본 모델)
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-0.6B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-4B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-8B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-14B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 
-# SFT 평가 (In-Domain)
-python main.py --mode eval --method sft \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-0.6B --student-gpu 0
+# SFT 평가 (gsm8k로 학습한 모델)
+python main.py --mode eval --domain math --eval-dataset gsm8k \
+    --student-model SaFD-00/qwen3-0.6b-math-gsm8k --student-gpu 0
 
-python main.py --mode eval --method sft \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
+python main.py --mode eval --domain math --eval-dataset gsm8k \
+    --student-model SaFD-00/qwen3-1.7b-math-gsm8k --student-gpu 0
 
-python main.py --mode eval --method sft \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
+python main.py --mode eval --domain math --eval-dataset gsm8k \
+    --student-model SaFD-00/qwen3-4b-math-gsm8k --student-gpu 0
 
-python main.py --mode eval --method sft \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
-
-# SFT_ID-MAS 평가 (In-Domain)
-python main.py --mode eval --method sft_id-mas \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-0.6B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain math --eval-dataset gsm8k \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
+# SFT 평가 (math로 학습한 모델)
+python main.py --mode eval --domain math --eval-dataset gsm8k \
+    --student-model SaFD-00/qwen3-0.6b-math-math --student-gpu 0
 
 # OOD 평가 (SVAMP)
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset svamp \
+python main.py --mode eval --domain math --eval-dataset svamp \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-python main.py --mode eval --method sft \
-    --domain math --eval-dataset svamp \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain math --eval-dataset svamp \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
+python main.py --mode eval --domain math --eval-dataset svamp \
+    --student-model SaFD-00/qwen3-1.7b-math-gsm8k --student-gpu 0
 ```
 
 #### Logical 도메인
 
 ```bash
-# Baseline 평가 (In-Domain)
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset reclor \
+# Baseline 평가
+python main.py --mode eval --domain logical --eval-dataset reclor \
     --student-model Qwen/Qwen3-0.6B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset reclor \
+python main.py --mode eval --domain logical --eval-dataset reclor \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
+# SFT 평가
+python main.py --mode eval --domain logical --eval-dataset reclor \
+    --student-model SaFD-00/qwen3-0.6b-logical-reclor --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
-
-# SFT 평가 (In-Domain)
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-0.6B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
-
-# SFT_ID-MAS 평가 (In-Domain)
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-0.6B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset reclor \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
+python main.py --mode eval --domain logical --eval-dataset reclor \
+    --student-model SaFD-00/qwen3-1.7b-logical-reclor --student-gpu 0
 
 # OOD 평가 (ANLI-R2)
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset anli_r2 \
+python main.py --mode eval --domain logical --eval-dataset anli_r2 \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset anli_r2 \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
+python main.py --mode eval --domain logical --eval-dataset anli_r2 \
+    --student-model SaFD-00/qwen3-1.7b-logical-reclor --student-gpu 0
 
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset anli_r2 \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-# OOD 평가 (BBH 서브태스크 - 개별 평가)
+# OOD 평가 (BBH 서브태스크)
 # 사용 가능한 서브태스크:
 # - bbh_boolean_expressions
 # - bbh_formal_fallacies
@@ -507,113 +391,36 @@ python main.py --mode eval --method sft_id-mas \
 # - bbh_tracking_shuffled_objects_seven_objects
 # - bbh_web_of_lies
 
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset bbh_boolean_expressions \
+python main.py --mode eval --domain logical --eval-dataset bbh_boolean_expressions \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain logical --eval-dataset bbh_web_of_lies \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain logical --eval-dataset bbh_formal_fallacies \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain logical --eval-dataset bbh_logical_deduction_three_objects \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
+python main.py --mode eval --domain logical --eval-dataset bbh_web_of_lies \
+    --student-model SaFD-00/qwen3-1.7b-logical-reclor --student-gpu 0
 ```
 
 #### Commonsense 도메인
 
 ```bash
-# Baseline 평가 (In-Domain)
-python main.py --mode eval --method baseline \
-    --domain commonsense --eval-dataset arc_c \
+# Baseline 평가
+python main.py --mode eval --domain commonsense --eval-dataset arc_c \
     --student-model Qwen/Qwen3-0.6B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain commonsense --eval-dataset arc_c \
+python main.py --mode eval --domain commonsense --eval-dataset arc_c \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
+# SFT 평가
+python main.py --mode eval --domain commonsense --eval-dataset arc_c \
+    --student-model SaFD-00/qwen3-0.6b-commonsense-arc_c --student-gpu 0
 
-python main.py --mode eval --method baseline \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method baseline \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method baseline \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
-
-# SFT 평가 (In-Domain)
-python main.py --mode eval --method sft \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-0.6B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method sft \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
-
-# SFT_ID-MAS 평가 (In-Domain)
-python main.py --mode eval --method sft_id-mas \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-0.6B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-4B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-8B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-14B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain commonsense --eval-dataset arc_c \
-    --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
+python main.py --mode eval --domain commonsense --eval-dataset arc_c \
+    --student-model SaFD-00/qwen3-1.7b-commonsense-arc_c --student-gpu 0
 
 # OOD 평가 (StrategyQA)
-python main.py --mode eval --method baseline \
-    --domain commonsense --eval-dataset strategyqa \
+python main.py --mode eval --domain commonsense --eval-dataset strategyqa \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
-python main.py --mode eval --method sft \
-    --domain commonsense --eval-dataset strategyqa \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
-
-python main.py --mode eval --method sft_id-mas \
-    --domain commonsense --eval-dataset strategyqa \
-    --student-model Qwen/Qwen3-1.7B --student-gpu 0
+python main.py --mode eval --domain commonsense --eval-dataset strategyqa \
+    --student-model SaFD-00/qwen3-1.7b-commonsense-arc_c --student-gpu 0
 ```
 
 ### 멀티 GPU 할당
@@ -632,8 +439,7 @@ python main.py --mode train --domain math --train-dataset gsm8k \
     --student-gpu 0
 
 # 평가 시 GPU 지정
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-8B --student-gpu 1
 ```
 
@@ -659,8 +465,7 @@ python main.py --mode train --domain math --train-dataset gsm8k \
     --student-gpu 0,1
 
 # 평가 시 다중 GPU
-python main.py --mode eval --method baseline \
-    --domain math --eval-dataset gsm8k \
+python main.py --mode eval --domain math --eval-dataset gsm8k \
     --student-model Qwen/Qwen3-32B --student-gpu 0,1,2
 ```
 

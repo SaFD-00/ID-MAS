@@ -3,7 +3,7 @@
 이 모듈은 ID-MAS 시스템의 Student 모델을 위한 래퍼를 제공합니다.
 Qwen 등 다양한 HuggingFace 로컬 모델을 지원합니다.
 
-SFT(Supervised Fine-Tuning) 모델과 SFT_ID-MAS 모델도 지원하여
+임의의 HuggingFace Hub 모델을 지원하여
 파인튜닝된 모델의 평가가 가능합니다.
 
 주요 클래스:
@@ -13,8 +13,8 @@ SFT(Supervised Fine-Tuning) 모델과 SFT_ID-MAS 모델도 지원하여
     >>> from models.student_wrapper import StudentModelWrapper
     >>> # 기본 모델
     >>> student = StudentModelWrapper("Qwen/Qwen3-1.7B")
-    >>> # SFT 파인튜닝 모델
-    >>> student = StudentModelWrapper("Qwen/Qwen3-1.7B", use_sft_model=True, sft_domain="math")
+    >>> # HuggingFace Hub 파인튜닝 모델
+    >>> student = StudentModelWrapper("SaFD-00/qwen3-1.7b-math-gsm8k")
 """
 from typing import Optional, List, Dict
 from config.models import get_student_model_config, DEFAULT_STUDENT_MODEL
@@ -31,13 +31,11 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
 
     지원 기능:
         - 기본 모델 (Qwen 등)
-        - SFT 파인튜닝 모델 (HuggingFace Hub)
-        - SFT_ID-MAS 파인튜닝 모델 (HuggingFace Hub)
+        - 임의 HuggingFace Hub 모델 (SFT 파인튜닝 모델 포함)
         - ModelCache를 통한 Teacher와 모델 공유
 
     Attributes:
-        model_name: 실제 사용 중인 모델명 (SFT 모델 포함)
-        base_model_name: 기본 모델명 (SFT 모델의 경우 원본 모델명)
+        model_name: 사용 중인 모델명 (HuggingFace Hub ID)
         config: 모델 설정 딕셔너리
         llm: vLLM LLM 인스턴스
     """
@@ -45,46 +43,22 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
     def __init__(
         self,
         model_name: str = None,
-        use_sft_model: bool = False,
-        use_sft_idmas_model: bool = False,
-        sft_domain: str = None,
         gpu_ids=None
     ):
         """StudentModelWrapper를 초기화합니다.
 
         Args:
-            model_name: 사용할 모델명. None이면 기본 모델(Qwen3-1.7B) 사용.
-            use_sft_model: SFT 파인튜닝 모델 사용 여부
-            use_sft_idmas_model: SFT_ID-MAS 파인튜닝 모델 사용 여부
-            sft_domain: SFT/SFT_ID-MAS 모델의 도메인 (예: "math", "logical")
+            model_name: 사용할 모델명 (HuggingFace Hub 모델 ID).
+                None이면 기본 모델 사용.
+                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-math-gsm8k"
             gpu_ids: GPU 인덱스 tuple (예: (0,), (0,1,2)).
                 None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
-
-        Raises:
-            ValueError: SFT 모델 사용 시 sft_domain이 지정되지 않은 경우
         """
         if model_name is None:
             model_name = DEFAULT_STUDENT_MODEL
 
-        # SFT 모델 이름 resolution
-        from config.sft import get_sft_model_name, get_sft_idmas_model_name
-
-        actual_model_name = model_name
-        self.base_model_name = model_name
-        if use_sft_idmas_model:
-            if sft_domain is None:
-                raise ValueError("sft_domain is required when use_sft_idmas_model=True")
-            actual_model_name = get_sft_idmas_model_name(model_name, sft_domain)
-            print(f"Loading SFT_ID-MAS fine-tuned model: {actual_model_name} (base: {model_name})")
-        elif use_sft_model:
-            if sft_domain is None:
-                raise ValueError("sft_domain is required when use_sft_model=True")
-            actual_model_name = get_sft_model_name(model_name, sft_domain)
-            print(f"Loading SFT fine-tuned model: {actual_model_name} (base: {model_name})")
-
-        # Get config using base model name (SFT models use same config as base)
-        self.config = get_student_model_config(self.base_model_name)
-        self.model_name = actual_model_name  # Use actual model name for loading
+        self.config = get_student_model_config(model_name)
+        self.model_name = model_name
         self.device = self.config["device"]
 
         # LocalModelMixin에서 사용하는 속성들
@@ -95,7 +69,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         # 공유 ModelCache를 사용하여 vLLM 모델 로드 (Teacher와 동일 모델일 경우 공유됨)
         self._gpu_ids = gpu_ids if gpu_ids is not None else self.config.get("gpu_ids")
         cached = ModelCache.get_or_load(
-            actual_model_name,
+            model_name,
             self.device,
             tensor_parallel_size=self.config.get("tensor_parallel_size", 1),
             gpu_memory_utilization=self.config.get("gpu_memory_utilization", 0.90),
