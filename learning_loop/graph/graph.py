@@ -84,8 +84,11 @@ def create_idmas_graph(
         return advance_to_next_question(state)
 
     def finalize_node(state: IDMASState) -> Dict[str, Any]:
-        """Generate SFT data and mark complete."""
-        return generate_sft_data(state)
+        """Mark pipeline as complete. SFT generation happens after save_results."""
+        return {
+            "is_complete": True,
+            "current_phase": "complete",
+        }
 
     # ==================== Conditional Routing ====================
 
@@ -411,24 +414,33 @@ class IDMASGraphRunner:
         print(f"  Total Skipped: {analysis.get('count', 0)}")
         print(f"  Skip Rate: {analysis.get('rate', 0) * 100:.1f}%")
 
-        print(f"\nSFT Data Generated: {len(final_state.get('sft_data', []))}")
-
-        # Save results if output_dir provided
+        # Finalize: save_results → generate_sft_data → SFT 재저장
         if output_dir:
             sft_filename = f"{train_dataset}_train_id-mas_{model_short}.json"
             logs_filename = f"{train_dataset}_train_id-mas_{model_short}_logs.json"
 
+            # Step 1: JSONL→JSON 변환 + 임시파일 정리
             results_path, sft_path = save_results(
                 state=final_state,
                 output_dir=output_dir,
                 sft_filename=sft_filename,
                 logs_filename=logs_filename,
             )
-            print(f"\nResults saved to: {results_path}")
-            print(f"SFT data saved to: {sft_path}")
-
             final_state["results_path"] = str(results_path)
             final_state["sft_path"] = str(sft_path)
+
+            # Step 2: JSON에서 결과를 읽어 SFT 데이터 생성
+            sft_update = generate_sft_data(final_state)
+            final_state.update(sft_update)
+
+            # Step 3: 생성된 SFT 데이터로 SFT 파일 재저장
+            with open(sft_path, "w", encoding="utf-8") as f:
+                json.dump(final_state.get("sft_data", []), f, ensure_ascii=False, indent=2)
+
+            print(f"\nResults saved to: {results_path}")
+            print(f"SFT data saved to: {sft_path} ({len(final_state.get('sft_data', []))} entries)")
+
+        print(f"\nSFT Data Generated: {len(final_state.get('sft_data', []))}")
 
         return final_state
 
