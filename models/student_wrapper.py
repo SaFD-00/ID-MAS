@@ -14,7 +14,7 @@ Qwen 등 다양한 HuggingFace 로컬 모델을 지원합니다.
     >>> # 기본 모델
     >>> student = StudentModelWrapper("Qwen/Qwen3-1.7B")
     >>> # HuggingFace Hub 파인튜닝 모델
-    >>> student = StudentModelWrapper("SaFD-00/qwen3-1.7b-math-gsm8k")
+    >>> student = StudentModelWrapper("SaFD-00/qwen3-1.7b-id-mas-math-gsm8k")
 """
 from typing import Optional, List, Dict
 from config.models import get_student_model_config, DEFAULT_STUDENT_MODEL
@@ -50,7 +50,7 @@ class StudentModelWrapper(BaseModelWrapper, LocalModelMixin):
         Args:
             model_name: 사용할 모델명 (HuggingFace Hub 모델 ID).
                 None이면 기본 모델 사용.
-                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-math-gsm8k"
+                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-id-mas-math-gsm8k"
             gpu_ids: GPU 인덱스 tuple (예: (0,), (0,1,2)).
                 None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
         """

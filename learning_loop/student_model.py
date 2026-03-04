@@ -62,7 +62,7 @@ class StudentModel:
         Args:
             model_name: 사용할 모델 이름 (HuggingFace Hub 모델 ID).
                 None이면 기본 모델 사용.
-                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-math-gsm8k"
+                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-id-mas-math-gsm8k"
             gpu_ids: GPU 인덱스 tuple (예: (0,), (0,1,2)).
                 None이면 CUDA_VISIBLE_DEVICES 기반 자동 할당.
         """

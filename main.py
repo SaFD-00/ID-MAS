@@ -542,7 +542,7 @@ class IDMASEvaluator:
         >>> evaluator = IDMASEvaluator(
         ...     domain="math",
         ...     eval_dataset="gsm8k",
-        ...     student_model_name="SaFD-00/qwen3-0.6b-math-gsm8k"
+        ...     student_model_name="SaFD-00/qwen3-0.6b-id-mas-math-gsm8k"
         ... )
         >>> result = evaluator.evaluate()
         >>> print(f"Accuracy: {result['accuracy']:.2%}")
@@ -562,7 +562,7 @@ class IDMASEvaluator:
             eval_dataset: 평가 데이터셋명 (예: "gsm8k", "svamp")
             student_model_name: 학생 모델명 (HuggingFace Hub 모델 ID).
                 None이면 기본 모델 사용.
-                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-math-gsm8k"
+                예: "Qwen/Qwen3-0.6B", "SaFD-00/qwen3-0.6b-id-mas-math-gsm8k"
             student_gpu_ids: Student GPU 인덱스 tuple (예: (0,), (0,1,2)).
                 None이면 자동 할당.
         """
@@ -1080,11 +1080,11 @@ Examples:
 
   # SFT 모델 평가 (HF Hub에서 로드)
   python main.py --mode eval --domain math --eval-dataset gsm8k \\
-      --student-model SaFD-00/qwen3-0.6b-math-gsm8k
+      --student-model SaFD-00/qwen3-0.6b-id-mas-math-gsm8k
 
   # Cross-dataset 평가
   python main.py --mode eval --domain math --eval-dataset svamp \\
-      --student-model SaFD-00/qwen3-4b-math-gsm8k
+      --student-model SaFD-00/qwen3-4b-id-mas-math-gsm8k
 
   # ========================================
   # GPU 할당 (단일/다중 GPU)

@@ -54,8 +54,8 @@ Fine-tuning된 모델은 HuggingFace Hub에서 직접 로드됩니다.
 
 | 케이스 | 네이밍 패턴 | 예시 |
 |--------|-----------|------|
-| Teacher=Student | `SaFD-00/{short}-{domain}-{dataset}` | `SaFD-00/qwen3-0.6b-math-gsm8k` |
-| Teacher=gpt-5.2 | `SaFD-00/{short}-{domain}-{dataset}-gpt52` | `SaFD-00/qwen3-4b-math-gsm8k-gpt52` |
+| Teacher=Student | `SaFD-00/{short}-id-mas-{domain}-{dataset}` | `SaFD-00/qwen3-0.6b-id-mas-math-gsm8k` |
+| Teacher=gpt-5.2 | `SaFD-00/{short}-id-mas-{domain}-{dataset}-gpt52` | `SaFD-00/qwen3-4b-id-mas-math-gsm8k-gpt52` |
 
 ---
 
@@ -169,8 +169,8 @@ Fine-tuning된 모델은 HuggingFace Hub에서 직접 로드됩니다.
 | 평가 유형 | --student-model 예시 | 설명 |
 |-----------|---------------------|------|
 | Baseline | `Qwen/Qwen3-0.6B` | 원본 모델 평가 |
-| SFT | `SaFD-00/qwen3-0.6b-math-gsm8k` | SFT 파인튜닝 모델 평가 |
-| SFT (gpt-5.2 Teacher) | `SaFD-00/qwen3-4b-math-gsm8k-gpt52` | gpt-5.2 Teacher 기반 SFT 모델 평가 |
+| SFT | `SaFD-00/qwen3-0.6b-id-mas-math-gsm8k` | SFT 파인튜닝 모델 평가 |
+| SFT (gpt-5.2 Teacher) | `SaFD-00/qwen3-4b-id-mas-math-gsm8k-gpt52` | gpt-5.2 Teacher 기반 SFT 모델 평가 |
 
 ---
 
@@ -335,24 +335,24 @@ python main.py --mode eval --domain math --eval-dataset gsm8k \
 
 # SFT 평가 (gsm8k로 학습한 모델)
 python main.py --mode eval --domain math --eval-dataset gsm8k \
-    --student-model SaFD-00/qwen3-0.6b-math-gsm8k --student-gpu 0
+    --student-model SaFD-00/qwen3-0.6b-id-mas-math-gsm8k --student-gpu 0
 
 python main.py --mode eval --domain math --eval-dataset gsm8k \
-    --student-model SaFD-00/qwen3-1.7b-math-gsm8k --student-gpu 0
+    --student-model SaFD-00/qwen3-1.7b-id-mas-math-gsm8k --student-gpu 0
 
 python main.py --mode eval --domain math --eval-dataset gsm8k \
-    --student-model SaFD-00/qwen3-4b-math-gsm8k --student-gpu 0
+    --student-model SaFD-00/qwen3-4b-id-mas-math-gsm8k --student-gpu 0
 
 # SFT 평가 (math로 학습한 모델)
 python main.py --mode eval --domain math --eval-dataset gsm8k \
-    --student-model SaFD-00/qwen3-0.6b-math-math --student-gpu 0
+    --student-model SaFD-00/qwen3-0.6b-id-mas-math-math --student-gpu 0
 
 # OOD 평가 (SVAMP)
 python main.py --mode eval --domain math --eval-dataset svamp \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --domain math --eval-dataset svamp \
-    --student-model SaFD-00/qwen3-1.7b-math-gsm8k --student-gpu 0
+    --student-model SaFD-00/qwen3-1.7b-id-mas-math-gsm8k --student-gpu 0
 ```
 
 #### Logical 도메인
@@ -367,17 +367,17 @@ python main.py --mode eval --domain logical --eval-dataset reclor \
 
 # SFT 평가
 python main.py --mode eval --domain logical --eval-dataset reclor \
-    --student-model SaFD-00/qwen3-0.6b-logical-reclor --student-gpu 0
+    --student-model SaFD-00/qwen3-0.6b-id-mas-logical-reclor --student-gpu 0
 
 python main.py --mode eval --domain logical --eval-dataset reclor \
-    --student-model SaFD-00/qwen3-1.7b-logical-reclor --student-gpu 0
+    --student-model SaFD-00/qwen3-1.7b-id-mas-logical-reclor --student-gpu 0
 
 # OOD 평가 (ANLI-R2)
 python main.py --mode eval --domain logical --eval-dataset anli_r2 \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --domain logical --eval-dataset anli_r2 \
-    --student-model SaFD-00/qwen3-1.7b-logical-reclor --student-gpu 0
+    --student-model SaFD-00/qwen3-1.7b-id-mas-logical-reclor --student-gpu 0
 
 # OOD 평가 (BBH 서브태스크)
 # 사용 가능한 서브태스크:
@@ -395,7 +395,7 @@ python main.py --mode eval --domain logical --eval-dataset bbh_boolean_expressio
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --domain logical --eval-dataset bbh_web_of_lies \
-    --student-model SaFD-00/qwen3-1.7b-logical-reclor --student-gpu 0
+    --student-model SaFD-00/qwen3-1.7b-id-mas-logical-reclor --student-gpu 0
 ```
 
 #### Commonsense 도메인
@@ -410,17 +410,17 @@ python main.py --mode eval --domain commonsense --eval-dataset arc_c \
 
 # SFT 평가
 python main.py --mode eval --domain commonsense --eval-dataset arc_c \
-    --student-model SaFD-00/qwen3-0.6b-commonsense-arc_c --student-gpu 0
+    --student-model SaFD-00/qwen3-0.6b-id-mas-commonsense-arc_c --student-gpu 0
 
 python main.py --mode eval --domain commonsense --eval-dataset arc_c \
-    --student-model SaFD-00/qwen3-1.7b-commonsense-arc_c --student-gpu 0
+    --student-model SaFD-00/qwen3-1.7b-id-mas-commonsense-arc_c --student-gpu 0
 
 # OOD 평가 (StrategyQA)
 python main.py --mode eval --domain commonsense --eval-dataset strategyqa \
     --student-model Qwen/Qwen3-1.7B --student-gpu 0
 
 python main.py --mode eval --domain commonsense --eval-dataset strategyqa \
-    --student-model SaFD-00/qwen3-1.7b-commonsense-arc_c --student-gpu 0
+    --student-model SaFD-00/qwen3-1.7b-id-mas-commonsense-arc_c --student-gpu 0
 ```
 
 ### 멀티 GPU 할당

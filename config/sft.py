@@ -12,7 +12,7 @@
 """
 
 # 기본 모델명 → HuggingFace Hub 레포지토리용 짧은 이름 매핑
-# SaFD-00/{short_name}-{domain} 형식으로 사용됨
+# SaFD-00/{short_name}-id-mas-{domain} 형식으로 사용됨
 MODEL_NAME_TO_SHORT = {
     "Qwen/Qwen3-0.6B": "qwen3-0.6b",
     "Qwen/Qwen3-1.7B": "qwen3-1.7b",
@@ -57,19 +57,19 @@ def get_sft_model_name(base_model_name: str, domain: str) -> str:
         domain: 도메인명 (예: "math")
 
     Returns:
-        SFT 모델 HF Hub 이름 (예: "SaFD-00/qwen3-4b-math")
+        SFT 모델 HF Hub 이름 (예: "SaFD-00/qwen3-4b-id-mas-math")
 
     Raises:
         ValueError: 지원하지 않는 모델이거나 알 수 없는 도메인인 경우
 
     Example:
         >>> get_sft_model_name("Qwen/Qwen3-4B", "math")
-        'SaFD-00/qwen3-4b-math'
+        'SaFD-00/qwen3-4b-id-mas-math'
     """
     _validate_sft_model_and_domain(base_model_name, domain)
 
     short_name = MODEL_NAME_TO_SHORT[base_model_name]
-    return f"SaFD-00/{short_name}-{domain}"
+    return f"SaFD-00/{short_name}-id-mas-{domain}"
 
 
 def get_sft_idmas_model_name(base_model_name: str, domain: str) -> str:
@@ -82,16 +82,16 @@ def get_sft_idmas_model_name(base_model_name: str, domain: str) -> str:
         domain: 도메인명 (예: "math")
 
     Returns:
-        SFT_ID-MAS 모델 HF Hub 이름 (예: "SaFD-00/qwen3-8b-math_id-mas")
+        SFT_ID-MAS 모델 HF Hub 이름 (예: "SaFD-00/qwen3-8b-id-mas-math_id-mas")
 
     Raises:
         ValueError: 지원하지 않는 모델이거나 알 수 없는 도메인인 경우
 
     Example:
         >>> get_sft_idmas_model_name("Qwen/Qwen3-8B", "math")
-        'SaFD-00/qwen3-8b-math_id-mas'
+        'SaFD-00/qwen3-8b-id-mas-math_id-mas'
     """
     _validate_sft_model_and_domain(base_model_name, domain)
 
     short_name = MODEL_NAME_TO_SHORT[base_model_name]
-    return f"SaFD-00/{short_name}-{domain}_id-mas"
+    return f"SaFD-00/{short_name}-id-mas-{domain}_id-mas"
