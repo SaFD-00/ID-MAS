@@ -414,7 +414,7 @@ class IDMASPipeline:
             - total_questions: 전체 문제 수
             - scaffolding_processed: 스캐폴딩 처리된 문제 수
             - scaffolding_correct: 정답 처리된 문제 수
-            - case_a_independent_performance_mastery: Case A: Independent Performance Mastery SFT 데이터 수
+            - case_statistics: Case A/B/C 통계 (독립적 수행 숙달, 스캐폴딩 숙달, 교사 모델링 증류)
             - sft_data_count: 총 SFT 데이터 수
             - sft_data_path: SFT 데이터 저장 경로
         """
@@ -446,8 +446,6 @@ class IDMASPipeline:
                         "total_questions": stats.get('total_questions', 0),
                         "scaffolding_processed": stats.get('scaffolding_processed', 0),
                         "scaffolding_correct": case_stats.get('success_total', 0),
-                        "case_a_independent_performance_mastery": case_stats.get('case_a_independent_performance_mastery', 0),
-                        "case_c_teacher_modeling_distillation": case_stats.get('case_c_teacher_modeling_distillation', 0),
                         "case_statistics": case_stats,
                         "sft_data_count": len(sft_data),
                         "sft_data_path": str(sft_path),
@@ -511,8 +509,6 @@ class IDMASPipeline:
             "total_questions": stats['total_questions'],
             "scaffolding_processed": stats['scaffolding_processed'],
             "scaffolding_correct": case_stats.get('success_total', 0),
-            "case_a_independent_performance_mastery": case_stats.get('case_a_independent_performance_mastery', 0),
-            "case_c_teacher_modeling_distillation": case_stats.get('case_c_teacher_modeling_distillation', 0),
             "case_statistics": case_stats,
             "sft_data_count": len(final_state.get('sft_data', [])),
             "sft_data_path": final_state.get('sft_path', ''),
