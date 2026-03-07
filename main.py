@@ -1092,18 +1092,18 @@ Examples:
 
   # 단일 GPU 할당
   python main.py --mode train --domain math --train-dataset gsm8k \\
-      --student-model Qwen/Qwen3-4B --teacher-model Qwen/Qwen3-32B \\
+      --student-model Qwen/Qwen3-4B --teacher-model Qwen/Qwen3-14B \\
       --student-gpu 0 --teacher-gpu 1
 
-  # 다중 GPU tensor parallel (Qwen3-32B 등 대형 모델)
+  # 다중 GPU tensor parallel (대형 모델)
   python main.py --mode train --domain math --train-dataset gsm8k \\
-      --student-model Qwen/Qwen3-32B --teacher-model gpt-5.2 \\
-      --student-gpu 0,1,2
+      --student-model Qwen/Qwen3-14B --teacher-model gpt-5.2 \\
+      --student-gpu 0,1
 
   # Student/Teacher 모두 다중 GPU
   python main.py --mode train --domain math --train-dataset gsm8k \\
-      --student-model Qwen/Qwen3-8B --teacher-model Qwen/Qwen3-32B \\
-      --student-gpu 0,1 --teacher-gpu 2,3,4,5
+      --student-model Qwen/Qwen3-8B --teacher-model Qwen/Qwen3-14B \\
+      --student-gpu 0,1 --teacher-gpu 2,3
 
   # API Teacher + Student GPU 지정
   python main.py --mode train --domain math --train-dataset gsm8k \\

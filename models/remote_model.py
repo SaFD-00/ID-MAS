@@ -12,7 +12,7 @@ GPU 격리가 보장됩니다. 다중 GPU tensor parallel도 지원합니다.
     >>> # 단일 GPU
     >>> proxy = RemoteLLMProxy("Qwen/Qwen3-8B", gpu_ids=(1,))
     >>> # 다중 GPU (tensor parallel)
-    >>> proxy = RemoteLLMProxy("Qwen/Qwen3-32B", gpu_ids=(0, 1, 2))
+    >>> proxy = RemoteLLMProxy("Qwen/Qwen3-14B", gpu_ids=(0, 1))
     >>> outputs = proxy.chat(messages=[messages], sampling_params=params)
 """
 import os
@@ -122,7 +122,7 @@ class RemoteLLMProxy:
 
     Example:
         >>> proxy = RemoteLLMProxy("Qwen/Qwen3-8B", gpu_ids=(1,))
-        >>> proxy = RemoteLLMProxy("Qwen/Qwen3-32B", gpu_ids=(0, 1, 2))
+        >>> proxy = RemoteLLMProxy("Qwen/Qwen3-14B", gpu_ids=(0, 1))
         >>> outputs = proxy.chat(
         ...     messages=[messages],
         ...     sampling_params=params,
