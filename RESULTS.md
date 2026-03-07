@@ -222,28 +222,28 @@ Qwen3-4B, Qwen3-8B만 해당.
 
 #### 모델별 학습 상세
 
-| Model | Domain | Batch Size | Steps | Train Loss | Runtime |
-|-------|--------|-----------|-------|-----------|---------|
-| Qwen3-0.6B | math_gsm8k | 8 | 702 | 0.3662 | 6m 15s |
-| Qwen3-0.6B | logical_reclor | 8 | 36 | 0.9215 | 27s |
-| Qwen3-0.6B | commonsense_arc_c | 8 | 105 | 0.7660 | 48s |
-| Qwen3-1.7B | math_gsm8k | 4 | 702 | 0.1940 | 27m 4s |
-| Qwen3-1.7B | logical_reclor | 4 | 435 | 0.3177 | 20m 40s |
-| Qwen3-1.7B | commonsense_arc_c | 4 | 105 | 0.3549 | 5m 25s |
-| Qwen3-4B | math_gsm8k | 2 | 702 | 0.2385 | 59m 40s |
-| Qwen3-4B | math_math | 2 | 705 | 0.1605 | 1h 41m |
-| Qwen3-4B | logical_reclor | 2 | 435 | 0.3662 | 30m 27s |
-| Qwen3-4B | commonsense_arc_c | 2 | 105 | 0.4462 | 5m 52s |
-| Qwen3-8B | math_gsm8k | 1 | 702 | 0.3222 | 2h 2m |
-| Qwen3-8B | math_math | 1 | 705 | 0.2319 | 2h 5m |
-| Qwen3-8B | commonsense_arc_c | 1 | 105 | 0.4761 | 29m 12s |
+| Model | Domain | Batch Size | Steps | Train Loss |
+|-------|--------|-----------|-------|-----------|
+| Qwen3-0.6B | math_gsm8k | 32 | 702 | 0.3662 |
+| Qwen3-0.6B | logical_reclor | 32 | 36 | 0.9215 |
+| Qwen3-0.6B | commonsense_arc_c | 32 | 105 | 0.7660 |
+| Qwen3-1.7B | math_gsm8k | 32 | 702 | 0.1940 |
+| Qwen3-1.7B | logical_reclor | 32 | 435 | 0.3177 |
+| Qwen3-1.7B | commonsense_arc_c | 32 | 105 | 0.3549 |
+| Qwen3-4B | math_gsm8k | 32 | 702 | 0.2385 |
+| Qwen3-4B | math_math | 32 | 705 | 0.1605 |
+| Qwen3-4B | logical_reclor | 32 | 435 | 0.3662 |
+| Qwen3-4B | commonsense_arc_c | 32 | 105 | 0.4462 |
+| Qwen3-8B | math_gsm8k | 32 | 702 | 0.3222 |
+| Qwen3-8B | math_math | 32 | 705 | 0.2319 |
+| Qwen3-8B | commonsense_arc_c | 32 | 105 | 0.4761 |
 
 **참고**: Qwen3-8B의 Logical Reasoning(ReClor) 학습은 수행되지 않았다.
 
 **분석**:
-- Batch size는 모델 크기에 반비례(0.6B=8, 1.7B=4, 4B=2, 8B=1)하여 GPU 메모리 제약을 반영한다.
-- Train loss는 수학 도메인에서 가장 낮으며(0.16~0.37), 논리적 추론에서 가장 높다(0.32~0.92).
-- 학습 시간은 모델 크기와 데이터셋 크기에 비례하여 증가한다.
+- Batch size는 모든 구성에서 32로 통일하였다.
+- Train loss는 수학 도메인에서 가장 낮으며(0.16-0.37), 논리적 추론에서 가장 높다(0.32-0.92).
+- 학습 시간은 모델 크기와 데이터셋 크기에 비례하여 증가하였다.
 
 ### 6.1 Case 분포 비교
 
